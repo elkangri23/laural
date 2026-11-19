@@ -14,3 +14,4 @@ La [hoja de ruta](ROADMAP.md) agrupa los hitos. Esta lista ordena el trabajo abi
 
 Avance de M2 y M3: perfiles vinculados al destino y reglas de coincidencia exacta implementados. Pendientes la validación entre proveedores y los ensayos por shell.
 Comprobación parcial de M1: los fragmentos de integración emiten las marcas esperadas en Windows PowerShell, CMD, Git Bash y Bash de Ubuntu en WSL. Sigue abierta la prueba de los cuatro shells dentro de la aplicación con perfiles de usuario.
+Cobertura: ampliar los casos de regresión a cambios de permisos, interacción del chat y ciclo de vida de sesiones al modificar esos flujos.

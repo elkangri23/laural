@@ -55,3 +55,4 @@ El centro de configuración está implementado en el código posterior a alpha.4
 
 M2 y M3 incorporan vinculación del perfil a su URL y un conjunto acotado de consultas automáticas de Git. Consulta el backlog para el estado de validación.
 M1 dispone de comprobaciones aisladas de las marcas de los cuatro shells. Falta verificar los bloques en la interfaz instalada.
+La interfaz y el backend disponen de informes automáticos de cobertura en cada push y pull request.

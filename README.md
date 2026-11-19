@@ -94,3 +94,4 @@ Laural se distribuye bajo la licencia [MIT](LICENSE). Las dependencias conservan
 ## Guías de uso y mantenimiento
 
 [Instalación](docs/instalacion.md) · [Configuración](docs/configuracion.md) · [Backlog](docs/BACKLOG.md) · [Hoja de ruta](docs/ROADMAP.md) · [Decisiones de arquitectura](docs/adr/README.md) · [Casos de uso](docs/use-cases/README.md)
+Las [instrucciones de pruebas con cobertura](docs/development/setup.md#pruebas-con-cobertura) explican cómo obtener los informes de la interfaz y del backend.

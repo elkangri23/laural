@@ -32,7 +32,7 @@ npm run build
 npm run tauri build
 ```
 
-Para cambios de terminal o agente, añade en el PR una validación manual pertinente en Windows. La cobertura automatizada está pendiente de definir.
+Para cambios de terminal o agente, añade en el PR una validación manual pertinente en Windows. Ejecuta las pruebas con cobertura como indica la guía de desarrollo.
 
 ## Pull requests
 

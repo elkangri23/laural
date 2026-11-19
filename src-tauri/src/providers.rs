@@ -1098,3 +1098,52 @@ pub fn preview_context(
         total_characters,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn la_clave_guardada_solo_corresponde_al_destino_del_perfil() {
+        let store = ProviderStore {
+            providers: vec![ProviderSettings {
+                id: "principal".into(),
+                name: "Local".into(),
+                base_url: "http://localhost:1234/v1/".into(),
+                model: "ejemplo".into(),
+            }],
+            ..Default::default()
+        };
+        let base = "http://localhost:1234/v1";
+        assert!(check_profile_destination(&store, "principal", base).unwrap());
+        assert!(!check_profile_destination(&store, "nuevo", base).unwrap());
+        assert!(check_profile_destination(&store, "principal", "https://example.org/v1").is_err());
+    }
+    #[test]
+    fn solo_admite_http_en_el_equipo_local() {
+        for url in [
+            "http://localhost:31415/v1",
+            "http://127.0.0.1/v1",
+            "http://[::1]/v1",
+            "https://example.org/v1",
+        ] {
+            assert!(validate_base_url(url).is_ok(), "{url}");
+        }
+        for url in [
+            "http://example.org/v1",
+            "https://user:pass@example.org",
+            "https://example.org/?token=x",
+            "file:///models",
+        ] {
+            assert!(validate_base_url(url).is_err(), "{url}");
+        }
+    }
+
+    #[test]
+    fn omite_nombres_sensibles_del_contexto_automatico() {
+        for name in [".env.local", "credentials.json", "token.txt", "private.key"] {
+            assert!(!is_project_text_file(name), "{name}");
+        }
+        assert!(is_project_text_file("README.md"));
+    }
+}

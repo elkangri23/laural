@@ -7,3 +7,4 @@ Con cada cambio actualiza la documentación afectada en el mismo commit. Para ca
 Aplica DRY, KISS y YAGNI. Reutiliza los validadores, formularios y tipos del dominio. Separa responsabilidades cuando cambien por motivos distintos. Implementa el comportamiento necesario con la solución más sencilla que lo cubra. Evita plantillas sin uso y capas que solo deleguen.
 
 Revisa los riesgos OWASP aplicables a cada cambio de red, permisos, almacenamiento o dependencias. Documenta amenazas y límites en docs/security. Comprueba las entradas en Rust, limita los permisos Tauri y evita incluir claves, contenido del terminal o archivos de usuario en registros y ejemplos.
+Al programar y al probar, ejecuta las pruebas con cobertura de la interfaz y del backend y comunica los porcentajes, el alcance y los fallos. Añade regresiones para el comportamiento modificado.
