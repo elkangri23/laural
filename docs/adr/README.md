@@ -20,3 +20,5 @@ Los ADR registran por qué se eligió una opción y qué costes trae. Un ADR ace
 ## Crear un ADR
 
 Copia [la plantilla](template.md), asigna el siguiente número y registra la decisión antes de implementar un cambio que afecte a arquitectura, privacidad, compatibilidad o formatos persistidos.
+
+[ADR-0013 — Configuración local unificada](0013-configuracion-local.md)

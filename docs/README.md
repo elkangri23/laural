@@ -22,3 +22,7 @@ Este índice reúne las decisiones y requisitos de la etapa inicial. El código 
 - [Privacidad y datos](security/privacy.md)
 - [Modelo de amenazas](security/threat-model.md)
 - [Política de seguridad](../SECURITY.md)
+
+## Guías de uso y mantenimiento
+
+[Instalación](instalacion.md) · [Configuración](configuracion.md) · [Backlog](BACKLOG.md) · [Hoja de ruta](ROADMAP.md) · [Decisiones de arquitectura](adr/README.md) · [Casos de uso](use-cases/README.md)

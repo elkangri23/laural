@@ -42,3 +42,5 @@ Para cambios de terminal o agente, añade en el PR una validación manual pertin
 - Atiende comentarios antes de dar el cambio por finalizado.
 
 Toda contribución se distribuye bajo MIT, salvo que el PR indique claramente una excepción aceptada por los mantenedores.
+
+Consulta las [normas comunes de mantenimiento](AGENTS.md) para commits en español, documentación, simplicidad y revisión de seguridad.

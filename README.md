@@ -90,3 +90,7 @@ Las reglas del agente reducen ejecuciones accidentales, pero no son un sandbox. 
 ## Licencia
 
 Laural se distribuye bajo la licencia [MIT](LICENSE). Las dependencias conservan sus propias licencias.
+
+## Guías de uso y mantenimiento
+
+[Instalación](docs/instalacion.md) · [Configuración](docs/configuracion.md) · [Backlog](docs/BACKLOG.md) · [Hoja de ruta](docs/ROADMAP.md) · [Decisiones de arquitectura](docs/adr/README.md) · [Casos de uso](docs/use-cases/README.md)

@@ -136,6 +136,10 @@ Los casos describen el comportamiento esperado del producto. Los estados disting
 
 **Objetivo:** adaptar contraste y color de acento al gusto del usuario.
 
-**Flujo principal:** abrir **Apariencia**, elegir modo claro u oscuro y seleccionar una de las doce paletas. La interfaz y terminal reflejan la selección; Laural la guarda localmente.
+**Flujo principal:** abrir **Configuración → Apariencia**, elegir modo claro u oscuro y seleccionar una de las doce paletas. La interfaz y terminal reflejan la selección; Laural la guarda localmente.
 
 **Criterios:** hay exactamente doce opciones etiquetadas, cada una ofrece modo claro y oscuro, la selección activa se anuncia con `aria-pressed`, el tema persiste al reiniciar y el terminal mantiene su sesión al cambiar colores.
+
+## UC-13 — Gestionar preferencias del equipo
+
+Desde la barra lateral, abre Configuración. Selecciona Apariencia para cambiar la paleta o Proveedores y modelos para conectar un servidor. En Permisos del agente elige el modo y, si corresponde, guarda una regla por línea. Al reabrir Laural deben recuperarse los ajustes guardados. Si falla el guardado, revisa el mensaje del formulario antes de ejecutar el agente.

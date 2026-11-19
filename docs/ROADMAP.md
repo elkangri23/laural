@@ -50,3 +50,5 @@ Estado al 19 de noviembre de 2026. «Implementado» describe código presente; �
 ## No planificado para el MVP
 
 Backend obligatorio, cuentas de usuario, monetización, telemetría por defecto, distribución de modelos y sandbox propio.
+
+El centro de configuración está implementado en el código posterior a alpha.4. Consulta el [backlog con criterios de cierre](BACKLOG.md).

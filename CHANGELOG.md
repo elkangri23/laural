@@ -2,6 +2,10 @@
 
 ## Cambios sin publicar
 
+- Centro de configuración local y guías de instalación, preferencias y mantenimiento.
+
+## Alpha.4 y versiones anteriores
+
 - Bloques navegables con comando, salida y código de salida por marcas OSC 133; integración inicial de PowerShell, CMD y Bash/WSL.
 - Cancelación del plan del agente, Ctrl+C para el comando activo y corte de acciones automáticas después de un error.
 - Vista previa del contenido exacto y recortado de terminal, proyecto y archivos elegidos.

@@ -14,3 +14,7 @@ Laural recibe instrucciones de usuario y salida de terminal/proyecto, y puede es
 - Las ediciones de archivo requieren aprobación y se limitan a rutas canónicas dentro del proyecto.
 - El agente ejecuta shells con los permisos de la cuenta actual; no existe sandbox.
 - Los filtros de riesgo son heurísticos; no deben describirse como una barrera de seguridad completa.
+
+## Revisión OWASP por superficie
+
+Usamos el [OWASP Top 10](https://owasp.org/www-project-top-ten/) para orientar la revisión. En Laural se debe revisar el control de acceso en las operaciones Tauri y las rutas del proyecto, la inyección al interpretar comandos, la protección de secretos y transporte al conectar proveedores, y la cadena de suministro al actualizar dependencias o empaquetar. El [modelo de amenazas](threat-model.md) describe los controles y riesgos residuales. El seguimiento de validaciones está en el [backlog](../BACKLOG.md).

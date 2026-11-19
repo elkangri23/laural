@@ -1,3 +1,4 @@
+import { SettingsDialog } from "./components/SettingsDialog";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -45,6 +46,7 @@ function App() {
   const [agentMode, setAgentMode] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [providerDialogOpen, setProviderDialogOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [themeId, setThemeId] = useState(() => localStorage.getItem("laural.theme") ?? "laurel");
   const [appearance, setAppearance] = useState<AppearanceMode>(() => localStorage.getItem("laural.appearance") === "light" ? "light" : "dark");
@@ -554,7 +556,7 @@ function App() {
             <div><strong>Conecta tu modelo</strong><p>Usa Ollama, LM Studio o tu endpoint.</p></div>
             <button className="plan-arrow" onClick={() => setProviderDialogOpen(true)} aria-label="Configurar proveedor"><ChevronIcon /></button>
           </div>
-          <button className="appearance-entry" onClick={() => setAppearanceOpen(true)}><PaletteIcon /><span>Apariencia</span><span className="appearance-entry-meta">{appearance === "dark" ? "Oscuro" : "Claro"}</span></button>
+          <button className="appearance-entry" onClick={() => setSettingsOpen(true)}><PaletteIcon /><span>Configuración</span><span className="appearance-entry-meta">{appearance === "dark" ? "Oscuro" : "Claro"}</span></button>
           <button className="profile-row"><span className="profile-avatar">AM</span><span className="profile-name">Perfil local</span><DotsIcon /></button>
         </div>
       </aside>
@@ -615,21 +617,7 @@ function App() {
               <button className={!agentMode ? "active" : ""} onClick={() => setAgentMode(false)} role="tab" aria-selected={!agentMode}><MessageIcon /> Chat</button>
               <button className={agentMode ? "active" : ""} onClick={() => setAgentMode(true)} role="tab" aria-selected={agentMode}><AgentIcon /> Agente <span className="mode-beta">PREVIEW</span></button>
             </div>
-            {agentMode && <div className="agent-policy-panel">
-              <label>Permisos del agente
-                <select value={executionMode} onChange={(event) => void changeExecutionMode(event.currentTarget.value as ExecutionMode)}>
-                  <option value="review">Confirmar cada comando</option>
-                  <option value="rules">Ejecutar reglas permitidas</option>
-                  <option value="automatic">Automático con filtros de riesgo</option>
-                </select>
-              </label>
-              {executionMode === "rules" && <div className="rules-editor">
-                <textarea value={ruleDraft} onChange={(event) => setRuleDraft(event.currentTarget.value)} aria-label="Reglas de comandos, una por línea" rows={3} />
-                <button onClick={() => void saveExecutionRules()}>Guardar reglas</button>
-              </div>}
-              {policyNotice && <span className="policy-notice">{policyNotice}</span>}
-              <p>Los cambios de archivos siempre requieren aprobación.</p>
-            </div>}
+            {agentMode && <button className="action-quiet" onClick={() => setSettingsOpen(true)}>Permisos del agente</button>}
             {chatMessages.length === 0 ? <div className="assistant-empty">
               <div className="empty-orbit orbit-one" /><div className="empty-orbit orbit-two" /><div className="empty-spark"><SparkIcon /></div>
               <h2>{agentMode ? "Trabaja junto al agente" : "¿Qué quieres hacer?"}</h2>
@@ -730,6 +718,26 @@ function App() {
         </section>
       </div>}
 
+      {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)}>
+        <button className="settings-link" onClick={() => { setSettingsOpen(false); setAppearanceOpen(true); }}>Apariencia <span>{activeTheme.name} · {appearance === "dark" ? "Oscuro" : "Claro"}</span></button>
+        <button className="settings-link" onClick={() => { setSettingsOpen(false); setProviderDialogOpen(true); }}>Proveedores y modelos <span>{provider?.name ?? "Configurar"}</span></button>
+        <div className="agent-policy-panel">
+              <label>Permisos del agente
+                <select value={executionMode} onChange={(event) => void changeExecutionMode(event.currentTarget.value as ExecutionMode)}>
+                  <option value="review">Confirmar cada comando</option>
+                  <option value="rules">Ejecutar reglas permitidas</option>
+                  <option value="automatic">Automático con filtros de riesgo</option>
+                </select>
+              </label>
+              {executionMode === "rules" && <div className="rules-editor">
+                <textarea value={ruleDraft} onChange={(event) => setRuleDraft(event.currentTarget.value)} aria-label="Reglas de comandos, una por línea" rows={3} />
+                <button onClick={() => void saveExecutionRules()}>Guardar reglas</button>
+              </div>}
+              {policyNotice && <span className="policy-notice">{policyNotice}</span>}
+              <p>Los cambios de archivos siempre requieren aprobación.</p>
+            </div>
+        <button className="action-quiet" onClick={clearChat} disabled={!chatMessages.length || chatBusy || agentPlanBusy || agentCommandBusy}>Borrar historial del chat</button>
+      </SettingsDialog>}
       {appearanceOpen && <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setAppearanceOpen(false); }}>
         <section className="appearance-dialog" role="dialog" aria-modal="true" aria-labelledby="appearance-title">
           <button className="dialog-close" onClick={() => setAppearanceOpen(false)} aria-label="Cerrar">×</button>
