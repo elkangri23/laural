@@ -52,3 +52,6 @@ Estado al 19 de noviembre de 2026. «Implementado» describe código presente; �
 Backend obligatorio, cuentas de usuario, monetización, telemetría por defecto, distribución de modelos y sandbox propio.
 
 El centro de configuración está implementado en el código posterior a alpha.4. Consulta el [backlog con criterios de cierre](BACKLOG.md).
+
+M2 y M3 incorporan vinculación del perfil a su URL y un conjunto acotado de consultas automáticas de Git. Consulta el backlog para el estado de validación.
+M1 dispone de comprobaciones aisladas de las marcas de los cuatro shells. Falta verificar los bloques en la interfaz instalada.

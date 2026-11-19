@@ -443,6 +443,8 @@ function App() {
 
   function chooseProvider(kind: string) {
     setProviderKind(kind);
+    setApiKey("");
+    setModels([]);
     setEditingProviderId(null);
     setProviderError("");
     setProviderNotice("");
@@ -460,7 +462,7 @@ function App() {
   function providerInput() {
     return {
       input: {
-        id: editingProviderId ?? `${providerKind}-${providerName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 48)}`,
+        id: editingProviderId ?? crypto.randomUUID(),
         name: providerName,
         baseUrl,
         model,
@@ -699,7 +701,7 @@ function App() {
             <input value={providerName} onChange={(event) => setProviderName(event.currentTarget.value)} placeholder="Mi proveedor" />
           </label>
           <label className="form-label">URL base
-            <input value={baseUrl} onChange={(event) => setBaseUrl(event.currentTarget.value)} placeholder="http://127.0.0.1:1234/v1" autoCapitalize="off" autoCorrect="off" />
+            <input readOnly={editingProviderId !== null} title={editingProviderId ? "Crea un perfil nuevo para cambiar el destino" : undefined} value={baseUrl} onChange={(event) => setBaseUrl(event.currentTarget.value)} placeholder="http://127.0.0.1:1234/v1" autoCapitalize="off" autoCorrect="off" />
           </label>
           <div className="form-row">
             <label className="form-label">Modelo
@@ -726,11 +728,11 @@ function App() {
                 <select value={executionMode} onChange={(event) => void changeExecutionMode(event.currentTarget.value as ExecutionMode)}>
                   <option value="review">Confirmar cada comando</option>
                   <option value="rules">Ejecutar reglas permitidas</option>
-                  <option value="automatic">Automático con filtros de riesgo</option>
+                  <option value="automatic">Automático para consultas de estado de Git</option>
                 </select>
               </label>
               {executionMode === "rules" && <div className="rules-editor">
-                <textarea value={ruleDraft} onChange={(event) => setRuleDraft(event.currentTarget.value)} aria-label="Reglas de comandos, una por línea" rows={3} />
+                <textarea value={ruleDraft} onChange={(event) => setRuleDraft(event.currentTarget.value)} placeholder="Un comando exacto por línea" aria-label="Comandos exactos permitidos, uno por línea" rows={3} />
                 <button onClick={() => void saveExecutionRules()}>Guardar reglas</button>
               </div>}
               {policyNotice && <span className="policy-notice">{policyNotice}</span>}

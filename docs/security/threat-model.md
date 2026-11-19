@@ -42,3 +42,5 @@ La política debe preferir confirmación para eliminación amplia, cambios de si
 3. Definir qué comandos pueden ejecutarse en automático; incorporar pruebas de política en el proceso del proyecto antes de cambiar esa lógica.
 4. Verificar que errores y diagnósticos no imprimen claves ni cuerpos completos de solicitudes.
 5. Instalar desde cero y revisar permisos, firma y actualizaciones de la aplicación.
+
+El backend comprueba la URL completa del perfil antes de consultar su clave al probar la conexión o actualizar el perfil. Las reglas de comandos exigen coincidencia exacta. Incluso una consulta de Git depende del ejecutable, la configuración y el entorno del shell del usuario.

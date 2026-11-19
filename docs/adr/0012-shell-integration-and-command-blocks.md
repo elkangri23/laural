@@ -18,3 +18,4 @@ Laural captura la línea enviada desde xterm y reconoce las secuencias OSC 133 d
 - Bash/Git Bash/WSL pueden tener scripts de inicio que sobrescriban `PROMPT_COMMAND`; CMD no proporciona código de salida mediante el prompt.
 - Los límites se identifican por marcas OSC, no mediante heurísticas sobre el contenido que imprime cada comando.
 - Cada shell y perfil personalizado necesita validación manual.
+En alpha.6 se usa el carácter ESC explícito en Windows PowerShell 5 y una cadena literal Rust para preservar los escapes interpretados por printf en Bash.

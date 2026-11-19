@@ -25,3 +25,5 @@ El modelo devuelve un plan acotado de acciones. El backend valida formato, longi
 - Se necesita historial claro de acciones, resultado, modo aplicado y autorizaciones.
 - La cancelación durante generación y el envío de Ctrl+C están implementados inicialmente; quedan pruebas por shell y la terminación de procesos hijos.
 - El usuario debe revisar las acciones y considerar el modo manual para proyectos sensibles.
+
+Revisión posterior a alpha.5: las reglas guardadas pasan a compararse con la línea completa, respetando mayúsculas. El modo automático admite las tres consultas de Git enumeradas en la guía de configuración. Ampliar argumentos requiere registrar otra regla o confirmar el comando.

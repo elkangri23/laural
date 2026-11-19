@@ -143,3 +143,5 @@ Los casos describen el comportamiento esperado del producto. Los estados disting
 ## UC-13 — Gestionar preferencias del equipo
 
 Desde la barra lateral, abre Configuración. Selecciona Apariencia para cambiar la paleta o Proveedores y modelos para conectar un servidor. En Permisos del agente elige el modo y, si corresponde, guarda una regla por línea. Al reabrir Laural deben recuperarse los ajustes guardados. Si falla el guardado, revisa el mensaje del formulario antes de ejecutar el agente.
+
+Al cambiar de servidor en UC-13, se crea un perfil independiente. Al habilitar reglas, el comando completo debe coincidir con una entrada guardada. Los argumentos adicionales requieren revisión.

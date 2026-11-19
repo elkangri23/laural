@@ -242,7 +242,7 @@ fn validate_base_url(input: &str) -> Result<String, String> {
     }
     if url.scheme() == "http" {
         let host = url.host_str().unwrap_or_default().to_ascii_lowercase();
-        if !matches!(host.as_str(), "localhost" | "127.0.0.1" | "::1") {
+        if !matches!(host.as_str(), "localhost" | "127.0.0.1" | "[::1]") {
             return Err(
                 "Para endpoints remotos usa HTTPS; HTTP solo se permite en este equipo."
                     .to_string(),
@@ -342,13 +342,30 @@ pub fn select_provider(app: AppHandle, provider_id: String) -> Result<PublicProv
     Ok(public_provider(&provider))
 }
 
+fn check_profile_destination(
+    store: &ProviderStore,
+    id: &str,
+    base_url: &str,
+) -> Result<bool, String> {
+    match store.providers.iter().find(|profile| profile.id == id) {
+        Some(profile) if validate_base_url(&profile.base_url)? != base_url => {
+            Err("Para cambiar la URL crea un perfil nuevo con sus propias credenciales.".into())
+        }
+        Some(_) => Ok(true),
+        None => Ok(false),
+    }
+}
+
 #[tauri::command]
-pub async fn test_provider(input: ProviderInput) -> Result<Vec<String>, String> {
+pub async fn test_provider(app: AppHandle, input: ProviderInput) -> Result<Vec<String>, String> {
     let base_url = validate_base_url(&input.base_url)?;
-    let saved_key = if input
-        .api_key
-        .as_deref()
-        .is_none_or(|key| key.trim().is_empty())
+    let existing =
+        check_profile_destination(&read_provider_store(&app)?, input.id.trim(), &base_url)?;
+    let saved_key = if existing
+        && input
+            .api_key
+            .as_deref()
+            .is_none_or(|key| key.trim().is_empty())
     {
         Entry::new(KEYRING_SERVICE, input.id.trim())
             .and_then(|entry| entry.get_password())
@@ -371,6 +388,8 @@ pub fn save_provider(app: AppHandle, input: ProviderInput) -> Result<PublicProvi
         return Err("Indica un nombre de proveedor y un modelo.".to_string());
     }
     let base_url = validate_base_url(&input.base_url)?;
+    let mut store = read_provider_store(&app)?;
+    check_profile_destination(&store, id, &base_url)?;
     if let Some(api_key) = input
         .api_key
         .as_deref()
@@ -386,7 +405,6 @@ pub fn save_provider(app: AppHandle, input: ProviderInput) -> Result<PublicProvi
         base_url,
         model: model.to_string(),
     };
-    let mut store = read_provider_store(&app)?;
     if let Some(existing) = store.providers.iter_mut().find(|entry| entry.id == id) {
         *existing = provider.clone();
     } else {
@@ -689,7 +707,7 @@ pub fn authorize_agent_command(
         || command.len() > 2_000
         || command.contains('\n')
         || command.contains('\r')
-        || command.contains('\0')
+        || command.chars().any(char::is_control)
     {
         return Err(
             "El comando está vacío, es demasiado largo o contiene varias líneas.".to_string(),
@@ -712,16 +730,10 @@ pub fn authorize_agent_command(
     }
     let settings = read_agent_settings(app)?;
     match settings.mode.as_str() {
-        "automatic" => Ok(()),
+        "automatic" if matches!(command, "git status" | "git status --short" | "git rev-parse --show-toplevel") => Ok(()),
+        "automatic" => Err("Este comando requiere revisión. La ejecución automática admite consultas de estado de Git.".into()),
         "rules" => {
-            let normalized = command.to_ascii_lowercase();
-            if settings.allowed_prefixes.iter().any(|prefix| {
-                let prefix = prefix.trim().to_ascii_lowercase();
-                normalized == prefix
-                    || normalized
-                        .strip_prefix(&prefix)
-                        .is_some_and(|rest| rest.starts_with(' '))
-            }) {
+            if settings.allowed_prefixes.iter().any(|rule| rule.trim() == command) {
                 Ok(())
             } else {
                 Err("El comando no coincide con tus reglas; necesita revisión.".to_string())
@@ -802,7 +814,7 @@ fn parse_agent_plan(content: &str) -> Result<AgentPlan, String> {
                     || command.len() > 2_000
                     || command.contains('\n')
                     || command.contains('\r')
-                    || command.contains('\0')
+                    || command.chars().any(char::is_control)
                 {
                     return Err(
                         "El plan contiene un comando vacío, demasiado largo o con varias líneas."

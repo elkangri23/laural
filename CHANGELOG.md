@@ -1,5 +1,11 @@
 # Registro de cambios
 
+## 0.1.0-alpha.6
+
+- Corregidas las marcas de bloque en Windows PowerShell 5 y Bash, incluida la primera orden de una sesión de PowerShell.
+
+- Cada perfil conserva su URL y sus credenciales. Las reglas del agente autorizan solo líneas completas y el modo automático admite tres consultas de Git.
+
 ## 0.1.0-alpha.5
 
 - Centro de configuración local y guías de instalación, preferencias y mantenimiento.

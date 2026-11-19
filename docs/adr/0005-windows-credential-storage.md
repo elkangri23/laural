@@ -24,3 +24,5 @@ Guardar las claves mediante la API de keyring del sistema operativo, usando Wind
 - Exportar/importar perfiles no debe exportar credenciales automáticamente.
 - La sincronización futura requiere un diseño explícito de cifrado y consentimiento.
 - La aplicación debe evitar incluir cabeceras, claves o mensajes completos en logs de diagnóstico.
+
+Revisión posterior a alpha.5: cada perfil nuevo recibe un identificador aleatorio y queda vinculado a su URL base. Los perfiles anteriores conservan su identificador. Cambiar de destino requiere crear otro perfil.

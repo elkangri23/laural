@@ -61,6 +61,9 @@ fn git_bash_path() -> Option<PathBuf> {
     candidates.into_iter().flatten().find(|path| path.is_file())
 }
 
+const BASH_PROMPT_COMMAND: &str =
+    r#"__laural_status=$?; printf '\033]133;D;%s\007' "$__laural_status""#;
+
 fn shell_command(shell: &str) -> Result<CommandBuilder, String> {
     match shell {
         "powershell" => {
@@ -69,22 +72,22 @@ fn shell_command(shell: &str) -> Result<CommandBuilder, String> {
             command.arg("-NoExit");
             command.arg("-Command");
             command.arg(r#"
-                $global:__lauralLastHistoryId = -1
+                $global:__lauralLastHistoryId = $null
                 $global:__lauralOriginalPrompt = $function:prompt
                 function global:prompt {
                     $success = $?
                     $last = Get-History -Count 1
-                    $code = if ($success) { 0 } elseif ($null -ne $global:LASTEXITCODE) { $global:LASTEXITCODE } else { 1 }
+                    $code = if ($success) { 0 } elseif ($global:LASTEXITCODE) { $global:LASTEXITCODE } else { 1 }
                     $out = ''
-                    if ($global:__lauralLastHistoryId -ge 0) {
-                        if ($last -and $last.Id -ne $global:__lauralLastHistoryId) { $out += "`e]133;D;$code`a" }
-                        else { $out += "`e]133;D`a" }
+                    if ($null -ne $global:__lauralLastHistoryId) {
+                        if ($last -and $last.Id -ne $global:__lauralLastHistoryId) { $out += "$([char]27)]133;D;$code`a" }
+                        else { $out += "$([char]27)]133;D`a" }
                     }
-                    $out += "`e]133;A`a"
+                    $out += "$([char]27)]133;A`a"
                     if ($global:__lauralOriginalPrompt) { $out += (& $global:__lauralOriginalPrompt) }
                     else { $out += "PS $($executionContext.SessionState.Path.CurrentLocation)> " }
-                    $out += "`e]133;B`a"
-                    if ($last) { $global:__lauralLastHistoryId = $last.Id }
+                    $out += "$([char]27)]133;B`a"
+                    $global:__lauralLastHistoryId = if ($last) { $last.Id } else { 0 }
                     return $out
                 }
             "#);
@@ -101,10 +104,7 @@ fn shell_command(shell: &str) -> Result<CommandBuilder, String> {
         }
         "wsl" => {
             let mut command = CommandBuilder::new("wsl.exe");
-            command.env(
-                "PROMPT_COMMAND",
-                "__laural_status=$?; printf '\\033]133;D;%s\\007' \"$__laural_status\"",
-            );
+            command.env("PROMPT_COMMAND", BASH_PROMPT_COMMAND);
             let existing = std::env::var("WSLENV").unwrap_or_default();
             let wsl_env = if existing
                 .split(':')
@@ -125,10 +125,7 @@ fn shell_command(shell: &str) -> Result<CommandBuilder, String> {
             })?;
             let mut command = CommandBuilder::new(path);
             command.args(["--login", "-i"]);
-            command.env(
-                "PROMPT_COMMAND",
-                "__laural_status=$?; printf '\\033]133;D;%s\\007' \"$__laural_status\"",
-            );
+            command.env("PROMPT_COMMAND", BASH_PROMPT_COMMAND);
             Ok(command)
         }
         _ => Err("Shell no admitido.".to_string()),
