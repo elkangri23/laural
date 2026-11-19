@@ -1,6 +1,6 @@
 # Registro de cambios
 
-## Cambios sin publicar
+## 0.1.0-alpha.5
 
 - Centro de configuración local y guías de instalación, preferencias y mantenimiento.
 
