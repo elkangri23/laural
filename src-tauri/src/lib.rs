@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     fs,
     io::{Read, Write},
     path::{Component, Path, PathBuf},
@@ -29,7 +29,6 @@ struct PtyStore {
 #[derive(Default)]
 struct PtyState {
     sessions: HashMap<String, Arc<Mutex<TerminalSession>>>,
-    closed_ids: HashSet<String>,
 }
 
 impl Drop for PtyStore {
@@ -151,9 +150,6 @@ fn create_terminal(
         .state
         .lock()
         .map_err(|_| "No se pudo acceder al registro de terminales.".to_string())?;
-    if state.closed_ids.remove(&terminal_id) {
-        return Ok(());
-    }
     if state.sessions.contains_key(&terminal_id) {
         return Ok(());
     }
@@ -289,7 +285,6 @@ fn close_terminal(state: State<'_, PtyStore>, terminal_id: String) -> Result<(),
         .state
         .lock()
         .map_err(|_| "No se pudo acceder al registro de terminales.".to_string())?;
-    state.closed_ids.insert(terminal_id.clone());
     let session = state.sessions.remove(&terminal_id);
     if let Some(session) = session {
         let mut session = session
@@ -444,4 +439,81 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(all(test, windows))]
+mod terminal_tests {
+    use super::*;
+    use std::sync::mpsc;
+    use std::time::{Duration, Instant};
+
+    // WSL and Git Bash are optional installations on end-user machines and CI runners.
+    #[test]
+    #[ignore = "requiere PowerShell, CMD, Git Bash y una distribución WSL instalados"]
+    fn ciclo_de_vida_de_los_cuatro_shells() {
+        for shell in ["cmd", "powershell", "git-bash", "wsl"] {
+            let pair = native_pty_system().openpty(PtySize::default()).unwrap();
+            let mut reader = pair.master.try_clone_reader().unwrap();
+            let mut writer = pair.master.take_writer().unwrap();
+            let mut child = pair
+                .slave
+                .spawn_command(shell_command(shell).unwrap())
+                .unwrap();
+            drop(pair.slave);
+            let (sent, received) = mpsc::channel();
+            thread::spawn(move || {
+                let mut chunk = [0; 4096];
+                while let Ok(count) = reader.read(&mut chunk) {
+                    if count == 0 || sent.send(chunk[..count].to_vec()).is_err() {
+                        break;
+                    }
+                }
+            });
+            pair.master
+                .resize(PtySize {
+                    rows: 42,
+                    cols: 100,
+                    pixel_width: 0,
+                    pixel_height: 0,
+                })
+                .unwrap();
+            let deadline = Instant::now() + Duration::from_secs(45);
+            let mut output = Vec::new();
+            let mut entered = false;
+            let status = loop {
+                if let Some(status) = child.try_wait().unwrap() {
+                    break Some(status.exit_code());
+                }
+                if Instant::now() >= deadline {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    break None;
+                }
+                if let Ok(bytes) = received.recv_timeout(Duration::from_millis(50)) {
+                    output.extend(bytes);
+                    if let Some(pos) = output.windows(4).position(|s| s == b"\x1b[6n") {
+                        writer.write_all(b"\x1b[1;1R").unwrap();
+                        writer.flush().unwrap();
+                        output.drain(..pos + 4);
+                    }
+                    if !entered
+                        && output
+                            .windows(4)
+                            .any(|s| s == b"133;" || s == b"$ \x1b[" || s == b"PS C")
+                    {
+                        writer.write_all(b"exit 37\r").unwrap();
+                        writer.flush().unwrap();
+                        entered = true;
+                    }
+                }
+            };
+            assert_eq!(
+                status,
+                Some(37),
+                "{shell}: prompt reconocido={entered}; bytes de salida={}",
+                output.len()
+            );
+            println!("{shell}: inicio, escritura, lectura, redimensionamiento y cierre correctos");
+        }
+    }
 }

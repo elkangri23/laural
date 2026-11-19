@@ -2,6 +2,8 @@
 
 ## Sin publicar
 
+- La terminal registra los eventos antes de iniciar el shell, conserva la sesión al ocultar una pestaña y ofrece reiniciar una sesión terminada. Al cerrar una pestaña se libera su contexto.
+
 - La consulta de modelos repite una vez los fallos temporales de conexión o pasarela.
 
 - El chat conserva los caracteres divididos entre paquetes, procesa eventos de varias líneas y avisa si la respuesta está incompleta, vacía, mal formada o supera el límite.

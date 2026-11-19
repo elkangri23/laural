@@ -211,7 +211,27 @@ function App() {
     }
   }
 
+  function releaseTabContext(tabId: string) {
+    finishCommandBlock(tabId, null);
+    delete terminalContextRef.current[tabId];
+    setCommandBlocks(blocks => blocks.filter(block => block.terminalId !== tabId));
+  }
+
+  function restartTab(tabId: string) {
+    releaseTabContext(tabId);
+    const id = crypto.randomUUID();
+    setTabs(current => current.map(tab => tab.id === tabId ? { ...tab, id } : tab));
+    if (activeTabId === tabId) setActiveTabId(id);
+    if (splitTabId === tabId) setSplitTabId(id);
+  }
+
+  function selectTab(tabId: string) {
+    if (splitTabId === tabId) setSplitTabId(activeTabId);
+    setActiveTabId(tabId);
+  }
+
   function closeTab(tabId: string) {
+    releaseTabContext(tabId);
     const nextTabs = tabs.filter((tab) => tab.id !== tabId);
     if (splitTabId === tabId || tabId === activeTabId) { setSplitTabId(null); setSplitOrientation(null); }
     if (nextTabs.length === 0) {
@@ -575,7 +595,7 @@ function App() {
 
         <div className="terminal-toolbar">
           <div className="tabs-strip" role="tablist" aria-label="Sesiones de terminal">
-            {tabs.map((tab) => <button className={`terminal-tab ${tab.id === activeTabId ? "selected" : ""}`} key={tab.id} onClick={() => setActiveTabId(tab.id)} role="tab" aria-selected={tab.id === activeTabId}>
+            {tabs.map((tab) => <button className={`terminal-tab ${tab.id === activeTabId ? "selected" : ""}`} key={tab.id} onClick={() => selectTab(tab.id)} role="tab" aria-selected={tab.id === activeTabId}>
               <span className={`shell-badge ${tab.shell}`}>{shellIcons[tab.shell]}</span><span>{tab.title}</span>
               <span className="tab-close" role="button" tabIndex={0} aria-label={`Cerrar ${tab.title}`} onClick={(event) => { event.stopPropagation(); closeTab(tab.id); }} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.stopPropagation(); closeTab(tab.id); } }}>×</span>
             </button>)}
@@ -598,7 +618,7 @@ function App() {
               <div className="terminal-heading-actions"><button className={`small-action ${blocksOpen ? "selected" : ""}`} onClick={() => setBlocksOpen((open) => !open)} aria-pressed={blocksOpen}>Bloques <span className="block-count">{visibleBlocks.length}</span></button><button className="small-action"><CopyIcon /> Copiar</button><button className="small-action"><ClearIcon /> Limpiar</button></div>
             </div>
             <div className={`terminal-frame ${blocksOpen ? "with-blocks" : ""} ${splitTabId ? `is-split split-${splitOrientation}` : ""}`}>
-              {tabs.map((tab) => <TerminalPane key={tab.id} terminalId={tab.id} shell={tab.shell} cwd={tab.cwd} visible={tab.id === activeTabId || tab.id === splitTabId} theme={activeTheme} appearance={appearance} onTextOutput={captureTerminalOutput} onCommandSubmit={startCommandBlock} onCommandFinish={finishCommandBlock} />)}
+              {tabs.map((tab) => <TerminalPane key={tab.id} terminalId={tab.id} active={tab.id === activeTabId} onRestart={() => restartTab(tab.id)} shell={tab.shell} cwd={tab.cwd} visible={tab.id === activeTabId || tab.id === splitTabId} theme={activeTheme} appearance={appearance} onTextOutput={captureTerminalOutput} onCommandSubmit={startCommandBlock} onCommandFinish={finishCommandBlock} />)}
               <div className="terminal-caption"><span className="shortcut-hint"><kbd>Ctrl</kbd> + <kbd>`</kbd> alternar terminal</span><span><span className="activity-pulse" /> Shell conectado</span></div>
             </div>
             {blocksOpen && <section className="command-blocks-panel" aria-label="Bloques de comandos">

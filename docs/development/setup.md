@@ -54,3 +54,13 @@ WSL, Git Bash, Ollama, LM Studio y proveedores remotos son programas/servicios e
 En Windows, instala el instrumental Rust una vez con `rustup component add llvm-tools-preview` y `cargo install cargo-llvm-cov --version 0.9.1 --locked`. Tras `npm ci` y `npm run build`, ejecuta `npm run test:coverage`. Para trabajar por separado, `npm test` mide TypeScript y TSX con Vitest/V8 y `npm run test:rust` instrumenta la biblioteca Rust.
 
 Abre `coverage/index.html` para la interfaz y `src-tauri/target/llvm-cov/html/index.html` para Rust. GitHub Actions publica ambos informes en el artefacto informes-cobertura. Interpreta los porcentajes por capa. Las pruebas de instalación, PTY y conexión con proveedores requieren validación adicional.
+
+### Comprobar terminales reales en Windows
+
+Con PowerShell, CMD, Git Bash y una distribución predeterminada de WSL disponibles, ejecuta desde la raíz:
+
+```powershell
+cargo llvm-cov --manifest-path src-tauri/Cargo.toml --lib --html -- --include-ignored --nocapture
+```
+
+Esta prueba abre una pseudoterminal por shell, cambia su tamaño, espera el prompt, envía una orden de salida y comprueba el código 37. La suite habitual deja esta prueba como opcional porque WSL y Git Bash dependen del equipo.

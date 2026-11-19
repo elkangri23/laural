@@ -12,10 +12,10 @@ Estado al 19 de noviembre de 2026. «Implementado» describe código presente; �
 - Icono y favicon propios; build de Windows automatizable desde GitHub Actions.
 - README, arquitectura, requisitos, ADR, casos de uso y documentación de contribución.
 
-## M1 — Estabilidad de terminal (pendiente)
+## M1 — Estabilidad de terminal (parcial)
 
 - Validar el inicio, cierre, reinicio, redimensionamiento y salida larga en los cuatro shells.
-- Revisar ciclo de vida de PTY al cambiar paneles, cerrar pestañas y cerrar la app.
+- El panel espera a sus suscripciones antes de arrancar y coordina el cierre durante el arranque. Las regresiones cubren ocultar y mostrar una sesión y el cierre temprano. Pendiente validar el cierre completo de la aplicación instalada.
 - Validar bloques de comandos, entrada editada y resultados en PowerShell, CMD, Git Bash y WSL; bash/prompt de usuario pueden sustituir las marcas de integración.
 - Probar instalación y desinstalación limpia en Windows 10 y 11.
 
@@ -54,5 +54,5 @@ Backend obligatorio, cuentas de usuario, monetización, telemetría por defecto,
 El centro de configuración está implementado en el código posterior a alpha.4. Consulta el [backlog con criterios de cierre](BACKLOG.md).
 
 M2 y M3 incorporan vinculación del perfil a su URL y un conjunto acotado de consultas automáticas de Git. Consulta el backlog para el estado de validación.
-M1 dispone de comprobaciones aisladas de las marcas de los cuatro shells. Falta verificar los bloques en la interfaz instalada.
+M1 incluye una prueba de PTY real ejecutada en los cuatro shells para inicio, redimensionamiento, lectura, escritura y cierre con código 37. Falta verificar los bloques en la interfaz instalada.
 La interfaz y el backend disponen de informes automáticos de cobertura en cada push y pull request.
