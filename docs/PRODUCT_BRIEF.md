@@ -7,6 +7,7 @@ Crear una aplicación de terminal open source para Windows con chat contextual y
 ## Alcance acordado
 
 - Windows primero; PowerShell, CMD, WSL y Git Bash.
+- Interfaz cuidada con 12 temas de color seleccionables y modos claro/oscuro.
 - Terminal con pestañas, bloques de comandos y paneles divididos.
 - Chat con salida del terminal, archivos seleccionados y el proyecto abierto como fuentes de contexto.
 - Agente que propone comandos y cambios de archivo; el usuario controla la ejecución.
@@ -34,6 +35,7 @@ Tauri 2, React/TypeScript, backend Rust con `portable-pty`, xterm.js, protocolo 
 
 - Tauri, UI propia en español, xterm.js y sesiones PTY para los cuatro shells.
 - Pestañas, una vista dividida vertical y apertura de carpeta/proyecto.
+- Selector local de 12 temas, modo claro/oscuro persistente e interfaz tipográfica más legible.
 - Perfiles múltiples, descubrimiento de modelos, claves en Credential Manager y chat sin streaming con contexto acotado.
 - Plan de agente, modos de confirmación/reglas/política automática y edición de archivo con aprobación.
 - Los bloqueos de riesgo son heurísticos; cancelar agentes, reglas por directorio, bloques, historial, chat persistente y streaming siguen pendientes.

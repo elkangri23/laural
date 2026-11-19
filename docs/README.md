@@ -7,14 +7,15 @@ Este índice reúne las decisiones y requisitos de la etapa inicial. El código 
 - [Visión, objetivos y límites](product/vision-and-scope.md)
 - [Brief de producto](PRODUCT_BRIEF.md)
 - [Hoja de ruta](ROADMAP.md)
+- [Sistema visual: 12 temas y modos](ui/design-system.md)
 - [Configuración de desarrollo](development/setup.md)
 
 ## Diseño
 
 - [Arquitectura del sistema](architecture/overview.md)
+- [ADR](adr/README.md)
 - [Requisitos](requirements/README.md)
 - [Casos de uso](use-cases/README.md)
-- [ADR](adr/README.md)
 
 ## Seguridad y datos
 

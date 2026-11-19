@@ -5,8 +5,10 @@ El orden refleja dependencias del MVP. Las fechas se fijarán cuando se acuerde 
 ## M0 — Esqueleto de desarrollo (actual)
 
 - Tauri 2, React/TypeScript y backend Rust.
-- Shelles PowerShell, CMD, WSL y Git Bash, pestañas y una división vertical.
+- PowerShell, CMD, WSL y Git Bash, pestañas y una división vertical.
 - Perfiles, descubrimiento de modelos, chat contextual sin streaming.
+- Doce temas de color, modo claro/oscuro y preferencia local.
+- Tamaños de texto ampliados; falta revisión visual de contraste en los doce temas y ambos modos.
 - Planes del agente, políticas iniciales y escritura de archivo con aprobación.
 - README, arquitectura, requisitos, ADR, casos de uso y contribución.
 - Compilación MSI y NSIS ejecutada; instalación real no verificada.

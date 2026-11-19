@@ -22,6 +22,8 @@ Los requisitos distinguen el alcance acordado del estado actual del prototipo. �
 | FR-14 | Guardar historial de chat y sesiones localmente. | Pendiente |
 | FR-15 | Cancelar una operación del agente durante la generación o ejecución. | Pendiente |
 | FR-16 | Sincronizar configuración/proveedores entre dispositivos. | Diferido; fuera del MVP |
+| FR-17 | Elegir entre 12 paletas visuales y cambiar entre modo claro y oscuro. | Implementación inicial |
+| FR-18 | Mantener la preferencia de apariencia tras reiniciar Laural. | Implementación inicial; localStorage |
 
 ## No funcionales
 
@@ -37,6 +39,7 @@ Los requisitos distinguen el alcance acordado del estado actual del prototipo. �
 | NFR-08 | Instalación reproducible. | Instrucciones de desarrollo y empaquetado versionadas junto al código. |
 | NFR-09 | Sin telemetría por defecto. | Ningún evento de uso sale a un servicio de Laural. |
 | NFR-10 | Portabilidad de datos futura. | Configuración no secreta legible y documentada; sincronización requiere decisión y diseño separados. |
+| NFR-11 | Legibilidad visual. | Contraste de texto y controles legibles en las 12 paletas y en ambos modos; cambio de tema no debe reiniciar shells. |
 
 ## Supuestos y dependencias
 

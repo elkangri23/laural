@@ -20,11 +20,12 @@ Quienes trabajan en terminal alternan entre shells, documentación, asistentes y
 ## Objetivos del MVP
 
 1. Proporcionar terminales de Windows con pestañas y paneles divididos.
-2. Conectar varios perfiles de proveedores y modelos compatibles con `/v1/models` y `/v1/chat/completions`.
-3. Permitir preguntas con contexto que el usuario pueda inspeccionar y seleccionar.
-4. Permitir que el agente prepare comandos y cambios en archivos del proyecto, con controles claros antes de modificar o ejecutar.
-5. Distribuir código fuente y un instalador Windows x64.
-6. Funcionar sin registro ni servicio alojado por Laural.
+2. Ofrecer 12 temas de color con modos claro y oscuro.
+3. Conectar varios perfiles de proveedores y modelos compatibles con `/v1/models` y `/v1/chat/completions`.
+4. Permitir preguntas con contexto que el usuario pueda inspeccionar y seleccionar.
+5. Permitir que el agente prepare comandos y cambios en archivos del proyecto, con controles claros antes de modificar o ejecutar.
+6. Distribuir código fuente y un instalador Windows x64.
+7. Funcionar sin registro ni servicio alojado por Laural.
 
 ## No objetivos del MVP
 
@@ -39,6 +40,7 @@ Quienes trabajan en terminal alternan entre shells, documentación, asistentes y
 ## Principios
 
 - El usuario escoge proveedor, modelo y contexto enviado.
+- El usuario puede cambiar paleta y apariencia sin perder la selección al reiniciar.
 - Las credenciales no se guardan en texto plano en la configuración de la aplicación.
 - Los cambios de archivos necesitan aprobación explícita.
 - La automatización debe poder desactivarse y mostrar qué comando se ejecutó.
@@ -49,6 +51,7 @@ Quienes trabajan en terminal alternan entre shells, documentación, asistentes y
 
 - Inicio de terminal en las cuatro shells instaladas y selección de directorio de trabajo.
 - Configuración y cambio entre varios perfiles guardados.
+- Cambio entre doce paletas y modos claro/oscuro sin reiniciar sesiones.
 - Chat que puede responder usando salida reciente, archivos adjuntos y archivos acotados del proyecto.
 - Plan del agente visible antes de actuar; edición de archivo solo tras aprobación.
 - Instalador x64 que se instala y arranca en Windows 10/11 limpio con WebView2.

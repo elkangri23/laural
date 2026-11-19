@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import TerminalPane from "./components/TerminalPane";
+import { themeVariables, themes, type AppearanceMode } from "./themes";
 import "./App.css";
 
 type Shell = "powershell" | "cmd" | "wsl" | "git-bash";
@@ -35,6 +36,9 @@ function App() {
   const [agentMode, setAgentMode] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [providerDialogOpen, setProviderDialogOpen] = useState(false);
+  const [appearanceOpen, setAppearanceOpen] = useState(false);
+  const [themeId, setThemeId] = useState(() => localStorage.getItem("laural.theme") ?? "laurel");
+  const [appearance, setAppearance] = useState<AppearanceMode>(() => localStorage.getItem("laural.appearance") === "light" ? "light" : "dark");
   const [provider, setProvider] = useState<Provider | null>(null);
   const [providers, setProviders] = useState<Provider[]>([]);
   const [editingProviderId, setEditingProviderId] = useState<string | null>(null);
@@ -97,7 +101,21 @@ function App() {
     () => tabs.find((tab) => tab.id === activeTabId) ?? tabs[0],
     [activeTabId, tabs],
   );
+  const activeTheme = themes.find((theme) => theme.id === themeId) ?? themes[0];
   const editingHasApiKey = providers.some((item) => item.id === editingProviderId && item.hasApiKey);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const colors = themeVariables(activeTheme, appearance);
+    root.dataset.theme = activeTheme.id;
+    root.dataset.mode = appearance;
+    root.style.setProperty("--theme-accent", colors.accent);
+    root.style.setProperty("--theme-accent-hover", colors.hover);
+    root.style.setProperty("--theme-accent-strong", colors.strong);
+    root.style.setProperty("--theme-accent-muted", colors.muted);
+    localStorage.setItem("laural.theme", activeTheme.id);
+    localStorage.setItem("laural.appearance", appearance);
+  }, [activeTheme, appearance]);
 
   function addTerminal(shell: Shell, cwd: string | null = projectPath) {
     const count = tabs.filter((tab) => tab.shell === shell).length + 1;
@@ -393,6 +411,7 @@ function App() {
             <div><strong>Conecta tu modelo</strong><p>Usa Ollama, LM Studio o tu endpoint.</p></div>
             <button className="plan-arrow" onClick={() => setProviderDialogOpen(true)} aria-label="Configurar proveedor"><ChevronIcon /></button>
           </div>
+          <button className="appearance-entry" onClick={() => setAppearanceOpen(true)}><PaletteIcon /><span>Apariencia</span><span className="appearance-entry-meta">{appearance === "dark" ? "Oscuro" : "Claro"}</span></button>
           <button className="profile-row"><span className="profile-avatar">AM</span><span className="profile-name">Perfil local</span><DotsIcon /></button>
         </div>
       </aside>
@@ -432,7 +451,7 @@ function App() {
               <div className="terminal-heading-actions"><button className="small-action"><CopyIcon /> Copiar</button><button className="small-action"><ClearIcon /> Limpiar</button></div>
             </div>
             <div className={`terminal-frame ${splitTabId ? "is-split" : ""}`}>
-              {tabs.map((tab) => <TerminalPane key={tab.id} terminalId={tab.id} shell={tab.shell} cwd={tab.cwd} visible={tab.id === activeTabId || tab.id === splitTabId} onTextOutput={captureTerminalOutput} />)}
+              {tabs.map((tab) => <TerminalPane key={tab.id} terminalId={tab.id} shell={tab.shell} cwd={tab.cwd} visible={tab.id === activeTabId || tab.id === splitTabId} theme={activeTheme} appearance={appearance} onTextOutput={captureTerminalOutput} />)}
               <div className="terminal-caption"><span className="shortcut-hint"><kbd>Ctrl</kbd> + <kbd>`</kbd> alternar terminal</span><span><span className="activity-pulse" /> Shell conectado</span></div>
             </div>
             <div className="terminal-footer"><div className="footer-left"><span className="footer-branch"><BranchIcon /> main</span><span className="footer-divider" /><span>Sin cambios</span></div><div className="footer-right"><span>UTF-8</span><span>{activeTab?.title ?? "PowerShell"}</span><span>100%</span></div></div>
@@ -540,12 +559,34 @@ function App() {
           <div className="dialog-footnote"><LockIcon /> La clave nunca se escribe en el archivo de configuración.</div>
         </section>
       </div>}
+
+      {appearanceOpen && <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setAppearanceOpen(false); }}>
+        <section className="appearance-dialog" role="dialog" aria-modal="true" aria-labelledby="appearance-title">
+          <button className="dialog-close" onClick={() => setAppearanceOpen(false)} aria-label="Cerrar">×</button>
+          <div className="dialog-mark"><PaletteIcon /></div><p className="eyebrow">PERSONALIZACIÓN</p><h2 id="appearance-title">Apariencia</h2>
+          <p className="dialog-copy">Elige un tema de color y el modo de visualización. La preferencia se guarda solo en este equipo.</p>
+          <div className="appearance-mode" role="group" aria-label="Modo de color">
+            <button className={appearance === "light" ? "selected" : ""} aria-pressed={appearance === "light"} onClick={() => setAppearance("light")}><SunIcon /> Claro</button>
+            <button className={appearance === "dark" ? "selected" : ""} aria-pressed={appearance === "dark"} onClick={() => setAppearance("dark")}><MoonIcon /> Oscuro</button>
+          </div>
+          <div className="theme-picker-heading"><strong>Temas</strong><span>{themes.length} disponibles</span></div>
+          <div className="theme-grid" role="group" aria-label="Temas de color">
+            {themes.map((theme) => <button key={theme.id} className={`theme-choice ${themeId === theme.id ? "selected" : ""}`} aria-pressed={themeId === theme.id} onClick={() => setThemeId(theme.id)}>
+              <span className="theme-swatch"><i style={{ backgroundColor: theme.accentDark }} /><i style={{ backgroundColor: theme.accentLight }} /><i className="theme-swatch-surface" /></span>
+              <span className="theme-choice-name">{theme.name}</span><span className="theme-choice-check" aria-hidden="true">{themeId === theme.id ? "✓" : ""}</span>
+            </button>)}
+          </div>
+        </section>
+      </div>}
     </main>
   );
 }
 
 function TerminalIcon() { return <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2.5" y="3" width="15" height="14" rx="3"/><path d="m6 8 2.3 2-2.3 2M10.5 12h3.5"/></svg>; }
 function SparkIcon() { return <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m10 2 1.7 5.2L17 9l-5.3 1.8L10 16l-1.7-5.2L3 9l5.3-1.8L10 2Z"/><path d="m16 13 .8 2.2L19 16l-2.2.8L16 19l-.8-2.2L13 16l2.2-.8L16 13Z"/></svg>; }
+function PaletteIcon() { return <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.5a7.5 7.5 0 1 0 0 15h1.1a1.7 1.7 0 0 0 1.2-2.9l-.5-.5a1.4 1.4 0 0 1 1-2.4h1.3A4.4 4.4 0 0 0 18.5 7c0-2.5-3.8-4.5-8.5-4.5Z"/><circle cx="6.2" cy="9.7" r=".8"/><circle cx="9.2" cy="6.2" r=".8"/><circle cx="13.1" cy="6.4" r=".8"/></svg>; }
+function SunIcon() { return <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="3.2"/><path d="M10 2v2m0 12v2M2 10h2m12 0h2M4.35 4.35l1.4 1.4m8.5 8.5 1.4 1.4m0-11.3-1.4 1.4m-8.5 8.5-1.4 1.4"/></svg>; }
+function MoonIcon() { return <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M16.8 12.3A7.2 7.2 0 0 1 7.7 3.2 7.5 7.5 0 1 0 16.8 12.3Z"/></svg>; }
 function HistoryIcon() { return <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 5.8A7 7 0 1 1 3 10"/><path d="M3 3.5v3h3M10 6v4l2.5 1.5"/></svg>; }
 function SearchIcon() { return <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.8" cy="8.8" r="5.8"/><path d="m13.2 13.2 4 4"/></svg>; }
 function ChevronIcon() { return <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3.5 4.5 4.5L6 12.5"/></svg>; }

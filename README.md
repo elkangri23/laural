@@ -10,6 +10,7 @@
 
 - Terminal con PowerShell, CMD, WSL y Git Bash.
 - Pestañas y panel dividido.
+- Doce temas de color y modos claro/oscuro, con preferencias guardadas localmente.
 - Chat contextual con salida reciente de terminal, proyecto abierto y archivos que el usuario elige adjuntar.
 - Perfiles para Ollama, LM Studio, FreeLLMAPI y endpoints compatibles con OpenAI.
 - Agente que propone comandos y cambios de archivos para revisión. Las políticas permiten confirmar comandos, aplicar reglas o activar el modo automático; las ediciones de archivos requieren aprobación explícita.
@@ -75,6 +76,7 @@ HTTP solo se acepta para `localhost` o loopback. Los endpoints remotos deben usa
 - [Decisiones de arquitectura (ADR)](docs/adr/README.md)
 - [Privacidad y modelo de amenazas](docs/security/README.md)
 - [Hoja de ruta](docs/ROADMAP.md)
+- [Sistema visual](docs/ui/design-system.md)
 - [Contribuir](CONTRIBUTING.md)
 - [Política de seguridad](SECURITY.md)
 

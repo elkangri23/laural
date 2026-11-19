@@ -25,6 +25,8 @@ flowchart LR
 
 Administra pestañas, shell seleccionado, directorio del proyecto, contexto elegido, chat, planes de agente y confirmaciones. Renderiza la terminal mediante xterm.js y convierte entrada/salida a invocaciones/eventos Tauri.
 
+La apariencia se administra en React y se aplica con atributos CSS `data-theme`/`data-mode` y propiedades personalizadas. La paleta de 12 temas y el modo claro/oscuro se guardan en `localStorage` del WebView; actualizar los colores de xterm.js no debe destruir la sesión PTY.
+
 ### Shell nativo (Rust)
 
 `portable-pty` abre un pseudo-terminal para el shell seleccionado. Rust mantiene sesiones, redimensiona la terminal y envía bytes de salida al frontend. Los comandos del agente se escriben en una sesión de shell existente.
@@ -41,6 +43,7 @@ El modelo propone un JSON con resumen, comandos y archivos. Rust valida el forma
 
 - `providers.json`: perfiles sin secretos y perfil activo.
 - `agent.json`: modo y prefijos permitidos.
+- `localStorage`: tema y modo de apariencia, sin información de proveedor o proyecto.
 - Windows Credential Manager: secretos por proveedor.
 - Archivos de proyecto: solo archivos explícitamente aprobados por la persona.
 - Historial de chat persistente: aún no implementado.

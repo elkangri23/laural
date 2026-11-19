@@ -13,6 +13,7 @@ Los casos describen el comportamiento esperado del producto. Los estados disting
 | UC-07 | Revisar y aplicar cambios de archivo | Desarrollador | Implementación inicial |
 | UC-08 | Usar Laural sin servicio externo de Laural | Desarrollador | Implementación inicial |
 | UC-09 | Instalar Laural en Windows | Colaborador/usuario | Paquete creado; instalación aún no validada |
+| UC-10 | Elegir tema y modo claro/oscuro | Usuario | Implementación inicial |
 
 ## UC-01 — Abrir terminal
 
@@ -112,3 +113,11 @@ Los casos describen el comportamiento esperado del producto. Los estados disting
 **Flujo esperado:** iniciar paquete MSI o EXE, revisar editor y origen, instalar, abrir Laural, crear terminal y configurar endpoint de prueba.
 
 **Estado:** compilación de los dos formatos completada en el equipo de desarrollo. La instalación limpia todavía necesita validación antes de anunciar una release estable.
+
+## UC-10 — Personalizar la apariencia
+
+**Objetivo:** adaptar contraste y color de acento al gusto del usuario.
+
+**Flujo principal:** abrir **Apariencia**, elegir modo claro u oscuro y seleccionar una de las doce paletas. La interfaz y terminal reflejan la selección; Laural la guarda localmente.
+
+**Criterios:** hay exactamente doce opciones etiquetadas, cada una ofrece modo claro y oscuro, la selección activa se anuncia con `aria-pressed`, el tema persiste al reiniciar y el terminal mantiene su sesión al cambiar colores.

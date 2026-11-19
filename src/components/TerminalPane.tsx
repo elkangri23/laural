@@ -3,13 +3,14 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { terminalTheme, type AppearanceMode, type ThemeDefinition } from "../themes";
 import "@xterm/xterm/css/xterm.css";
 
 type Shell = "powershell" | "cmd" | "wsl" | "git-bash";
 type OutputEvent = { terminalId: string; data: number[] };
-type TerminalPaneProps = { terminalId: string; shell: Shell; cwd: string | null; visible: boolean; onTextOutput: (terminalId: string, text: string) => void };
+type TerminalPaneProps = { terminalId: string; shell: Shell; cwd: string | null; visible: boolean; theme: ThemeDefinition; appearance: AppearanceMode; onTextOutput: (terminalId: string, text: string) => void };
 
-function TerminalPane({ terminalId, shell, cwd, visible, onTextOutput }: TerminalPaneProps) {
+function TerminalPane({ terminalId, shell, cwd, visible, theme, appearance, onTextOutput }: TerminalPaneProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -27,15 +28,7 @@ function TerminalPane({ terminalId, shell, cwd, visible, onTextOutput }: Termina
       fontSize: 13,
       lineHeight: 1.45,
       scrollback: 5000,
-      theme: {
-        background: "#101115", foreground: "#e2e4e9", cursor: "#b9f27c",
-        cursorAccent: "#101115", selectionBackground: "#4b5366aa",
-        black: "#272a33", red: "#ff758f", green: "#b9f27c", yellow: "#f6cd75",
-        blue: "#88a8ff", magenta: "#d3a3ff", cyan: "#76dbd1", white: "#d2d6df",
-        brightBlack: "#626879", brightRed: "#ff91a6", brightGreen: "#cbff8e",
-        brightYellow: "#ffe19a", brightBlue: "#a1baff", brightMagenta: "#e2bdff",
-        brightCyan: "#91eee5", brightWhite: "#ffffff",
-      },
+      theme: terminalTheme(theme, appearance),
     });
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
@@ -104,6 +97,10 @@ function TerminalPane({ terminalId, shell, cwd, visible, onTextOutput }: Termina
       fitRef.current = null;
     };
   }, [cwd, onTextOutput, shell, terminalId]);
+
+  useEffect(() => {
+    if (terminalRef.current) terminalRef.current.options.theme = terminalTheme(theme, appearance);
+  }, [appearance, theme]);
 
   useEffect(() => {
     if (!visible) return;

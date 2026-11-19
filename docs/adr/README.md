@@ -13,6 +13,7 @@ Los ADR registran por qué se eligió una opción y qué costes trae. Un ADR ace
 | [0007](0007-local-first-no-sync-mvp.md) | Sin cuenta ni sincronización en el MVP | Aceptada |
 | [0008](0008-independent-implementation-mit.md) | Implementación independiente y licencia MIT | Aceptada |
 | [0009](0009-local-json-profile-storage.md) | Perfiles y política en JSON local, secretos aparte | Aceptada |
+| [0010](0010-theme-and-appearance-preferences.md) | Doce paletas y modo claro/oscuro local | Aceptada |
 
 ## Crear un ADR
 
