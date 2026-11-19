@@ -14,6 +14,7 @@ Los ADR registran por qué se eligió una opción y qué costes trae. Un ADR ace
 | [0008](0008-independent-implementation-mit.md) | Implementación independiente y licencia MIT | Aceptada |
 | [0009](0009-local-json-profile-storage.md) | Perfiles y política en JSON local, secretos aparte | Aceptada |
 | [0010](0010-theme-and-appearance-preferences.md) | Doce paletas y modo claro/oscuro local | Aceptada |
+| [0011](0011-streaming-chat-and-local-history.md) | Chat incremental y almacenamiento local de conversaciones | Aceptada |
 
 ## Crear un ADR
 

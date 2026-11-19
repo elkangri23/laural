@@ -9,11 +9,12 @@
 ## Qué ofrece
 
 - Terminal con PowerShell, CMD, WSL y Git Bash.
-- Pestañas y panel dividido.
+- Pestañas y panel dividido vertical u horizontal.
 - Doce temas de color y modos claro/oscuro, con preferencias guardadas localmente.
-- Chat contextual con salida reciente de terminal, proyecto abierto y archivos que el usuario elige adjuntar.
+- Chat contextual con respuesta incremental, historial local borrable, salida reciente de terminal, proyecto abierto y archivos que el usuario elige adjuntar.
 - Perfiles para Ollama, LM Studio, FreeLLMAPI y endpoints compatibles con OpenAI.
 - Agente que propone comandos y cambios de archivos para revisión. Las políticas permiten confirmar comandos, aplicar reglas o activar el modo automático; las ediciones de archivos requieren aprobación explícita.
+- Icono y favicon propios; la compilación para Windows se puede generar desde GitHub Actions al publicar una etiqueta `v*`.
 - Aplicación local sin cuenta ni servicio propio. La sincronización está fuera del alcance de la primera versión.
 
 Laural es una implementación independiente con marca e interfaz propias. No incluye código, recursos ni componentes de Warp.
@@ -25,7 +26,7 @@ La compilación x64 actual se encuentra en [Releases](https://github.com/elkangr
 - `nsis/Laural_0.1.0_x64-setup.exe`
 - `msi/Laural_0.1.0_x64_en-US.msi`
 
-Estos instaladores todavía no se han validado mediante una instalación limpia en otro equipo. No se consideran una versión estable.
+Los instaladores requieren validación manual en una instalación limpia. No se consideran una versión estable.
 
 ## Requisitos para desarrollar
 

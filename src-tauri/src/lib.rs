@@ -367,6 +367,7 @@ fn apply_agent_file(
 pub fn run() {
     tauri::Builder::default()
         .manage(PtyStore::default())
+        .manage(providers::ChatStreamRegistry::default())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
@@ -382,6 +383,8 @@ pub fn run() {
             providers::test_provider,
             providers::save_provider,
             providers::send_chat,
+            providers::send_chat_stream,
+            providers::cancel_chat_stream,
             providers::get_agent_settings,
             providers::save_agent_settings,
             providers::plan_agent

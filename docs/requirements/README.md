@@ -8,18 +8,18 @@ Los requisitos distinguen el alcance acordado del estado actual del prototipo. �
 | --- | --- | --- |
 | FR-01 | Abrir PowerShell, CMD, WSL y Git Bash en una terminal integrada. | Implementación inicial |
 | FR-02 | Mantener varias pestañas y cambiar entre ellas. | Implementación inicial |
-| FR-03 | Mostrar terminales simultáneas en paneles divididos. | Implementación inicial, división vertical |
+| FR-03 | Mostrar terminales simultáneas en paneles divididos. | Implementación inicial, dos paneles vertical u horizontal |
 | FR-04 | Abrir una carpeta de proyecto y crear una terminal con esa carpeta como directorio de trabajo. | Implementado inicialmente |
 | FR-05 | Guardar varios perfiles de proveedor y activar uno. | Implementado inicialmente |
 | FR-06 | Probar el endpoint y obtener modelos desde `/models`. | Implementado inicialmente |
-| FR-07 | Enviar mensajes a `/chat/completions` con modelo seleccionado. | Implementado, sin streaming |
+| FR-07 | Enviar mensajes a `/chat/completions` con modelo seleccionado. | Streaming incremental y cancelación de chat implementados; contratos de proveedores pendientes de validación manual |
 | FR-08 | Incluir salida reciente de terminal y contexto acotado del proyecto en una solicitud. | Implementado inicialmente |
 | FR-09 | Adjuntar archivos seleccionados explícitamente. | Implementado inicialmente |
 | FR-10 | Pedir al modelo un plan de acciones estructurado y mostrarlo antes de aplicar. | Implementado inicialmente |
 | FR-11 | Ejecutar comandos con confirmación por acción, reglas configurables o modo automático explícito. | Implementado inicialmente; reglas heurísticas |
 | FR-12 | Modificar archivos del proyecto solo con aprobación explícita y respaldo del original. | Implementado inicialmente |
-| FR-13 | Mostrar bloques de comandos y resultados como unidades navegables. | Pendiente |
-| FR-14 | Guardar historial de chat y sesiones localmente. | Pendiente |
+| FR-13 | Mostrar bloques de comandos y resultados como unidades navegables. | Pendiente; requiere integración shell-aware para identificar fin y estado de cada comando |
+| FR-14 | Conservar un historial de chat local y permitir borrarlo. | Implementación inicial en almacenamiento local del WebView; límite de 100 mensajes |
 | FR-15 | Cancelar una operación del agente durante la generación o ejecución. | Pendiente |
 | FR-16 | Sincronizar configuración/proveedores entre dispositivos. | Diferido; fuera del MVP |
 | FR-17 | Elegir entre 12 paletas visuales y cambiar entre modo claro y oscuro. | Implementación inicial |

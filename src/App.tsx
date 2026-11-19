@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import TerminalPane from "./components/TerminalPane";
 import { themeVariables, themes, type AppearanceMode } from "./themes";
@@ -7,7 +8,7 @@ import "./App.css";
 
 type Shell = "powershell" | "cmd" | "wsl" | "git-bash";
 type TerminalTab = { id: string; shell: Shell; title: string; cwd: string | null };
-type ChatMessage = { role: "user" | "assistant"; content: string };
+type ChatMessage = { role: "user" | "assistant"; content: string; id?: string };
 type Provider = { id: string; name: string; baseUrl: string; model: string; hasApiKey: boolean };
 type ExecutionMode = "review" | "rules" | "automatic";
 type PlanAction =
@@ -32,6 +33,7 @@ function App() {
   const [activeTabId, setActiveTabId] = useState(tabs[0].id);
   const [projectPath, setProjectPath] = useState<string | null>(null);
   const [splitTabId, setSplitTabId] = useState<string | null>(null);
+  const [splitOrientation, setSplitOrientation] = useState<"vertical" | "horizontal" | null>(null);
   const [shellMenuOpen, setShellMenuOpen] = useState(false);
   const [agentMode, setAgentMode] = useState(false);
   const [prompt, setPrompt] = useState("");
@@ -51,7 +53,12 @@ function App() {
   const [providerBusy, setProviderBusy] = useState(false);
   const [providerError, setProviderError] = useState("");
   const [providerNotice, setProviderNotice] = useState("");
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>(() => {
+    try {
+      const stored: unknown = JSON.parse(localStorage.getItem("laural.chat.v1") ?? "[]");
+      return Array.isArray(stored) ? stored.filter((item): item is ChatMessage => item && (item.role === "user" || item.role === "assistant") && typeof item.content === "string").slice(-100) : [];
+    } catch { return []; }
+  });
   const [chatBusy, setChatBusy] = useState(false);
   const [contextFiles, setContextFiles] = useState<string[]>([]);
   const [agentPlan, setAgentPlan] = useState<AgentPlan | null>(null);
@@ -61,6 +68,14 @@ function App() {
   const [ruleDraft, setRuleDraft] = useState("git status\ngit diff");
   const [policyNotice, setPolicyNotice] = useState("");
   const terminalContextRef = useRef<Record<string, string>>({});
+  const activeChatRequestRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    try {
+      const bounded = chatMessages.slice(-100).map(({ role, content }) => ({ role, content: content.slice(0, 20_000) }));
+      localStorage.setItem("laural.chat.v1", JSON.stringify(bounded));
+    } catch { /* Storage may be unavailable or full; chat can still continue in memory. */ }
+  }, [chatMessages]);
 
   useEffect(() => {
     void Promise.all([
@@ -151,7 +166,7 @@ function App() {
 
   function closeTab(tabId: string) {
     const nextTabs = tabs.filter((tab) => tab.id !== tabId);
-    setSplitTabId(null);
+    if (splitTabId === tabId || tabId === activeTabId) { setSplitTabId(null); setSplitOrientation(null); }
     if (nextTabs.length === 0) {
       const replacement = { id: crypto.randomUUID(), shell: "powershell" as Shell, title: "PowerShell", cwd: projectPath };
       setTabs([replacement]);
@@ -166,7 +181,8 @@ function App() {
 
   function toggleSplit() {
     if (splitTabId) {
-      setSplitTabId(null);
+      if (splitOrientation === "vertical") setSplitOrientation("horizontal");
+      else { setSplitTabId(null); setSplitOrientation(null); }
       return;
     }
     const shell = activeTab?.shell ?? "powershell";
@@ -179,6 +195,7 @@ function App() {
     };
     setTabs((current) => [...current, nextTab]);
     setSplitTabId(nextTab.id);
+    setSplitOrientation("vertical");
   }
 
   function submitPrompt(event: FormEvent<HTMLFormElement>) {
@@ -218,20 +235,45 @@ function App() {
       }).finally(() => setAgentPlanBusy(false));
       return;
     }
-    const nextMessages = [...chatMessages, { role: "user" as const, content: question }];
+    const requestId = crypto.randomUUID();
+    const assistantMessageId = crypto.randomUUID();
+    const nextMessages = [...chatMessages, { role: "user" as const, content: question }, { role: "assistant" as const, content: "", id: assistantMessageId }];
     setChatMessages(nextMessages);
     setPrompt("");
     setChatBusy(true);
-    void invoke<string>("send_chat", {
-      messages: nextMessages,
+    activeChatRequestRef.current = requestId;
+    let unlisten: (() => void) | undefined;
+    void listen<{ requestId: string; delta: string }>("chat-stream-delta", (event) => {
+      if (event.payload.requestId !== requestId) return;
+      setChatMessages((current) => current.map((message) => message.id === assistantMessageId ? { ...message, content: message.content + event.payload.delta } : message));
+    }).then((stopListening) => {
+      unlisten = stopListening;
+      return invoke("send_chat_stream", {
+      requestId,
+      messages: nextMessages.slice(0, -1),
       terminalContext: terminalContextRef.current[activeTabId] ?? "",
       projectPath,
       selectedFiles: contextFiles,
-    }).then((reply) => {
-      setChatMessages((current) => [...current, { role: "assistant", content: reply }]);
+      });
     }).catch((error) => {
-      setChatMessages((current) => [...current, { role: "assistant", content: `No se pudo completar la consulta: ${String(error)}` }]);
-    }).finally(() => setChatBusy(false));
+      const message = String(error);
+      setChatMessages((current) => current.map((item) => item.id === assistantMessageId ? { ...item, content: item.content ? `${item.content}\n\n[${message}]` : `No se pudo completar la consulta: ${message}` } : item));
+    }).finally(() => {
+      unlisten?.();
+      activeChatRequestRef.current = null;
+      setChatBusy(false);
+    });
+  }
+
+  async function stopChat() {
+    const requestId = activeChatRequestRef.current;
+    if (requestId) await invoke("cancel_chat_stream", { requestId }).catch(() => undefined);
+  }
+
+  function clearChat() {
+    setChatMessages([]);
+    setAgentPlan(null);
+    localStorage.removeItem("laural.chat.v1");
   }
 
   function updateAgentAction(index: number, update: Partial<PlanAction>) {
@@ -439,7 +481,7 @@ function App() {
           </div>
           <div className="terminal-tools">
             <button className="toolbar-chip" onClick={() => setProviderDialogOpen(true)}><span className={`status-led ${provider ? "connected" : ""}`} /><span>{provider ? `${provider.name} · ${provider.model}` : "Proveedor sin configurar"}</span><ChevronIcon /></button>
-            <button className={`toolbar-icon ${splitTabId ? "active" : ""}`} aria-label={splitTabId ? "Cerrar panel dividido" : "Dividir panel"} title={splitTabId ? "Cerrar panel dividido" : "Dividir terminal"} onClick={toggleSplit}><SplitIcon /></button>
+            <button className={`toolbar-icon ${splitTabId ? "active" : ""}`} aria-label={splitTabId ? `División ${splitOrientation === "vertical" ? "vertical" : "horizontal"}; cambiar o cerrar` : "Dividir panel"} title={splitTabId ? `${splitOrientation === "vertical" ? "Vertical" : "Horizontal"} · clic para cambiar/cerrar` : "Dividir terminal"} onClick={toggleSplit}><SplitIcon /></button>
             <button className="toolbar-icon" aria-label="Más opciones"><DotsIcon /></button>
           </div>
         </div>
@@ -450,7 +492,7 @@ function App() {
               <div><div className="terminal-title-line"><span className="terminal-title-mark">⌁</span><h1>{activeTab?.title ?? "Terminal"}</h1><span className="connection-pill"><span /> Local</span></div><p className="terminal-path">{activeTab?.cwd ?? "Directorio de inicio"} <span>·</span> Windows</p></div>
               <div className="terminal-heading-actions"><button className="small-action"><CopyIcon /> Copiar</button><button className="small-action"><ClearIcon /> Limpiar</button></div>
             </div>
-            <div className={`terminal-frame ${splitTabId ? "is-split" : ""}`}>
+            <div className={`terminal-frame ${splitTabId ? `is-split split-${splitOrientation}` : ""}`}>
               {tabs.map((tab) => <TerminalPane key={tab.id} terminalId={tab.id} shell={tab.shell} cwd={tab.cwd} visible={tab.id === activeTabId || tab.id === splitTabId} theme={activeTheme} appearance={appearance} onTextOutput={captureTerminalOutput} />)}
               <div className="terminal-caption"><span className="shortcut-hint"><kbd>Ctrl</kbd> + <kbd>`</kbd> alternar terminal</span><span><span className="activity-pulse" /> Shell conectado</span></div>
             </div>
@@ -458,7 +500,7 @@ function App() {
           </section>
 
           <aside className="assistant-panel">
-            <div className="assistant-header"><div className="assistant-heading"><div className="assistant-avatar"><SparkIcon /></div><div><strong>Asistente</strong><span>Contexto de esta terminal</span></div></div><button className="icon-button" aria-label="Opciones del asistente"><DotsIcon /></button></div>
+            <div className="assistant-header"><div className="assistant-heading"><div className="assistant-avatar"><SparkIcon /></div><div><strong>Asistente</strong><span>Contexto de esta terminal</span></div></div><button className="action-quiet" onClick={clearChat} disabled={chatBusy || agentPlanBusy}>Borrar historial</button></div>
             <div className="mode-switch" role="tablist" aria-label="Modo de IA">
               <button className={!agentMode ? "active" : ""} onClick={() => setAgentMode(false)} role="tab" aria-selected={!agentMode}><MessageIcon /> Chat</button>
               <button className={agentMode ? "active" : ""} onClick={() => setAgentMode(true)} role="tab" aria-selected={agentMode}><AgentIcon /> Agente <span className="mode-beta">PREVIEW</span></button>
@@ -489,7 +531,7 @@ function App() {
                 <button onClick={() => setPrompt("Dame un comando para revisar el estado de Git")}><span className="suggestion-icon"><TerminalIcon /></span><span>Genera un comando con contexto</span><ArrowUpRightIcon /></button>
               </div>
             </div> : <div className="message-thread">
-              {chatMessages.map((message, index) => <article className={`chat-message ${message.role}`} key={`${index}-${message.role}`}>
+              {chatMessages.map((message, index) => <article className={`chat-message ${message.role}`} key={message.id ?? `${index}-${message.role}`}>
                 <span className="message-avatar">{message.role === "user" ? "Tú" : <SparkIcon />}</span>
                 <div className="message-content">{message.content}</div>
               </article>)}
@@ -505,7 +547,7 @@ function App() {
                     {action.status !== "submitted" && action.status !== "applied" && action.status !== "rejected" && <button className="action-quiet" onClick={() => updateAgentAction(index, { status: "rejected", result: "Acción descartada." })}>Descartar</button>}</div>
                 </article>)}</div>
               </div>}
-              {(chatBusy || agentPlanBusy) && <div className="typing-indicator"><span /><span /><span /> {agentMode ? "El agente está preparando el plan" : "El modelo está respondiendo"}</div>}
+              {(chatBusy || agentPlanBusy) && <div className="typing-indicator"><span /><span /><span /> {agentMode ? "El agente está preparando el plan" : "El modelo está respondiendo"} {chatBusy && !agentMode && <button className="action-quiet" onClick={() => void stopChat()}>Detener</button>}</div>}
             </div>}
             <div className="composer-wrap">
               <form className="composer" onSubmit={submitPrompt}>

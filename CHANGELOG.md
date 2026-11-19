@@ -1,5 +1,13 @@
 # Registro de cambios
 
+## Cambios sin publicar
+
+- Respuestas incrementales del chat con cancelación e historial local borrable, limitado a 100 mensajes.
+- División de terminal horizontal además de la vertical.
+- Bloqueo adicional de operadores de composición y sustitución en comandos del agente.
+- Icono/favico propio y workflow de build de Windows para GitHub Actions.
+- Hoja de ruta y requisitos actualizados para separar implementación y validación manual.
+
 Los cambios relevantes se anotan por versión. La versión `0.1.0` es un prototipo de desarrollo, no una release estable.
 
 ## 0.1.0 — Prototipo inicial
