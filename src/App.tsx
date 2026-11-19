@@ -1,3 +1,4 @@
+import { appendTerminalOutput } from "./terminalOutput";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
@@ -124,9 +125,9 @@ function App() {
 
   const captureTerminalOutput = useCallback((terminalId: string, text: string) => {
     const current = terminalContextRef.current[terminalId] ?? "";
-    terminalContextRef.current[terminalId] = (current + text).slice(-24_000);
+    terminalContextRef.current[terminalId] = appendTerminalOutput(current, text);
     const blockId = activeCommandBlockRef.current[terminalId];
-    if (blockId) setCommandBlocks((blocks) => blocks.map((block) => block.id === blockId ? { ...block, output: (block.output + text).slice(-24_000) } : block));
+    if (blockId) setCommandBlocks((blocks) => blocks.map((block) => block.id === blockId ? { ...block, output: appendTerminalOutput(block.output, text) } : block));
   }, []);
 
   const startCommandBlock = useCallback((terminalId: string, command: string) => {

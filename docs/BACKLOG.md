@@ -5,7 +5,7 @@ La [hoja de ruta](ROADMAP.md) agrupa los hitos. Esta lista ordena el trabajo abi
 | Prioridad | Entrega | Criterio de cierre |
 | --- | --- | --- |
 | Alta · M3 | Autorización del agente | Verificar comandos y rutas por shell, documentar límites y resolver los casos que permitan eludir aprobación. |
-| Alta · M1 | Terminal y bloques | Regresiones de montaje, cierre temprano y reinicio disponibles. Comprobar inicio, edición, salida, interrupción y cierre en PowerShell, CMD, WSL y Git Bash con y sin perfiles personalizados. |
+| Alta · M1 | Terminal y bloques | Regresiones de montaje, cierre temprano, reinicio y recorte Unicode disponibles. La PTY real recibe la última de 1.500 líneas en los cuatro shells. Comprobar inicio, edición, salida, interrupción y cierre en PowerShell, CMD, WSL y Git Bash con y sin perfiles personalizados. |
 | Alta · M4 | Distribución | Registrar instalación limpia, actualización y desinstalación en Windows 10/11 x64, incluidos datos residuales. |
 | Alta · M2 | Proveedores y privacidad | El decodificador cuenta con regresiones de fragmentación, límites y cortes de conexión. Validar modelos, streaming, cancelación, errores y contenido enviado con cada proveedor admitido. |
 | Media · M0 | Configuración | Verificar navegación con teclado, guardado de preferencias tras reinicio y cambio de perfil sin exposición de claves. |

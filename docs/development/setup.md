@@ -63,4 +63,4 @@ Con PowerShell, CMD, Git Bash y una distribución predeterminada de WSL disponib
 cargo llvm-cov --manifest-path src-tauri/Cargo.toml --lib --html -- --include-ignored --nocapture
 ```
 
-Esta prueba abre una pseudoterminal por shell, cambia su tamaño, espera el prompt, envía una orden de salida y comprueba el código 37. La suite habitual deja esta prueba como opcional porque WSL y Git Bash dependen del equipo.
+Esta prueba abre una pseudoterminal por shell, cambia su tamaño, espera el prompt, genera 1.500 líneas, verifica que recibe más de 24.000 bytes y la marca de la última línea, y comprueba el código de salida 37. La suite habitual deja esta prueba como opcional porque WSL y Git Bash dependen del equipo.

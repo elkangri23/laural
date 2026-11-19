@@ -1,6 +1,8 @@
 # Registro de cambios
 
-## Sin publicar
+## 0.1.0-alpha.7
+
+- Al salir de la aplicación se cierran las sesiones activas aunque haya una escritura en curso. El contexto de salida larga y los bloques comparten un recorte que respeta caracteres Unicode.
 
 - La terminal registra los eventos antes de iniciar el shell, conserva la sesión al ocultar una pestaña y ofrece reiniciar una sesión terminada. Al cerrar una pestaña se libera su contexto.
 

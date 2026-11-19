@@ -14,8 +14,8 @@ Estado al 19 de noviembre de 2026. «Implementado» describe código presente; �
 
 ## M1 — Estabilidad de terminal (parcial)
 
-- Validar el inicio, cierre, reinicio, redimensionamiento y salida larga en los cuatro shells.
-- El panel espera a sus suscripciones antes de arrancar y coordina el cierre durante el arranque. Las regresiones cubren ocultar y mostrar una sesión y el cierre temprano. Pendiente validar el cierre completo de la aplicación instalada.
+- Prueba con PTY real completada en los cuatro shells: arranque, redimensionamiento, salida larga y cierre. El reinicio desde la interfaz instalada sigue pendiente.
+- El panel espera a sus suscripciones antes de arrancar y coordina el cierre durante el arranque. Las regresiones cubren ocultar y mostrar una sesión y el cierre temprano. El evento de salida de Tauri vacía el registro y termina los procesos aunque la entrada esté ocupada. Probado con CMD real desde el backend. Pendiente validar el cierre desde la ventana instalada.
 - Validar bloques de comandos, entrada editada y resultados en PowerShell, CMD, Git Bash y WSL; bash/prompt de usuario pueden sustituir las marcas de integración.
 - Probar instalación y desinstalación limpia en Windows 10 y 11.
 

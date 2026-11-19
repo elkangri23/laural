@@ -30,7 +30,7 @@ Los casos describen el comportamiento esperado del producto. Los estados disting
 3. La persona escribe comandos y ve salida en la terminal integrada.
 4. La persona puede añadir pestañas, cambiar de pestaña o cerrar una sesión.
 
-**Alternativas y errores:** si el ejecutable no está instalado o no arranca, Laural muestra un error en el panel. Cerrar la pestaña termina su proceso asociado y libera el contexto. Si el shell finaliza o falla al iniciar, **Reiniciar terminal** abre otra sesión con el mismo shell y directorio inicial.
+**Alternativas y errores:** si el ejecutable no está instalado o no arranca, Laural muestra un error en el panel. Cerrar la pestaña termina su proceso asociado y libera el contexto. Al salir de Laural, el backend termina los shells activos. La salida mostrada se entrega a la terminal por fragmentos; los bloques conservan hasta 24.000 unidades UTF-16 recientes. Si el shell finaliza o falla al iniciar, **Reiniciar terminal** abre otra sesión con el mismo shell y directorio inicial.
 
 **Criterios de aceptación:** entrada, salida, resize y cierre se mantienen en la sesión elegida; cerrar una pestaña no cierra las demás.
 
