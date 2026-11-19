@@ -1,0 +1,114 @@
+# Casos de uso
+
+Los casos describen el comportamiento esperado del producto. Los estados distinguen la implementación inicial de trabajo todavía pendiente.
+
+| ID | Caso | Actor principal | Estado |
+| --- | --- | --- | --- |
+| UC-01 | Abrir una terminal y seleccionar shell | Desarrollador | Implementación inicial |
+| UC-02 | Trabajar en varias terminales y proyecto | Desarrollador | Implementación inicial |
+| UC-03 | Configurar y cambiar perfiles de modelo | Desarrollador | Implementación inicial |
+| UC-04 | Preguntar al chat con contexto escogido | Desarrollador | Implementación inicial |
+| UC-05 | Solicitar un plan al agente | Desarrollador | Implementación inicial |
+| UC-06 | Revisar y ejecutar comandos propuestos | Desarrollador | Implementación inicial |
+| UC-07 | Revisar y aplicar cambios de archivo | Desarrollador | Implementación inicial |
+| UC-08 | Usar Laural sin servicio externo de Laural | Desarrollador | Implementación inicial |
+| UC-09 | Instalar Laural en Windows | Colaborador/usuario | Paquete creado; instalación aún no validada |
+
+## UC-01 — Abrir terminal
+
+**Objetivo:** iniciar un shell disponible y trabajar interactivamente.
+
+**Precondiciones:** Laural está abierta y el shell seleccionado está instalado.
+
+**Flujo principal:**
+
+1. La persona abre una pestaña y selecciona PowerShell, CMD, WSL o Git Bash.
+2. Laural inicia el shell en el directorio inicial seleccionado o en el perfil de usuario.
+3. La persona escribe comandos y ve salida en la terminal integrada.
+4. La persona puede añadir pestañas, cambiar de pestaña o cerrar una sesión.
+
+**Alternativas y errores:** si el ejecutable no está instalado o no arranca, Laural muestra un error en el panel. Cerrar el panel termina su proceso asociado.
+
+**Criterios de aceptación:** entrada, salida, resize y cierre se mantienen en la sesión elegida; cerrar una pestaña no cierra las demás.
+
+## UC-02 — Abrir proyecto y organizar terminales
+
+**Objetivo:** trabajar en una carpeta con más de un shell o tarea simultánea.
+
+**Flujo principal:** elegir una carpeta, iniciar una terminal en ella, crear nuevas pestañas y mostrar dos terminales en paneles divididos.
+
+**Alternativas:** si la carpeta no existe o no es accesible, informar sin iniciar una terminal con ruta inválida.
+
+**Criterios:** cada terminal mantiene su propio shell y directorio de trabajo; el cambio de tamaño actualiza el área PTY.
+
+**Pendiente:** división horizontal, persistencia del layout y bloques de comandos detectados.
+
+## UC-03 — Configurar proveedor y modelo
+
+**Objetivo:** asociar Laural a un servidor local o endpoint OpenAI-compatible.
+
+**Flujo principal:** elegir perfil proveedor, indicar URL, introducir clave opcional, probar conexión, seleccionar un modelo y guardar. Se pueden guardar perfiles separados y cambiar el activo.
+
+**Alternativas:** indicar errores de conexión, autenticación, respuesta incompatible o lista vacía. No incluir la clave en mensajes de error.
+
+**Criterios:** perfiles no secretos persisten localmente; clave queda en Windows Credential Manager; HTTP remoto se rechaza; HTTPS remoto y HTTP loopback se aceptan.
+
+## UC-04 — Chat con contexto elegido
+
+**Objetivo:** preguntar sobre salida del shell, proyecto abierto y archivos adjuntos.
+
+**Flujo principal:** abrir chat, revisar las señales de contexto, añadir archivos si es necesario, escribir pregunta y enviar. La respuesta aparece en la conversación.
+
+**Límite de privacidad:** el contexto se entrega al endpoint activo. El usuario debe conocer proveedor y modelo antes de enviar.
+
+**Criterios:** limitar número y tamaño de archivos y salida; ignorar rutas fuera de contexto permitido; mostrar errores del proveedor sin registrar claves.
+
+**Pendiente:** mostrar vista previa precisa del contexto enviado, exclusiones configurables, streaming e historial local.
+
+## UC-05 — Pedir plan al agente
+
+**Objetivo:** recibir pasos para cambiar el proyecto usando información contextual.
+
+**Precondiciones:** hay proveedor configurado y carpeta de proyecto abierta.
+
+**Flujo principal:** describir la tarea, pedir plan, recibir resumen y lista acotada de comandos o cambios de archivo, revisar cada acción.
+
+**Criterios:** el backend valida JSON, número de acciones, longitud de comandos y rutas relativas; el texto del proyecto se trata como entrada no confiable.
+
+## UC-06 — Autorizar comandos del agente
+
+**Objetivo:** ejecutar un comando propuesto bajo la política del usuario.
+
+**Flujo principal:** el agente propone comando y motivo; Laural muestra ambos; aplica el modo de confirmación, reglas o automático; escribe el comando en terminal activa; presenta salida.
+
+**Alternativas:** comandos de riesgo reconocido se bloquean en ejecución automática o por regla y requieren confirmación manual; se puede rechazar una acción.
+
+**Criterios:** rechazos no envían bytes al shell; el modo efectivo se ve en UI; comandos de varias líneas se rechazan.
+
+**Riesgo residual:** el análisis de comando es heurístico y se puede evadir; modo automático no es sandbox.
+
+## UC-07 — Aplicar cambio de archivo
+
+**Objetivo:** permitir que una propuesta edite un archivo dentro del proyecto.
+
+**Flujo principal:** el modelo propone una ruta relativa y contenido; la persona revisa la propuesta; al aprobar, Laural comprueba canonical path, guarda respaldo si el archivo existía y escribe el contenido.
+
+**Criterios:** nunca sobrescribir fuera de la carpeta canónica; rechazar rutas absolutas y `..`; limitar tamaño; mantener respaldos excluidos del contexto automático.
+
+## UC-08 — Uso local-first
+
+**Objetivo:** trabajar sin cuenta ni servicio alojado por Laural.
+
+**Flujo principal:** utilizar un modelo local o remoto configurado, terminales locales, perfiles y política en disco local.
+
+**Criterios:** no se contacta infraestructura de Laural en funcionamiento normal; al usar proveedor remoto, las solicitudes van al proveedor configurado.
+
+## UC-09 — Instalar Laural en Windows
+
+**Objetivo:** instalar aplicación compilada desde el paquete x64.
+
+**Precondiciones:** Windows compatible y WebView2 Runtime.
+
+**Flujo esperado:** iniciar paquete MSI o EXE, revisar editor y origen, instalar, abrir Laural, crear terminal y configurar endpoint de prueba.
+
+**Estado:** compilación de los dos formatos completada en el equipo de desarrollo. La instalación limpia todavía necesita validación antes de anunciar una release estable.

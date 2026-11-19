@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Reportar una vulnerabilidad
+    url: https://github.com/elkangri23/laural/security/advisories/new
+    about: No publiques detalles de vulnerabilidades sin parchear en un issue público.

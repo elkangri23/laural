@@ -1,0 +1,25 @@
+name: Propuesta de mejora
+description: Propón un caso de uso o cambio para Laural
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problema o tarea
+      description: ¿Qué intentas hacer y qué dificultad encuentras?
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Resultado deseado
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternativas consideradas
+  - type: textarea
+    id: risks
+    attributes:
+      label: Impacto en privacidad, seguridad o compatibilidad

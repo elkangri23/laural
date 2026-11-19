@@ -1,0 +1,23 @@
+# Documentación de Laural
+
+Este índice reúne las decisiones y requisitos de la etapa inicial. El código disponible es un prototipo temprano; los documentos distinguen lo acordado, lo implementado y lo pendiente.
+
+## Producto y entrega
+
+- [Visión, objetivos y límites](product/vision-and-scope.md)
+- [Brief de producto](PRODUCT_BRIEF.md)
+- [Hoja de ruta](ROADMAP.md)
+- [Configuración de desarrollo](development/setup.md)
+
+## Diseño
+
+- [Arquitectura del sistema](architecture/overview.md)
+- [Requisitos](requirements/README.md)
+- [Casos de uso](use-cases/README.md)
+- [ADR](adr/README.md)
+
+## Seguridad y datos
+
+- [Privacidad y datos](security/privacy.md)
+- [Modelo de amenazas](security/threat-model.md)
+- [Política de seguridad](../SECURITY.md)
