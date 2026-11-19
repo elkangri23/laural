@@ -29,24 +29,24 @@ La apariencia se administra en React y se aplica con atributos CSS `data-theme`/
 
 ### Shell nativo (Rust)
 
-`portable-pty` abre un pseudo-terminal para el shell seleccionado. Rust mantiene sesiones, redimensiona la terminal y envía bytes de salida al frontend. Los comandos del agente se escriben en una sesión de shell existente.
+`portable-pty` abre un pseudo-terminal para el shell seleccionado. Rust mantiene sesiones, redimensiona la terminal y envía bytes de salida al frontend. Cada terminal marca entrada con OSC 133 para delimitar bloques y devolver códigos de salida cuando el shell lo permite. Las marcas son locales a la sesión; no se escriben perfiles persistentes del usuario.
 
 ### Proveedores
 
-El cliente Rust usa HTTP para consultar `/models` y enviar solicitudes no-streaming a `/chat/completions`. El identificador de modelo, URL base y nombre se guardan en `providers.json`; la clave se busca por perfil en el almacén del sistema operativo.
+El cliente Rust usa HTTP para consultar `/models` y enviar solicitudes en streaming a `/chat/completions`. Los eventos de fragmentos se asocian al identificador de la petición; el registro local permite cancelarla. `preview_context` devuelve los mismos recortes de terminal, proyecto y archivos que usa el envío. El identificador de modelo, URL base y nombre se guardan en `providers.json`; la clave se busca por perfil en el almacén del sistema operativo.
 
 ### Agente
 
-El modelo propone un JSON con resumen, comandos y archivos. Rust valida el formato, las rutas relativas y tamaños. Los comandos pasan por la política del usuario; las escrituras de archivo exigen aprobación y guardan una copia de archivos existentes. No hay bucle autónomo de herramientas ilimitado.
+El modelo propone un JSON con resumen, comandos y archivos. Rust valida el formato, las rutas relativas y tamaños. Los comandos pasan por la política del usuario; el plan puede cancelarse, cada comando se espera hasta su marca de finalización y se puede transmitir Ctrl+C al PTY. Las escrituras de archivo exigen aprobación y guardan una copia de archivos existentes. No hay bucle autónomo de herramientas ilimitado.
 
 ### Almacenamiento local
 
 - `providers.json`: perfiles sin secretos y perfil activo.
 - `agent.json`: modo y prefijos permitidos.
-- `localStorage`: tema y modo de apariencia, sin información de proveedor o proyecto.
+- `localStorage`: tema, modo de apariencia e historial acotado de hasta 100 mensajes.
 - Windows Credential Manager: secretos por proveedor.
 - Archivos de proyecto: solo archivos explícitamente aprobados por la persona.
-- Historial de chat persistente: aún no implementado.
+- Bloques de comando: estado en memoria de la sesión, hasta 160 por aplicación.
 
 ## Flujos de datos
 
@@ -78,8 +78,8 @@ sequenceDiagram
   UI->>R: mensajes + terminal + proyecto + adjuntos
   R->>R: aplica límites y carga clave del almacén
   R->>P: POST /chat/completions
-  P-->>R: respuesta
-  R-->>UI: texto
+  P-->>R: eventos SSE
+  R-->>UI: fragmentos asociados al ID de solicitud
 ```
 
 ## Límites y evolución
@@ -88,7 +88,8 @@ sequenceDiagram
 - El modo automático usa comprobaciones heurísticas y no reemplaza el consentimiento informado ni controles del sistema operativo.
 - La autorización de una acción del agente no significa que la operación sea reversible.
 - El contexto se envía al endpoint elegido por el usuario. Un endpoint remoto puede almacenar solicitudes según sus propias condiciones.
-- Streaming, persistencia de conversaciones, detección de bloques y cancelación se diseñarán e implementarán después del primer esqueleto.
+- Las marcas de bloques y códigos de salida varían por shell; PowerShell, CMD y Bash están instrumentados inicialmente. Scripts de inicio pueden sobrescribir `PROMPT_COMMAND` y comandos interactivos pueden no terminar solos.
+- La vista previa representa el contenido recogido al abrirla; la terminal puede producir más salida antes de enviar.
 - Sincronización no forma parte de esta arquitectura inicial.
 
 ## Estructura de código

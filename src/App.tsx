@@ -9,6 +9,8 @@ import "./App.css";
 type Shell = "powershell" | "cmd" | "wsl" | "git-bash";
 type TerminalTab = { id: string; shell: Shell; title: string; cwd: string | null };
 type ChatMessage = { role: "user" | "assistant"; content: string; id?: string };
+type CommandBlock = { id: string; terminalId: string; command: string; output: string; status: "running" | "finished"; exitCode: number | null };
+type ContextPreview = { terminal: string; project: string; selectedFiles: string; totalCharacters: number };
 type Provider = { id: string; name: string; baseUrl: string; model: string; hasApiKey: boolean };
 type ExecutionMode = "review" | "rules" | "automatic";
 type PlanAction =
@@ -34,6 +36,11 @@ function App() {
   const [projectPath, setProjectPath] = useState<string | null>(null);
   const [splitTabId, setSplitTabId] = useState<string | null>(null);
   const [splitOrientation, setSplitOrientation] = useState<"vertical" | "horizontal" | null>(null);
+  const [commandBlocks, setCommandBlocks] = useState<CommandBlock[]>([]);
+  const [blocksOpen, setBlocksOpen] = useState(false);
+  const [contextPreview, setContextPreview] = useState<ContextPreview | null>(null);
+  const [contextPreviewBusy, setContextPreviewBusy] = useState(false);
+  const [contextPreviewError, setContextPreviewError] = useState("");
   const [shellMenuOpen, setShellMenuOpen] = useState(false);
   const [agentMode, setAgentMode] = useState(false);
   const [prompt, setPrompt] = useState("");
@@ -63,12 +70,18 @@ function App() {
   const [contextFiles, setContextFiles] = useState<string[]>([]);
   const [agentPlan, setAgentPlan] = useState<AgentPlan | null>(null);
   const [agentPlanBusy, setAgentPlanBusy] = useState(false);
+  const [agentCommandBusy, setAgentCommandBusy] = useState(false);
   const [executionMode, setExecutionMode] = useState<ExecutionMode>("review");
   const [allowedPrefixes, setAllowedPrefixes] = useState(["git status", "git diff"]);
   const [ruleDraft, setRuleDraft] = useState("git status\ngit diff");
   const [policyNotice, setPolicyNotice] = useState("");
   const terminalContextRef = useRef<Record<string, string>>({});
   const activeChatRequestRef = useRef<string | null>(null);
+  const activeCommandBlockRef = useRef<Record<string, string>>({});
+  const activeAgentRequestRef = useRef<string | null>(null);
+  const agentStopRequestedRef = useRef(false);
+  const activeAgentTerminalRef = useRef<string | null>(null);
+  const commandCompletionRef = useRef<Record<string, { resolve: (exitCode: number | null) => void; timer: ReturnType<typeof setTimeout> }>>({});
 
   useEffect(() => {
     try {
@@ -110,6 +123,37 @@ function App() {
   const captureTerminalOutput = useCallback((terminalId: string, text: string) => {
     const current = terminalContextRef.current[terminalId] ?? "";
     terminalContextRef.current[terminalId] = (current + text).slice(-24_000);
+    const blockId = activeCommandBlockRef.current[terminalId];
+    if (blockId) setCommandBlocks((blocks) => blocks.map((block) => block.id === blockId ? { ...block, output: (block.output + text).slice(-24_000) } : block));
+  }, []);
+
+  const startCommandBlock = useCallback((terminalId: string, command: string) => {
+    const id = crypto.randomUUID();
+    const previous = activeCommandBlockRef.current[terminalId];
+    const pendingCompletion = commandCompletionRef.current[terminalId];
+    if (pendingCompletion) {
+      clearTimeout(pendingCompletion.timer);
+      delete commandCompletionRef.current[terminalId];
+      pendingCompletion.resolve(null);
+    }
+    activeCommandBlockRef.current[terminalId] = id;
+    setCommandBlocks((blocks) => [
+      ...blocks.map((block) => block.id === previous ? { ...block, status: "finished" as const } : block),
+      { id, terminalId, command, output: "", status: "running" as const, exitCode: null },
+    ].slice(-160));
+  }, []);
+
+  const finishCommandBlock = useCallback((terminalId: string, exitCode: number | null) => {
+    const id = activeCommandBlockRef.current[terminalId];
+    if (!id) return;
+    setCommandBlocks((blocks) => blocks.map((block) => block.id === id ? { ...block, status: "finished", exitCode } : block));
+    delete activeCommandBlockRef.current[terminalId];
+    const completion = commandCompletionRef.current[terminalId];
+    if (completion) {
+      clearTimeout(completion.timer);
+      delete commandCompletionRef.current[terminalId];
+      completion.resolve(exitCode);
+    }
   }, []);
 
   const activeTab = useMemo(
@@ -117,6 +161,7 @@ function App() {
     [activeTabId, tabs],
   );
   const activeTheme = themes.find((theme) => theme.id === themeId) ?? themes[0];
+  const visibleBlocks = commandBlocks.filter((block) => block.terminalId === activeTabId).slice(-30).reverse();
   const editingHasApiKey = providers.some((item) => item.id === editingProviderId && item.hasApiKey);
 
   useEffect(() => {
@@ -201,7 +246,7 @@ function App() {
   function submitPrompt(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const question = prompt.trim();
-    if (!question || chatBusy) return;
+    if (!question || chatBusy || agentPlanBusy || agentCommandBusy) return;
     if (!provider) {
       setProviderDialogOpen(true);
       return;
@@ -210,29 +255,43 @@ function App() {
       setPrompt("");
       setAgentPlan(null);
       setAgentPlanBusy(true);
+      const requestId = crypto.randomUUID();
+      activeAgentRequestRef.current = requestId;
+      agentStopRequestedRef.current = false;
       setChatMessages((current) => [...current, { role: "user", content: question }]);
       const planTerminalId = activeTabId;
       const shell = activeTab?.shell ?? "powershell";
       void invoke<AgentPlan>("plan_agent", {
+        requestId,
         task: question,
         shell,
         terminalContext: terminalContextRef.current[planTerminalId] ?? "",
         projectPath,
         selectedFiles: contextFiles,
       }).then(async (plan) => {
+        if (agentStopRequestedRef.current) return;
         const prepared: AgentPlan = { ...plan, actions: plan.actions.map((action) => ({ ...action, status: "pending" })) };
         setAgentPlan(prepared);
         setChatMessages((current) => [...current, { role: "assistant", content: `Plan preparado con ${plan.actions.length} acciones.` }]);
         if (executionMode !== "review") {
           for (let index = 0; index < prepared.actions.length; index += 1) {
+            if (agentStopRequestedRef.current) break;
             if (prepared.actions[index].type === "run_command") {
-              await executeAgentCommand(index, false, prepared, planTerminalId);
+              const completed = await executeAgentCommand(index, false, prepared, planTerminalId);
+              if (!completed) {
+                if (!agentStopRequestedRef.current) setChatMessages((current) => [...current, { role: "assistant", content: "La secuencia automática se detuvo porque un comando no devolvió un código de salida correcto." }]);
+                break;
+              }
             }
           }
+          if (agentStopRequestedRef.current) setChatMessages((current) => [...current, { role: "assistant", content: "Ejecución del agente detenida. Los cambios de archivo pendientes no se aplicaron." }]);
         }
       }).catch((error) => {
-        setChatMessages((current) => [...current, { role: "assistant", content: `No se pudo preparar el plan: ${String(error)}` }]);
-      }).finally(() => setAgentPlanBusy(false));
+        setChatMessages((current) => [...current, { role: "assistant", content: agentStopRequestedRef.current ? "Planificación del agente cancelada." : `No se pudo preparar el plan: ${String(error)}` }]);
+      }).finally(() => {
+        if (activeAgentRequestRef.current === requestId) activeAgentRequestRef.current = null;
+        setAgentPlanBusy(false);
+      });
       return;
     }
     const requestId = crypto.randomUUID();
@@ -270,10 +329,34 @@ function App() {
     if (requestId) await invoke("cancel_chat_stream", { requestId }).catch(() => undefined);
   }
 
+  async function stopAgent() {
+    agentStopRequestedRef.current = true;
+    const requestId = activeAgentRequestRef.current;
+    if (requestId) await invoke("cancel_agent_plan", { requestId }).catch(() => undefined);
+    const terminalId = activeAgentTerminalRef.current;
+    if (terminalId) await invoke("write_terminal", { terminalId, data: "\u0003" }).catch(() => undefined);
+  }
+
   function clearChat() {
     setChatMessages([]);
     setAgentPlan(null);
     localStorage.removeItem("laural.chat.v1");
+  }
+
+  async function openContextPreview() {
+    setContextPreviewBusy(true);
+    setContextPreviewError("");
+    try {
+      setContextPreview(await invoke<ContextPreview>("preview_context", {
+        terminalContext: terminalContextRef.current[activeTabId] ?? "",
+        projectPath,
+        selectedFiles: contextFiles,
+      }));
+    } catch (error) {
+      setContextPreviewError(String(error));
+    } finally {
+      setContextPreviewBusy(false);
+    }
   }
 
   function updateAgentAction(index: number, update: Partial<PlanAction>) {
@@ -285,17 +368,35 @@ function App() {
     });
   }
 
-  async function executeAgentCommand(index: number, approved: boolean, plan = agentPlan, terminalId = activeTabId) {
+  async function executeAgentCommand(index: number, approved: boolean, plan = agentPlan, terminalId = activeTabId): Promise<boolean> {
     const action = plan?.actions[index];
-    if (!action || action.type !== "run_command") return;
+    if (!action || action.type !== "run_command") return false;
+    setAgentCommandBusy(true);
+    activeAgentTerminalRef.current = terminalId;
+    startCommandBlock(terminalId, action.command);
+    let completionResolve: (exitCode: number | null) => void = () => undefined;
+    const completion = new Promise<number | null>((resolve) => { completionResolve = resolve; });
+    const timer = setTimeout(() => finishCommandBlock(terminalId, null), 120_000);
+    commandCompletionRef.current[terminalId] = { resolve: completionResolve, timer };
     updateAgentAction(index, { status: "running", result: undefined });
     try {
       await invoke("run_agent_command", { terminalId, command: action.command, approved });
-      updateAgentAction(index, { status: "submitted", result: "Comando enviado a la terminal." });
+      const exitCode = await completion;
+      if (agentStopRequestedRef.current) { updateAgentAction(index, { status: "cancelled", result: "Interrupción enviada a la terminal." }); return false; }
+      if (exitCode === 0) { updateAgentAction(index, { status: "completed", result: "El comando terminó correctamente." }); return true; }
+      if (exitCode !== null) { updateAgentAction(index, { status: "error", result: `El comando terminó con código ${exitCode}.` }); return false; }
+      updateAgentAction(index, { status: "submitted", result: "Comando enviado; este shell no comunicó el código de salida." });
+      return false;
     } catch (error) {
+      clearTimeout(timer);
+      delete commandCompletionRef.current[terminalId];
       const message = String(error);
       const status = message.toLowerCase().includes("requiere") || message.toLowerCase().includes("coincide") ? "needs_review" : "error";
       updateAgentAction(index, { status, result: message });
+      return false;
+    } finally {
+      activeAgentTerminalRef.current = null;
+      setAgentCommandBusy(false);
     }
   }
 
@@ -490,17 +591,26 @@ function App() {
           <section className="terminal-area" aria-label="Terminal">
             <div className="terminal-heading">
               <div><div className="terminal-title-line"><span className="terminal-title-mark">⌁</span><h1>{activeTab?.title ?? "Terminal"}</h1><span className="connection-pill"><span /> Local</span></div><p className="terminal-path">{activeTab?.cwd ?? "Directorio de inicio"} <span>·</span> Windows</p></div>
-              <div className="terminal-heading-actions"><button className="small-action"><CopyIcon /> Copiar</button><button className="small-action"><ClearIcon /> Limpiar</button></div>
+              <div className="terminal-heading-actions"><button className={`small-action ${blocksOpen ? "selected" : ""}`} onClick={() => setBlocksOpen((open) => !open)} aria-pressed={blocksOpen}>Bloques <span className="block-count">{visibleBlocks.length}</span></button><button className="small-action"><CopyIcon /> Copiar</button><button className="small-action"><ClearIcon /> Limpiar</button></div>
             </div>
-            <div className={`terminal-frame ${splitTabId ? `is-split split-${splitOrientation}` : ""}`}>
-              {tabs.map((tab) => <TerminalPane key={tab.id} terminalId={tab.id} shell={tab.shell} cwd={tab.cwd} visible={tab.id === activeTabId || tab.id === splitTabId} theme={activeTheme} appearance={appearance} onTextOutput={captureTerminalOutput} />)}
+            <div className={`terminal-frame ${blocksOpen ? "with-blocks" : ""} ${splitTabId ? `is-split split-${splitOrientation}` : ""}`}>
+              {tabs.map((tab) => <TerminalPane key={tab.id} terminalId={tab.id} shell={tab.shell} cwd={tab.cwd} visible={tab.id === activeTabId || tab.id === splitTabId} theme={activeTheme} appearance={appearance} onTextOutput={captureTerminalOutput} onCommandSubmit={startCommandBlock} onCommandFinish={finishCommandBlock} />)}
               <div className="terminal-caption"><span className="shortcut-hint"><kbd>Ctrl</kbd> + <kbd>`</kbd> alternar terminal</span><span><span className="activity-pulse" /> Shell conectado</span></div>
             </div>
+            {blocksOpen && <section className="command-blocks-panel" aria-label="Bloques de comandos">
+              {visibleBlocks.length === 0 ? <p className="blocks-empty">Los comandos que envíes desde esta terminal aparecerán aquí con su salida.</p> : visibleBlocks.map((block) => {
+                const cleanOutput = block.output.replace(/\u001b\][^\u0007]*(?:\u0007|\u001b\\)/g, "").replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, "").replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "");
+                return <details className="command-block" key={block.id}>
+                  <summary><span className="block-status-dot" data-status={block.status} /><code>{block.command}</code><span className="block-exit">{block.status === "running" ? "En curso" : block.exitCode === null ? "Finalizado" : `Salida ${block.exitCode}`}</span></summary>
+                  <pre>{cleanOutput.trim() || "Sin salida capturada."}</pre>
+                </details>;
+              })}
+            </section>}
             <div className="terminal-footer"><div className="footer-left"><span className="footer-branch"><BranchIcon /> main</span><span className="footer-divider" /><span>Sin cambios</span></div><div className="footer-right"><span>UTF-8</span><span>{activeTab?.title ?? "PowerShell"}</span><span>100%</span></div></div>
           </section>
 
           <aside className="assistant-panel">
-            <div className="assistant-header"><div className="assistant-heading"><div className="assistant-avatar"><SparkIcon /></div><div><strong>Asistente</strong><span>Contexto de esta terminal</span></div></div><button className="action-quiet" onClick={clearChat} disabled={chatBusy || agentPlanBusy}>Borrar historial</button></div>
+            <div className="assistant-header"><div className="assistant-heading"><div className="assistant-avatar"><SparkIcon /></div><div><strong>Asistente</strong><span>Contexto de esta terminal</span></div></div><button className="action-quiet" onClick={clearChat} disabled={chatBusy || agentPlanBusy || agentCommandBusy}>Borrar historial</button></div>
             <div className="mode-switch" role="tablist" aria-label="Modo de IA">
               <button className={!agentMode ? "active" : ""} onClick={() => setAgentMode(false)} role="tab" aria-selected={!agentMode}><MessageIcon /> Chat</button>
               <button className={agentMode ? "active" : ""} onClick={() => setAgentMode(true)} role="tab" aria-selected={agentMode}><AgentIcon /> Agente <span className="mode-beta">PREVIEW</span></button>
@@ -539,27 +649,45 @@ function App() {
                 <div className="agent-plan-header"><span className="plan-icon-small"><AgentIcon /></span><strong>Plan del agente</strong><span>{agentPlan.actions.length} acciones</span></div>
                 <p className="agent-plan-summary">{agentPlan.summary}</p>
                 <div className="agent-action-list">{agentPlan.actions.map((action, index) => <article className={`agent-action ${action.status ?? "pending"}`} key={`${index}-${action.type}`}>
-                  <div className="agent-action-top"><span className="action-number">{index + 1}</span><span className="action-type">{action.type === "run_command" ? "COMANDO" : "CAMBIO DE ARCHIVO"}</span><span className="action-status">{action.status === "submitted" ? "ENVIADO" : action.status === "needs_review" ? "REVISAR" : action.status === "applied" ? "APLICADO" : action.status === "running" || action.status === "applying" ? "EN CURSO" : action.status === "error" ? "ERROR" : action.status === "rejected" ? "DESCARTADO" : "PENDIENTE"}</span></div>
+                  <div className="agent-action-top"><span className="action-number">{index + 1}</span><span className="action-type">{action.type === "run_command" ? "COMANDO" : "CAMBIO DE ARCHIVO"}</span><span className="action-status">{action.status === "completed" ? "COMPLETADO" : action.status === "cancelled" ? "DETENIDO" : action.status === "submitted" ? "ENVIADO" : action.status === "needs_review" ? "REVISAR" : action.status === "applied" ? "APLICADO" : action.status === "running" || action.status === "applying" ? "EN CURSO" : action.status === "error" ? "ERROR" : action.status === "rejected" ? "DESCARTADO" : "PENDIENTE"}</span></div>
                   <p className="action-reason">{action.reason}</p>
                   {action.type === "run_command" ? <pre className="action-code">{action.command}</pre> : <details className="file-preview"><summary>{action.path}</summary><pre>{action.content}</pre></details>}
                   {action.result && <p className={`action-result ${action.status === "error" || action.status === "needs_review" ? "warning" : ""}`}>{action.result}</p>}
-                  <div className="action-buttons">{action.type === "run_command" ? action.status !== "submitted" && action.status !== "rejected" && <button className="action-primary" onClick={() => void executeAgentCommand(index, true)}>{action.status === "needs_review" ? "Revisar y ejecutar" : "Aprobar y ejecutar"}</button> : action.status !== "applied" && action.status !== "rejected" && <button className="action-primary" onClick={() => void applyAgentFile(index)} disabled={!projectPath || action.status === "applying"}>Aplicar cambio</button>}
-                    {action.status !== "submitted" && action.status !== "applied" && action.status !== "rejected" && <button className="action-quiet" onClick={() => updateAgentAction(index, { status: "rejected", result: "Acción descartada." })}>Descartar</button>}</div>
+                  <div className="action-buttons">{action.type === "run_command" ? !["submitted", "completed", "cancelled", "rejected", "running"].includes(action.status ?? "") && <button className="action-primary" onClick={() => void executeAgentCommand(index, true)}>{action.status === "needs_review" ? "Revisar y ejecutar" : "Aprobar y ejecutar"}</button> : action.status !== "applied" && action.status !== "rejected" && <button className="action-primary" onClick={() => void applyAgentFile(index)} disabled={!projectPath || action.status === "applying"}>Aplicar cambio</button>}
+                    {!(["submitted", "completed", "cancelled", "applied", "rejected", "running", "applying"].includes(action.status ?? "")) && <button className="action-quiet" onClick={() => updateAgentAction(index, { status: "rejected", result: "Acción descartada." })}>Descartar</button>}</div>
                 </article>)}</div>
               </div>}
-              {(chatBusy || agentPlanBusy) && <div className="typing-indicator"><span /><span /><span /> {agentMode ? "El agente está preparando el plan" : "El modelo está respondiendo"} {chatBusy && !agentMode && <button className="action-quiet" onClick={() => void stopChat()}>Detener</button>}</div>}
+              {(chatBusy || agentPlanBusy || agentCommandBusy) && <div className="typing-indicator"><span /><span /><span /> {agentMode ? agentCommandBusy ? "El agente está esperando al shell" : "El agente está preparando el plan" : "El modelo está respondiendo"} {chatBusy && !agentMode && <button className="action-quiet" onClick={() => void stopChat()}>Detener</button>}{agentMode && <button className="action-quiet" onClick={() => void stopAgent()}>Detener agente</button>}</div>}
             </div>}
             <div className="composer-wrap">
               <form className="composer" onSubmit={submitPrompt}>
                 <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder={agentMode ? "Describe una tarea para el agente…" : "Pregunta sobre tu terminal…"} rows={3} />
                 {contextFiles.length > 0 && <div className="context-file-list">{contextFiles.map((path) => <button type="button" className="context-file-chip" key={path} title={path} onClick={() => setContextFiles((current) => current.filter((item) => item !== path))}><PaperclipIcon /> {path.split(/[\\/]/).pop()} <span>×</span></button>)}</div>}
-                <div className="composer-controls"><div className="composer-left"><button type="button" className="composer-tool" title="Adjuntar archivos" onClick={() => void addContextFiles()}><PaperclipIcon /></button><button type="button" className="context-chip" title="La salida reciente de esta terminal se adjunta al mensaje"><span className="context-indicator" /> Terminal <span>+</span></button>{projectPath && <span className="project-context-chip" title="Se incluirá contexto acotado del proyecto">Proyecto</span>}<button type="button" className="composer-tool" title="Seleccionar modelo" onClick={() => setProviderDialogOpen(true)}><ModelIcon /></button></div><button type="submit" className="send-button" aria-label="Enviar mensaje" disabled={!prompt.trim() || chatBusy || agentPlanBusy}><ArrowUpIcon /></button></div>
+                <div className="composer-controls"><div className="composer-left"><button type="button" className="composer-tool" title="Adjuntar archivos" onClick={() => void addContextFiles()}><PaperclipIcon /></button><button type="button" className="context-chip" title="Revisar el contenido de terminal, proyecto y archivos que se enviará" onClick={() => void openContextPreview()}><span className="context-indicator" /> Revisar contexto</button>{projectPath && <span className="project-context-chip" title="Se incluirá contexto acotado del proyecto">Proyecto</span>}<button type="button" className="composer-tool" title="Seleccionar modelo" onClick={() => setProviderDialogOpen(true)}><ModelIcon /></button></div><button type="submit" className="send-button" aria-label="Enviar mensaje" disabled={!prompt.trim() || chatBusy || agentPlanBusy || agentCommandBusy}><ArrowUpIcon /></button></div>
               </form>
               <div className="composer-note"><span>{agentMode ? "Modo agente: ejecución pendiente" : provider ? `El contexto seleccionado se enviará a ${provider.name}` : "Conecta un proveedor para empezar"}</span><button onClick={() => setProviderDialogOpen(true)}>{provider ? "Ajustes" : "Configurar modelo"}</button></div>
             </div>
           </aside>
         </div>
       </section>
+
+      {contextPreviewError && <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setContextPreviewError(""); }}><section className="provider-dialog context-error-dialog" role="alertdialog" aria-modal="true"><button className="dialog-close" onClick={() => setContextPreviewError("")} aria-label="Cerrar">×</button><p className="eyebrow">VISTA PREVIA</p><h2>No se pudo preparar el contexto</h2><p className="dialog-copy">{contextPreviewError}</p></section></div>}
+
+      {contextPreview && <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setContextPreview(null); }}>
+        <section className="context-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="context-preview-title">
+          <button className="dialog-close" onClick={() => setContextPreview(null)} aria-label="Cerrar">×</button>
+          <div className="dialog-mark"><PaperclipIcon /></div><p className="eyebrow">DATOS QUE SE ADJUNTAN</p><h2 id="context-preview-title">Revisa el contexto</h2>
+          <p className="dialog-copy">Este contenido se enviará al proveedor activo al mandar el siguiente mensaje. Comprueba que no incluya credenciales o datos privados.</p>
+          <span className="context-size">{contextPreview.totalCharacters.toLocaleString("es-ES")} caracteres</span>
+          {[ ["Salida de terminal", contextPreview.terminal], ["Proyecto", contextPreview.project], ["Archivos elegidos", contextPreview.selectedFiles] ].map(([title, content]) => <details className="context-preview-section" key={title} open={Boolean(content)}>
+            <summary>{title}<span>{content ? `${content.length.toLocaleString("es-ES")} caracteres` : "Sin contenido"}</span></summary>
+            <pre>{content || "No se enviará contenido de esta fuente."}</pre>
+          </details>)}
+          <div className="provider-actions"><button className="primary-button" onClick={() => setContextPreview(null)}>Listo</button></div>
+        </section>
+      </div>}
+
+      {contextPreviewBusy && <div className="context-preview-loading" role="status">Preparando vista previa…</div>}
 
       {providerDialogOpen && <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeProviderDialog(); }}>
         <section className="provider-dialog" role="dialog" aria-modal="true" aria-labelledby="provider-title">

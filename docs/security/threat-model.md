@@ -33,12 +33,12 @@ Versión inicial de Laural para escritorio Windows: frontend Tauri, procesos PTY
 
 ## Tratamiento de alto impacto
 
-La política debe preferir confirmación para eliminación amplia, cambios de sistema, administración, red y despliegue. Las nuevas reglas automáticas necesitan ejemplos adversariales y revisión por pares. Toda acción debe poder asociarse a plan, terminal y resultado. El botón de cancelar operaciones largas está pendiente.
+La política debe preferir confirmación para eliminación amplia, cambios de sistema, administración, red y despliegue. Las nuevas reglas automáticas necesitan ejemplos adversariales y revisión por pares. Toda acción debe poder asociarse a plan, terminal y resultado. La cancelación inicial puede mandar Ctrl+C al PTY, pero no garantiza detener procesos hijos, procesos que ignoran Ctrl+C ni deshacer efectos ya realizados.
 
 ## Mejoras requeridas antes de release estable
 
 1. Validar rutas ante symlinks y sustitución de directorio entre comprobación y escritura.
-2. Añadir parada/cancelación y terminación fiable de procesos hijos.
+2. Validar parada/cancelación por shell y diseñar terminación fiable de procesos hijos.
 3. Definir qué comandos pueden ejecutarse en automático; incorporar pruebas de política en el proceso del proyecto antes de cambiar esa lógica.
 4. Verificar que errores y diagnósticos no imprimen claves ni cuerpos completos de solicitudes.
 5. Instalar desde cero y revisar permisos, firma y actualizaciones de la aplicación.

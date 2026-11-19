@@ -16,20 +16,20 @@ Estado al 19 de noviembre de 2026. «Implementado» describe código presente; �
 
 - Validar el inicio, cierre, reinicio, redimensionamiento y salida larga en los cuatro shells.
 - Revisar ciclo de vida de PTY al cambiar paneles, cerrar pestañas y cerrar la app.
-- Implementar bloques de comandos y navegación de resultados con integración específica por shell.
+- Validar bloques de comandos, entrada editada y resultados en PowerShell, CMD, Git Bash y WSL; bash/prompt de usuario pueden sustituir las marcas de integración.
 - Probar instalación y desinstalación limpia en Windows 10 y 11.
 
 ## M2 — Chat y proveedores (parcial)
 
 - Chat incremental cancelable e historial local borrable implementados.
 - Probar manualmente `/models` y streaming de chat con Ollama, LM Studio, FreeLLMAPI y un endpoint OpenAI-compatible.
-- Añadir vista previa del contexto exacto que se va a enviar.
+- La vista previa del contexto y sus límites de envío están implementados; verificar que coincide con cada proveedor.
 - Gestionar errores de formato, límites del proveedor y reintento de conexión.
 
 ## M3 — Agente (parcial)
 
 - Planes y estados por acción; modos de autorización configurables.
-- Cancelar de forma fiable la generación del plan y los ciclos de ejecución automática.
+- Cancelación de generación, interrupción de comando activo y corte del ciclo automático implementados; probar cancelación y resultado en cada shell.
 - Añadir análisis de riesgo por shell; las reglas actuales son heurísticas y no aíslan comandos.
 - Revisar límites de rutas y respaldos bajo condiciones de carrera.
 - Registrar acciones localmente sin guardar secretos ni enviar telemetría.
@@ -37,7 +37,7 @@ Estado al 19 de noviembre de 2026. «Implementado» describe código presente; �
 ## M4 — Distribución pública (parcial)
 
 - Build de MSI/NSIS disponible localmente y workflow para GitHub Actions.
-- Ejecutar el workflow en GitHub y revisar sus artefactos.
+- Workflow de GitHub Actions ejecutado correctamente en GitHub y artefactos generados.
 - Validar instalación limpia, actualización y desinstalación.
 - Firma y procedencia verificable dependen de credenciales de publicación que no están configuradas.
 - Resolver incidencias críticas de validación manual antes de declarar estable.

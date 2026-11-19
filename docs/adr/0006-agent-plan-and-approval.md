@@ -23,5 +23,5 @@ El modelo devuelve un plan acotado de acciones. El backend valida formato, longi
 - Las reglas de riesgo son heurísticas incompletas, no una frontera de seguridad.
 - El modo automático puede ejecutar comandos no previstos con los privilegios de la cuenta actual.
 - Se necesita historial claro de acciones, resultado, modo aplicado y autorizaciones.
-- La cancelación durante generación y procesos de larga duración sigue pendiente.
+- La cancelación durante generación y el envío de Ctrl+C están implementados inicialmente; quedan pruebas por shell y la terminación de procesos hijos.
 - El usuario debe revisar las acciones y considerar el modo manual para proyectos sensibles.

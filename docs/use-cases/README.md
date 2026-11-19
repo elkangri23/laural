@@ -14,6 +14,8 @@ Los casos describen el comportamiento esperado del producto. Los estados disting
 | UC-08 | Usar Laural sin servicio externo de Laural | Desarrollador | Implementación inicial |
 | UC-09 | Instalar Laural en Windows | Colaborador/usuario | Paquete creado; instalación aún no validada |
 | UC-10 | Elegir tema y modo claro/oscuro | Usuario | Implementación inicial |
+| UC-11 | Revisar contexto antes de enviarlo al proveedor | Desarrollador | Implementación inicial |
+| UC-12 | Detener una planificación o comando del agente | Desarrollador | Implementación inicial; validar en cada shell |
 
 ## UC-01 — Abrir terminal
 
@@ -42,7 +44,7 @@ Los casos describen el comportamiento esperado del producto. Los estados disting
 
 **Criterios:** cada terminal mantiene su propio shell y directorio de trabajo; el cambio de tamaño actualiza el área PTY.
 
-**Pendiente:** división horizontal, persistencia del layout y bloques de comandos detectados.
+**Pendiente:** persistencia del layout y validación de la detección de bloques en shells y prompts personalizados.
 
 ## UC-03 — Configurar proveedor y modelo
 
@@ -64,7 +66,7 @@ Los casos describen el comportamiento esperado del producto. Los estados disting
 
 **Criterios:** limitar número y tamaño de archivos y salida; ignorar rutas fuera de contexto permitido; mostrar errores del proveedor sin registrar claves.
 
-**Pendiente:** mostrar vista previa precisa del contexto enviado, exclusiones configurables, streaming e historial local.
+**Implementado inicialmente:** vista previa del contexto limitado, streaming cancelable e historial local borrable. La exclusión de rutas es fija, no configurable.
 
 ## UC-05 — Pedir plan al agente
 
@@ -84,9 +86,25 @@ Los casos describen el comportamiento esperado del producto. Los estados disting
 
 **Alternativas:** comandos de riesgo reconocido se bloquean en ejecución automática o por regla y requieren confirmación manual; se puede rechazar una acción.
 
-**Criterios:** rechazos no envían bytes al shell; el modo efectivo se ve en UI; comandos de varias líneas se rechazan.
+**Criterios:** rechazos no envían bytes al shell; el modo efectivo se ve en UI; comandos de varias líneas se rechazan; el bloque muestra salida y código cuando el shell emite la marca de fin.
 
 **Riesgo residual:** el análisis de comando es heurístico y se puede evadir; modo automático no es sandbox.
+
+## UC-11 — Revisar contexto del proveedor
+
+**Objetivo:** saber qué contenido de la terminal, proyecto y archivos seleccionados se enviará al proveedor.
+
+**Flujo principal:** abrir «Revisar contexto», inspeccionar cada sección con los límites aplicados y cerrar antes de enviar la consulta.
+
+**Criterios:** la vista previa se genera desde el mismo backend que arma el contexto del chat y no incluye credenciales del proveedor.
+
+## UC-12 — Detener agente
+
+**Objetivo:** cancelar una planificación, detener la secuencia automática o interrumpir el comando activo.
+
+**Flujo principal:** pulsar «Detener agente»; Laural cancela la petición de plan y, si hay un comando enviado, transmite Ctrl+C al PTY. La secuencia automática no envía acciones posteriores.
+
+**Límite:** un proceso puede ignorar Ctrl+C o continuar por trabajo delegado a procesos hijos. La cancelación no revierte cambios ya realizados.
 
 ## UC-07 — Aplicar cambio de archivo
 

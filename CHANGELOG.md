@@ -2,6 +2,9 @@
 
 ## Cambios sin publicar
 
+- Bloques navegables con comando, salida y código de salida por marcas OSC 133; integración inicial de PowerShell, CMD y Bash/WSL.
+- Cancelación del plan del agente, Ctrl+C para el comando activo y corte de acciones automáticas después de un error.
+- Vista previa del contenido exacto y recortado de terminal, proyecto y archivos elegidos.
 - Respuestas incrementales del chat con cancelación e historial local borrable, limitado a 100 mensajes.
 - División de terminal horizontal además de la vertical.
 - Bloqueo adicional de operadores de composición y sustitución en comandos del agente.

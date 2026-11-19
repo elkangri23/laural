@@ -34,11 +34,11 @@ Tauri 2, React/TypeScript, backend Rust con `portable-pty`, xterm.js, protocolo 
 ## Estado del prototipo
 
 - Tauri, UI propia en español, xterm.js y sesiones PTY para los cuatro shells.
-- Pestañas, una vista dividida vertical y apertura de carpeta/proyecto.
+- Pestañas, divisiones vertical/horizontal, bloques de salida y apertura de carpeta/proyecto.
 - Selector local de 12 temas, modo claro/oscuro persistente e interfaz tipográfica más legible.
-- Perfiles múltiples, descubrimiento de modelos, claves en Credential Manager y chat sin streaming con contexto acotado.
+- Perfiles múltiples, descubrimiento de modelos, claves en Credential Manager y chat con streaming, contexto acotado y vista previa.
 - Plan de agente, modos de confirmación/reglas/política automática y edición de archivo con aprobación.
-- Los bloqueos de riesgo son heurísticos; cancelar agentes, reglas por directorio, bloques, historial, chat persistente y streaming siguen pendientes.
+- Los bloqueos de riesgo son heurísticos y no hay reglas por directorio. Los bloques, historial local, streaming, vista previa y controles de cancelación tienen implementación inicial, pero sus flujos requieren validación manual por shell y proveedor.
 - Compilación de Windows x64 generó MSI y NSIS. La instalación limpia y pruebas manuales siguen pendientes.
 - FreeLLMAPI se comprobó usando `/v1/models` y una solicitud mínima a `/v1/chat/completions`; la clave no se guardó en el proyecto.
 - La inspección de Warp solo confirmó el objetivo instalado. No se reutilizaron código, recursos ni análisis para implementar Laural.
@@ -46,8 +46,8 @@ Tauri 2, React/TypeScript, backend Rust con `portable-pty`, xterm.js, protocolo 
 ## Secuencia sugerida
 
 1. Validar instalación y ciclo de vida de terminales en Windows limpio.
-2. Completar bloques, historial de comandos y cancelación.
-3. Añadir streaming y persistencia local de chats con borrado explícito.
+2. Validar bloques, historial de comandos y cancelación en los cuatro shells.
+3. Probar proveedor, contexto, streaming y cancelación de chat dentro de la app.
 4. Revisar límites del agente y mejorar feedback por acción.
 5. Firmar y automatizar releases.
 6. Evaluar sincronización opcional después del MVP.

@@ -8,9 +8,9 @@ import "@xterm/xterm/css/xterm.css";
 
 type Shell = "powershell" | "cmd" | "wsl" | "git-bash";
 type OutputEvent = { terminalId: string; data: number[] };
-type TerminalPaneProps = { terminalId: string; shell: Shell; cwd: string | null; visible: boolean; theme: ThemeDefinition; appearance: AppearanceMode; onTextOutput: (terminalId: string, text: string) => void };
+type TerminalPaneProps = { terminalId: string; shell: Shell; cwd: string | null; visible: boolean; theme: ThemeDefinition; appearance: AppearanceMode; onTextOutput: (terminalId: string, text: string) => void; onCommandSubmit: (terminalId: string, command: string) => void; onCommandFinish: (terminalId: string, exitCode: number | null) => void };
 
-function TerminalPane({ terminalId, shell, cwd, visible, theme, appearance, onTextOutput }: TerminalPaneProps) {
+function TerminalPane({ terminalId, shell, cwd, visible, theme, appearance, onTextOutput, onCommandSubmit, onCommandFinish }: TerminalPaneProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -41,6 +41,15 @@ function TerminalPane({ terminalId, shell, cwd, visible, theme, appearance, onTe
     let writeQueue: Promise<void> = Promise.resolve();
     let unlistenOutput: (() => void) | undefined;
     const decoder = new TextDecoder();
+    const commandOsc = terminal.parser.registerOscHandler(133, (payload) => {
+      const [mark, rawCode] = payload.split(";", 2);
+      if (mark === "D") {
+        const parsed = rawCode === undefined ? null : Number.parseInt(rawCode, 10);
+        onCommandFinish(terminalId, parsed !== null && Number.isFinite(parsed) ? parsed : null);
+        return true;
+      }
+      return mark === "A" || mark === "B" || mark === "C";
+    });
     const outputListener = listen<OutputEvent>("terminal-output", (event) => {
       if (event.payload.terminalId === terminalId) {
         const bytes = new Uint8Array(event.payload.data);
@@ -48,7 +57,32 @@ function TerminalPane({ terminalId, shell, cwd, visible, theme, appearance, onTe
         onTextOutput(terminalId, decoder.decode(bytes, { stream: true }));
       }
     });
+    let commandLine: string | null = "";
+    let skipLineFeed = false;
     const inputSubscription = terminal.onData((data) => {
+      if (data.includes("\u0003")) commandLine = "";
+      if (data.startsWith("\u001b")) commandLine = null;
+      else {
+        for (const character of data) {
+          if (character === "\r") {
+            skipLineFeed = true;
+            if (commandLine?.trim()) onCommandSubmit(terminalId, commandLine.trim());
+            else if (commandLine === null) onCommandSubmit(terminalId, "Comando editado en el shell; texto no capturado");
+            commandLine = "";
+          } else if (character === "\n" && skipLineFeed) {
+            skipLineFeed = false;
+          } else if (character === "\n") {
+            if (commandLine?.trim()) onCommandSubmit(terminalId, commandLine.trim());
+            else if (commandLine === null) onCommandSubmit(terminalId, "Comando editado en el shell; texto no capturado");
+            commandLine = "";
+          } else if (character === "\u007f" || character === "\b") {
+            if (commandLine && commandLine.length > 0) commandLine = commandLine.slice(0, -1);
+          } else if (character >= " " && character !== "\u007f") {
+            commandLine = commandLine === null ? null : commandLine + character;
+          }
+        }
+      }
+      if (!data.includes("\r") && !data.includes("\n")) skipLineFeed = false;
       if (isReady) {
         writeQueue = writeQueue.then(async () => {
           await invoke("write_terminal", { terminalId, data });
@@ -89,6 +123,7 @@ function TerminalPane({ terminalId, shell, cwd, visible, theme, appearance, onTe
       disposed = true;
       observer.disconnect();
       inputSubscription.dispose();
+      commandOsc.dispose();
       unlistenOutput?.();
       void outputListener.then((unlisten) => unlisten());
       terminal.dispose();
@@ -96,7 +131,7 @@ function TerminalPane({ terminalId, shell, cwd, visible, theme, appearance, onTe
       terminalRef.current = null;
       fitRef.current = null;
     };
-  }, [cwd, onTextOutput, shell, terminalId]);
+  }, [cwd, onCommandFinish, onCommandSubmit, onTextOutput, shell, terminalId]);
 
   useEffect(() => {
     if (terminalRef.current) terminalRef.current.options.theme = terminalTheme(theme, appearance);

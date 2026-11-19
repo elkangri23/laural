@@ -18,12 +18,13 @@ Los requisitos distinguen el alcance acordado del estado actual del prototipo. �
 | FR-10 | Pedir al modelo un plan de acciones estructurado y mostrarlo antes de aplicar. | Implementado inicialmente |
 | FR-11 | Ejecutar comandos con confirmación por acción, reglas configurables o modo automático explícito. | Implementado inicialmente; reglas heurísticas |
 | FR-12 | Modificar archivos del proyecto solo con aprobación explícita y respaldo del original. | Implementado inicialmente |
-| FR-13 | Mostrar bloques de comandos y resultados como unidades navegables. | Pendiente; requiere integración shell-aware para identificar fin y estado de cada comando |
+| FR-13 | Mostrar bloques de comandos y resultados como unidades navegables. | Implementación inicial; PowerShell, CMD y Bash señalizan fin/código cuando sus hooks están activos; edición de línea y shells personalizados requieren validación manual |
 | FR-14 | Conservar un historial de chat local y permitir borrarlo. | Implementación inicial en almacenamiento local del WebView; límite de 100 mensajes |
-| FR-15 | Cancelar una operación del agente durante la generación o ejecución. | Pendiente |
+| FR-15 | Cancelar una operación del agente durante la generación o ejecución. | Implementación inicial; cancela planificación, detiene el ciclo automático y envía Ctrl+C al comando activo; validar por shell |
 | FR-16 | Sincronizar configuración/proveedores entre dispositivos. | Diferido; fuera del MVP |
 | FR-17 | Elegir entre 12 paletas visuales y cambiar entre modo claro y oscuro. | Implementación inicial |
 | FR-18 | Mantener la preferencia de apariencia tras reiniciar Laural. | Implementación inicial; localStorage |
+| FR-19 | Revisar el contexto terminal/proyecto/archivos antes de enviarlo al proveedor. | Implementación inicial; muestra el contenido con los mismos límites de envío |
 
 ## No funcionales
 

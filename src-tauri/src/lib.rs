@@ -66,16 +66,69 @@ fn shell_command(shell: &str) -> Result<CommandBuilder, String> {
         "powershell" => {
             let mut command = CommandBuilder::new("powershell.exe");
             command.arg("-NoLogo");
+            command.arg("-NoExit");
+            command.arg("-Command");
+            command.arg(r#"
+                $global:__lauralLastHistoryId = -1
+                $global:__lauralOriginalPrompt = $function:prompt
+                function global:prompt {
+                    $success = $?
+                    $last = Get-History -Count 1
+                    $code = if ($success) { 0 } elseif ($null -ne $global:LASTEXITCODE) { $global:LASTEXITCODE } else { 1 }
+                    $out = ''
+                    if ($global:__lauralLastHistoryId -ge 0) {
+                        if ($last -and $last.Id -ne $global:__lauralLastHistoryId) { $out += "`e]133;D;$code`a" }
+                        else { $out += "`e]133;D`a" }
+                    }
+                    $out += "`e]133;A`a"
+                    if ($global:__lauralOriginalPrompt) { $out += (& $global:__lauralOriginalPrompt) }
+                    else { $out += "PS $($executionContext.SessionState.Path.CurrentLocation)> " }
+                    $out += "`e]133;B`a"
+                    if ($last) { $global:__lauralLastHistoryId = $last.Id }
+                    return $out
+                }
+            "#);
             Ok(command)
         }
-        "cmd" => Ok(CommandBuilder::new("cmd.exe")),
-        "wsl" => Ok(CommandBuilder::new("wsl.exe")),
+        "cmd" => {
+            let mut command = CommandBuilder::new("cmd.exe");
+            let existing_prompt = std::env::var("PROMPT").unwrap_or_else(|_| "$P$G".to_string());
+            command.env(
+                "PROMPT",
+                format!("$E]133;D$E\\$E]133;A$E\\{existing_prompt}$E]133;B$E\\"),
+            );
+            Ok(command)
+        }
+        "wsl" => {
+            let mut command = CommandBuilder::new("wsl.exe");
+            command.env(
+                "PROMPT_COMMAND",
+                "__laural_status=$?; printf '\\033]133;D;%s\\007' \"$__laural_status\"",
+            );
+            let existing = std::env::var("WSLENV").unwrap_or_default();
+            let wsl_env = if existing
+                .split(':')
+                .any(|item| item.split('/').next() == Some("PROMPT_COMMAND"))
+            {
+                existing
+            } else if existing.is_empty() {
+                "PROMPT_COMMAND".to_string()
+            } else {
+                format!("{existing}:PROMPT_COMMAND")
+            };
+            command.env("WSLENV", wsl_env);
+            Ok(command)
+        }
         "git-bash" => {
             let path = git_bash_path().ok_or_else(|| {
                 "No encuentro Git Bash. Instala Git for Windows o revisa su ubicación.".to_string()
             })?;
             let mut command = CommandBuilder::new(path);
             command.args(["--login", "-i"]);
+            command.env(
+                "PROMPT_COMMAND",
+                "__laural_status=$?; printf '\\033]133;D;%s\\007' \"$__laural_status\"",
+            );
             Ok(command)
         }
         _ => Err("Shell no admitido.".to_string()),
@@ -385,6 +438,8 @@ pub fn run() {
             providers::send_chat,
             providers::send_chat_stream,
             providers::cancel_chat_stream,
+            providers::cancel_agent_plan,
+            providers::preview_context,
             providers::get_agent_settings,
             providers::save_agent_settings,
             providers::plan_agent

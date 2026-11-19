@@ -59,4 +59,4 @@ Quienes trabajan en terminal alternan entre shells, documentación, asistentes y
 
 ## Límites conocidos
 
-La versión actual tiene streaming, historial persistente, bloques de comandos y cancelación del agente pendientes. Las políticas del agente no aíslan procesos. La compatibilidad de proveedores depende de los endpoints que cada servidor implemente.
+La versión actual tiene implementación inicial de streaming, historial local, bloques de comandos, vista previa contextual y cancelación del agente. Falta validar estos flujos dentro de la aplicación en los cuatro shells y con cada proveedor. Las políticas del agente no aíslan procesos y Ctrl+C no garantiza detener procesos hijos. La compatibilidad depende de los endpoints que cada servidor implemente.
