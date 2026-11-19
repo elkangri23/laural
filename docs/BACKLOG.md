@@ -7,7 +7,7 @@ La [hoja de ruta](ROADMAP.md) agrupa los hitos. Esta lista ordena el trabajo abi
 | Alta · M3 | Autorización del agente | Verificar comandos y rutas por shell, documentar límites y resolver los casos que permitan eludir aprobación. |
 | Alta · M1 | Terminal y bloques | Comprobar inicio, edición, salida, interrupción y cierre en PowerShell, CMD, WSL y Git Bash con y sin perfiles personalizados. |
 | Alta · M4 | Distribución | Registrar instalación limpia, actualización y desinstalación en Windows 10/11 x64, incluidos datos residuales. |
-| Alta · M2 | Proveedores y privacidad | Validar modelos, streaming, cancelación, errores y contenido enviado con cada proveedor admitido. |
+| Alta · M2 | Proveedores y privacidad | El decodificador cuenta con regresiones de fragmentación, límites y cortes de conexión. Validar modelos, streaming, cancelación, errores y contenido enviado con cada proveedor admitido. |
 | Media · M0 | Configuración | Verificar navegación con teclado, guardado de preferencias tras reinicio y cambio de perfil sin exposición de claves. |
 | Media · M4 | Firma | Publicar paquetes firmados cuando haya certificado y comprobar el editor en Windows. |
 | Diferida | Sincronización opcional | Acordar alcance, cifrado y recuperación antes de implementar. |

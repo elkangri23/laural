@@ -66,6 +66,8 @@ Los casos describen el comportamiento esperado del producto. Los estados disting
 
 **Criterios:** limitar número y tamaño de archivos y salida; ignorar rutas fuera de contexto permitido; mostrar errores del proveedor sin registrar claves.
 
+Si la conexión se corta antes del final o el proveedor envía un evento inválido, el chat conserva el texto recibido y muestra el error. Se admite una respuesta de hasta 2 MB de texto UTF-8.
+
 **Implementado inicialmente:** vista previa del contexto limitado, streaming cancelable e historial local borrable. La exclusión de rutas es fija, no configurable.
 
 ## UC-05 — Pedir plan al agente

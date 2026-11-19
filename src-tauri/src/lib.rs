@@ -12,6 +12,7 @@ use portable_pty::{Child, CommandBuilder, MasterPty, PtySize, native_pty_system}
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
+mod chat_stream;
 mod providers;
 
 struct TerminalSession {

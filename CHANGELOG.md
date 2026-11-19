@@ -1,5 +1,11 @@
 # Registro de cambios
 
+## Sin publicar
+
+- La consulta de modelos repite una vez los fallos temporales de conexión o pasarela.
+
+- El chat conserva los caracteres divididos entre paquetes, procesa eventos de varias líneas y avisa si la respuesta está incompleta, vacía, mal formada o supera el límite.
+
 ## 0.1.0-alpha.6
 
 - Corregidas las marcas de bloque en Windows PowerShell 5 y Bash, incluida la primera orden de una sesión de PowerShell.

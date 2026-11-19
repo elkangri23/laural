@@ -267,14 +267,33 @@ fn client() -> Result<reqwest::Client, String> {
 }
 
 async fn get_models(base_url: &str, api_key: Option<&str>) -> Result<Vec<String>, String> {
-    let mut request = client()?.get(endpoint(base_url, "models")?);
-    if let Some(key) = api_key.filter(|key| !key.trim().is_empty()) {
-        request = request.bearer_auth(key.trim());
+    let http = client()?;
+    let url = endpoint(base_url, "models")?;
+    let fetch = || {
+        let mut request = http.get(url.clone());
+        if let Some(key) = api_key.filter(|key| !key.trim().is_empty()) {
+            request = request.bearer_auth(key.trim());
+        }
+        request.send()
+    };
+    let first = fetch().await;
+    let retry = match &first {
+        Ok(response) => {
+            matches!(response.status().as_u16(), 502..=504)
+                && !response
+                    .headers()
+                    .contains_key(reqwest::header::RETRY_AFTER)
+        }
+        Err(error) => error.is_connect(),
+    };
+    let response = if retry {
+        drop(first);
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        fetch().await
+    } else {
+        first
     }
-    let response = request
-        .send()
-        .await
-        .map_err(|error| format!("No se pudo conectar con el proveedor: {error}"))?;
+    .map_err(|error| format!("No se pudo conectar con el proveedor: {error}"))?;
     let status = response.status();
     let body = response
         .text()
@@ -557,31 +576,18 @@ pub async fn send_chat_stream(
             return Err(format!("El proveedor respondió HTTP {status}: {}", short_body(&body)));
         }
         let mut stream = response.bytes_stream();
-        let mut buffer = Vec::<u8>::new();
+        let mut decoder = crate::chat_stream::ChatStream::default();
+        let mut emit = |text: &str| app.emit("chat-stream-delta", ChatStreamEvent {
+            request_id: request_id.clone(), delta: text.to_owned()
+        }).map_err(|error| format!("No se pudo mostrar la respuesta: {error}"));
         let mut ticker = tokio::time::interval(Duration::from_millis(100));
         loop {
             tokio::select! {
                 _ = ticker.tick() => if cancelled.load(Ordering::Relaxed) { return Err("Consulta cancelada.".to_string()); },
                 chunk = stream.next() => match chunk {
-                    Some(Ok(bytes)) => {
-                        buffer.extend_from_slice(&bytes);
-                        if buffer.len() > 2_000_000 { return Err("El proveedor envió un bloque de respuesta demasiado grande.".to_string()); }
-                        while let Some(end) = buffer.iter().position(|byte| *byte == b'\n') {
-                            let mut line = buffer.drain(..=end).collect::<Vec<_>>();
-                            line.pop();
-                            if line.last() == Some(&b'\r') { line.pop(); }
-                            let line = String::from_utf8_lossy(&line);
-                            let Some(data) = line.strip_prefix("data:").map(str::trim) else { continue };
-                            if data == "[DONE]" { return Ok(()); }
-                            let Ok(value) = serde_json::from_str::<Value>(data) else { continue };
-                            if let Some(delta) = value.pointer("/choices/0/delta/content").and_then(Value::as_str).filter(|s| !s.is_empty()) {
-                                app.emit("chat-stream-delta", ChatStreamEvent { request_id: request_id.clone(), delta: delta.to_string() })
-                                    .map_err(|error| format!("No se pudo mostrar la respuesta: {error}"))?;
-                            }
-                        }
-                    }
+                    Some(Ok(bytes)) => if decoder.push(&bytes, &mut emit)? { return Ok(()); },
                     Some(Err(error)) => return Err(format!("Se interrumpió la respuesta del proveedor: {error}")),
-                    None => return Ok(()),
+                    None => return decoder.eof(&mut emit),
                 }
             }
         }
@@ -1102,6 +1108,39 @@ pub fn preview_context(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn recupera_los_modelos_tras_un_error_temporal() {
+        use std::io::{BufRead, BufReader, Write};
+        use std::net::TcpListener;
+
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let url = format!("http://{}/v1", listener.local_addr().unwrap());
+        let server = std::thread::spawn(move || {
+            for (status, body) in [
+                ("503 Service Unavailable", ""),
+                ("200 OK", r#"{"data":[{"id":"local"}]}"#),
+            ] {
+                let (mut socket, _) = listener.accept().unwrap();
+                let reader = BufReader::new(&socket);
+                let mut lines = reader.lines().map(Result::unwrap);
+                assert_eq!(lines.next().unwrap(), "GET /v1/models HTTP/1.1");
+                for line in lines {
+                    if line.is_empty() {
+                        break;
+                    }
+                }
+                write!(
+                    socket,
+                    "HTTP/1.1 {status}\r\nConnection: close\r\nContent-Length: {}\r\n\r\n{body}",
+                    body.len()
+                )
+                .unwrap();
+            }
+        });
+        assert_eq!(get_models(&url, None).await.unwrap(), ["local"]);
+        server.join().unwrap();
+    }
 
     #[test]
     fn la_clave_guardada_solo_corresponde_al_destino_del_perfil() {

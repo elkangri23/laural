@@ -24,7 +24,7 @@ Estado al 19 de noviembre de 2026. «Implementado» describe código presente; �
 - Chat incremental cancelable e historial local borrable implementados.
 - Probar manualmente `/models` y streaming de chat con Ollama, LM Studio, FreeLLMAPI y un endpoint OpenAI-compatible.
 - La vista previa del contexto y sus límites de envío están implementados; verificar que coincide con cada proveedor.
-- Gestionar errores de formato, límites del proveedor y reintento de conexión.
+- El chat detecta respuestas truncadas o vacías, errores de formato y eventos demasiado grandes. La consulta de modelos reintenta una vez los fallos de conexión y HTTP 502–504 sin Retry-After. Pendiente la validación con proveedores reales.
 
 ## M3 — Agente (parcial)
 
