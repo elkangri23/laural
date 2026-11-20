@@ -33,7 +33,7 @@ Estado al 20 de noviembre de 2026. «Implementado» describe código presente; �
 - Planes y estados por acción; modos de autorización configurables.
 - Cancelación de generación, interrupción de comando activo y corte del ciclo automático implementados; probar cancelación y resultado en cada shell.
 - Implementada una primera validación de operadores por shell y detección de alias y operaciones comunes de borrado, copia, movimiento, truncado y escritura. Las reglas siguen siendo heurísticas, no aíslan comandos y no interpretan perfiles personalizados.
-- La restauración fija los directorios intermedios y abre la copia sin seguir reparse points en Windows; quedan por revisar las condiciones de carrera restantes al escribir archivos de trabajo.
+- La restauración y limpieza fijan los directorios intermedios de las copias en Windows; la restauración además abre el archivo sin seguir reparse points. Quedan por revisar las condiciones de carrera al escribir archivos de trabajo.
 - Registrar acciones localmente sin guardar secretos ni enviar telemetría.
 - Retención optativa de 5/10/20/50/100 copias por archivo implementada; sin límite predeterminado para conservar el comportamiento. La limpieza es por archivo, no recursiva y está cubierta por regresión.
 

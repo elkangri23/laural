@@ -335,17 +335,20 @@ fn prune_backups(root: &Path, relative: &Path, keep: usize) -> io::Result<usize>
 
 fn remove_backup_file(root: &Path, version_root: &Path, relative: &Path) -> io::Result<bool> {
     let backups = root.join(BACKUPS).canonicalize()?;
-    let version_root = version_root.canonicalize()?;
-    if !version_root.starts_with(backups) {
+    let canonical_version = version_root.canonicalize()?;
+    if !canonical_version.starts_with(&backups) {
         return Ok(false);
     }
-    let version_pin = match pin_directory(&version_root) {
+    let version_pin = match pin_directory(version_root) {
         Ok(pin) => pin,
         Err(_) => return Ok(false),
     };
+    if version_root.canonicalize()? != canonical_version {
+        return Ok(false);
+    }
     let candidate = version_root.join(relative);
     let mut pins = Vec::new();
-    let mut parent = version_root.clone();
+    let mut parent = version_root.to_path_buf();
     for part in relative.parent().unwrap_or(Path::new("")).iter() {
         parent.push(part);
         match pin_directory(&parent) {
@@ -358,7 +361,7 @@ fn remove_backup_file(root: &Path, version_root: &Path, relative: &Path) -> io::
     };
     if !candidate_parent
         .canonicalize()
-        .is_ok_and(|canonical| canonical.starts_with(&version_root))
+        .is_ok_and(|canonical| canonical.starts_with(&canonical_version))
     {
         return Ok(false);
     }
@@ -382,7 +385,7 @@ fn remove_backup_file(root: &Path, version_root: &Path, relative: &Path) -> io::
         };
         directory = parent.to_path_buf();
     }
-    let _ = fs::remove_dir(&version_root);
+    let _ = fs::remove_dir(version_root);
     Ok(true)
 }
 
@@ -500,21 +503,9 @@ pub(crate) fn clear_backups(root: &Path, relative: &str, approved: bool) -> Resu
             continue;
         }
         let version_root = entry.path();
-        if pin_directory(&version_root).is_err() {
-            continue;
-        }
-        let candidate = version_root.join(relative);
-        let Some(parent) = candidate.parent() else {
-            continue;
-        };
-        if !parent
-            .canonicalize()
-            .is_ok_and(|canonical| canonical.starts_with(&version_root))
+        if remove_backup_file(&root, &version_root, relative)
+            .map_err(|_| "No se pudo eliminar una copia.")?
         {
-            continue;
-        }
-        if fs::symlink_metadata(&candidate).is_ok_and(|meta| meta.file_type().is_file()) {
-            fs::remove_file(candidate).map_err(|_| "No se pudo eliminar una copia.")?;
             removed += 1;
         }
     }
@@ -673,12 +664,15 @@ mod tests {
         use std::os::windows::fs::symlink_file;
         let root = tempfile::tempdir().unwrap();
         let outside = tempfile::NamedTempFile::new().unwrap();
+        fs::write(outside.path(), b"outside").unwrap();
         let version = root.path().join(BACKUPS).join("edicion-prueba");
         fs::create_dir_all(&version).unwrap();
         symlink_file(outside.path(), version.join("secreto.txt")).unwrap();
         assert!(list_backups(root.path(), "secreto.txt").unwrap().is_empty());
         assert!(open_backup_file(&version.join("secreto.txt")).is_err());
         assert!(restore(root.path(), "secreto.txt", "edicion-prueba", true).is_err());
+        assert_eq!(clear_backups(root.path(), "secreto.txt", true).unwrap(), 0);
+        assert_eq!(fs::read(outside.path()).unwrap(), b"outside");
     }
 
     #[cfg(windows)]
