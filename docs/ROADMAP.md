@@ -8,6 +8,7 @@ Estado al 20 de noviembre de 2026. «Implementado» describe código presente; �
 - PowerShell, CMD, WSL y Git Bash, pestañas y división de dos terminales vertical u horizontal.
 - Perfiles locales, descubrimiento de modelos y chat contextual con streaming y cancelación.
 - Doce temas de color, modo claro/oscuro y preferencias locales.
+- Regresiones de la app principal verifican que tema y modo se recuperan/guardan y que se ofrecen doce temas; también cubren creación de pestañas y alternancia de panel dividido.
 - Planes de agente, modos revisar/reglas/automático y aprobación explícita para cambios de archivos.
 - Icono y favicon propios; build de Windows automatizable desde GitHub Actions.
 - README, arquitectura, requisitos, ADR, casos de uso y documentación de contribución.
@@ -15,7 +16,7 @@ Estado al 20 de noviembre de 2026. «Implementado» describe código presente; �
 ## M1 — Estabilidad de terminal (parcial)
 
 - Prueba manual de PTY superada en PowerShell, CMD, Git Bash y WSL Ubuntu: entrada, redimensionamiento, recepción de las 1.500 líneas y código de salida 37. El reinicio y la comprobación de bloques en la interfaz instalada siguen pendientes.
-- Las regresiones de interfaz comprueban la captura de comandos, marcadores OSC de bloques/código de salida y líneas editadas en el shell. Se abrió el ejecutable local, pero la automatización de Windows no pudo activar su ventana tras dos intentos; siguen pendientes la revisión visual de bloques, interrupción, cierre y reinicio desde la ventana instalada.
+- Las regresiones de interfaz comprueban la captura de comandos, marcadores OSC de bloques/código de salida y líneas editadas en el shell. La ventana instalada está disponible, pero esta sesión quedó en la elección inicial de actualizaciones; siguen pendientes la revisión visual de bloques, interrupción, cierre y reinicio desde la ventana instalada.
 - El panel espera a sus suscripciones antes de arrancar y coordina el cierre durante el arranque. Las regresiones cubren ocultar y mostrar una sesión y el cierre temprano. El evento de salida de Tauri vacía el registro y termina los procesos aunque la entrada esté ocupada. Probado con CMD real desde el backend. Pendiente validar el cierre desde la ventana instalada.
 - Validar bloques de comandos, entrada editada y resultados en PowerShell, CMD, Git Bash y WSL; bash/prompt de usuario pueden sustituir las marcas de integración.
 - Probar instalación y desinstalación limpia en Windows 10 y 11.
