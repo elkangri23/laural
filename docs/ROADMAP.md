@@ -24,6 +24,7 @@ Estado al 20 de noviembre de 2026. «Implementado» describe código presente; �
 - Chat incremental cancelable e historial local borrable implementados.
 - Corregida la compilación de `keyring` para usar Windows Credential Manager; la clave se verifica tras guardar. Pendiente probar FreeLLMAPI, Ollama y LM Studio desde una instalación limpia.
 - Probar manualmente `/models` y streaming de chat con Ollama, LM Studio, FreeLLMAPI y un endpoint OpenAI-compatible.
+- Añadida regresión local que confirma que el cliente rechaza redirecciones HTTP del proveedor, para no enviar credenciales/contexto a otro destino. Las pruebas con proveedores instalados siguen pendientes.
 - La vista previa del contexto y sus límites de envío están implementados; verificar que coincide con cada proveedor.
 - El chat detecta respuestas truncadas o vacías, errores de formato y eventos demasiado grandes. La consulta de modelos reintenta una vez los fallos de conexión y HTTP 502–504 sin Retry-After. Pendiente la validación con proveedores reales.
 
@@ -43,7 +44,8 @@ Estado al 20 de noviembre de 2026. «Implementado» describe código presente; �
 - Updater Tauri integrado para NSIS x64: preferencia manual/automática, chequeo al inicio y cada seis horas, descarga separada, reinicio y versión en Configuración. Falta validar una actualización real de alpha.14 a la siguiente release.
 - Firma del updater configurada con clave privada como secreto de GitHub Actions y clave pública fijada en la app; firma Authenticode sigue fuera del alcance.
 - Validar instalación limpia, actualización y desinstalación.
-- El flujo automático de release y manifiesto depende de que el workflow se ejecute correctamente en GitHub; validar la publicación de alpha.14.
+- Publicación de alpha.14 validada en GitHub: instalador NSIS x64, firma `.sig` y `latest.json` firmados publicados; el manifiesto fue sincronizado a `main`.
+- Validar en Windows la actualización real de alpha.14 a la siguiente versión, instalación limpia, reinicio y desinstalación.
 - Resolver incidencias críticas de validación manual antes de declarar estable.
 
 ## Auditoría de seguridad (primera revisión completada; validación manual pendiente)

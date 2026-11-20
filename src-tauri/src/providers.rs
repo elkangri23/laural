@@ -1445,6 +1445,68 @@ mod tests {
         server.join().unwrap();
     }
 
+    #[tokio::test]
+    async fn no_sigue_redirecciones_del_proveedor_a_otro_destino() {
+        use std::{
+            io::{BufRead, BufReader, Write},
+            net::TcpListener,
+            time::Instant,
+        };
+
+        let destination = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        destination.set_nonblocking(true).unwrap();
+        let destination_url = format!("http://{}/steal", destination.local_addr().unwrap());
+        let forwarded = std::thread::spawn(move || {
+            let deadline = Instant::now() + Duration::from_millis(500);
+            while Instant::now() < deadline {
+                match destination.accept() {
+                    Ok(_) => return true,
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        std::thread::sleep(Duration::from_millis(10));
+                    }
+                    Err(error) => panic!("No se pudo comprobar la redirección: {error}"),
+                }
+            }
+            false
+        });
+
+        let provider = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let url = format!("http://{}/v1", provider.local_addr().unwrap());
+        let server = std::thread::spawn(move || {
+            let (mut socket, _) = provider.accept().unwrap();
+            let reader = BufReader::new(&socket);
+            let mut lines = reader.lines().map(Result::unwrap);
+            assert_eq!(lines.next().unwrap(), "GET /v1/models HTTP/1.1");
+            let mut sent_authorization = false;
+            for line in lines {
+                if line.is_empty() {
+                    break;
+                }
+                sent_authorization |=
+                    line.eq_ignore_ascii_case("authorization: bearer credencial-fixture");
+            }
+            write!(
+                socket,
+                "HTTP/1.1 302 Found\r\nLocation: {destination_url}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
+            )
+            .unwrap();
+            sent_authorization
+        });
+
+        let error = get_models(&url, Some("credencial-fixture"))
+            .await
+            .unwrap_err();
+        assert!(error.contains("302"), "{error}");
+        assert!(
+            server.join().unwrap(),
+            "La solicitud inicial no llevaba autenticación."
+        );
+        assert!(
+            !forwarded.join().unwrap(),
+            "La redirección alcanzó otro destino."
+        );
+    }
+
     #[test]
     fn la_clave_guardada_solo_corresponde_al_destino_del_perfil() {
         let store = ProviderStore {

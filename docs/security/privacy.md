@@ -25,6 +25,7 @@ No existe telemetría ni cuenta de Laural en el MVP. La sincronización queda di
 El updater consulta `raw.githubusercontent.com` y descarga el instalador desde GitHub Releases. Esas solicitudes pueden revelar a GitHub la dirección IP y metadatos HTTP habituales. La firma se verifica localmente antes de instalar; no se envían configuración, claves de proveedores ni contenido del terminal al servicio de actualizaciones.
 
 El WebView aplica una política CSP local: bloquea scripts externos, `eval`, objetos y frames; conserva estilos inline requeridos por la interfaz, e IPC de Tauri. Las conexiones del frontend a endpoints de modelos se realizan desde Rust, no desde el navegador.
+El cliente de proveedores no sigue redirecciones HTTP: las claves y el contexto solo se envían al destino configurado por el usuario.
 
 ## Solicitudes de soporte
 

@@ -23,3 +23,4 @@ Usar endpoints de estilo OpenAI: obtener modelos en `/models` y solicitar chat e
 - El MVP no garantiza streaming, herramientas nativas, imágenes, embeddings o esquemas de respuesta no estándar.
 - Las pruebas de contrato deben cubrir modelos, autenticación, errores y respuesta de chat de cada proveedor objetivo.
 - HTTP queda limitado a loopback; para hosts remotos se exige HTTPS.
+- Las solicitudes de modelos y chat no siguen redirecciones HTTP. Cada perfil queda ligado a su destino configurado y una respuesta 3xx no debe reenviar claves ni contexto a otro host.

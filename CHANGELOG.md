@@ -1,5 +1,9 @@
 # Registro de cambios
 
+## Sin publicar
+
+- Añadida regresión de proveedor que comprueba que una redirección HTTP no reenvía la solicitud autenticada a otro destino.
+
 ## 0.1.0-alpha.14
 
 - Consulta de actualizaciones firmadas de GitHub al iniciar y cada seis horas; preferencia de instalación manual o automática, indicador visible, descarga separada de instalación y versión instalada en Configuración.

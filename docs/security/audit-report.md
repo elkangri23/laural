@@ -15,6 +15,7 @@
 | Baja | Plugin y permiso de apertura externa no usados estaban habilitados | Eliminados dependencia, inicialización y permiso de opener. |
 | Media | Solicitudes de IA podían reutilizar identificadores o crecer sin límite | Rechazo de IDs inválidos/duplicados y máximo de ocho consultas simultáneas. |
 | Media | Datos IPC de chat, contexto y escritura carecían de límites uniformes | Límite de 1 MB por escritura de terminal/contexto, 100 mensajes con 64 KB cada uno, 12 archivos elegidos, URL de 2.048 caracteres, clave de 16 KB, y límites del agente aplicados en backend. |
+| Media | Un proveedor podía responder con una redirección a otro destino | El cliente no sigue redirecciones; una regresión local confirma que una solicitud con autenticación no llega al destino indicado por un 302. |
 | Alta | Las releases anteriores no tenían un instalador desde la app ni autenticación criptográfica de los paquetes de actualización | Integrado updater Tauri, HTTPS, clave pública fija, artefactos NSIS firmados y secreto privado en GitHub Actions. Falta validar el salto real entre versiones publicadas. |
 
 ## Dependencias
@@ -33,7 +34,7 @@
 
 Se ejecutaron `git diff --check`, `npm audit`, `cargo audit`, pruebas frontend con cobertura, cobertura Rust y build NSIS de Windows con generación de `.sig`. La prueba estática no sustituye la validación manual del instalador y actualización real.
 
-- Interfaz: 24 pruebas pasadas; cobertura global 26,23 % de líneas. La suite no monta `App.tsx`; el nuevo gestor de actualizaciones tiene 95,29 % de líneas.
-- Backend Rust: 28 pruebas pasadas, 0 fallidas, 1 ignorada; cobertura 48,86 % de líneas (51,29 % de regiones). `lib.rs` y `providers.rs` requieren más cobertura.
+- Interfaz: 24 pruebas pasadas; cobertura global 26,23 % de líneas. La suite no monta `App.tsx`; el gestor de actualizaciones tiene 95,29 % de líneas.
+- Backend Rust: 29 pruebas pasadas, 0 fallidas, 1 ignorada; cobertura 50,22 % de líneas (52,55 % de regiones). `lib.rs` y `providers.rs` requieren más cobertura.
 - `npm audit`: 0 vulnerabilidades; `cargo check`, build frontend, build NSIS y `git diff --check` pasan. `cargo audit` conserva tres avisos heredados de mantenimiento/soundness de dependencias no usadas en el artefacto Windows.
 - Build NSIS: completado con firma de updater; generó `Laural_0.1.0-alpha.14_x64-setup.exe` (2,97 MiB) y su archivo `.sig`. Instalación limpia, aviso de Windows y actualización real aún requieren ejecución manual.

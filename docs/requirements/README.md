@@ -34,7 +34,7 @@ Los requisitos distinguen el alcance acordado del estado actual del prototipo. �
 | NFR-01 | Windows primero. | Paquete x64; Windows 10+ con WebView2 como plataforma objetivo inicial. |
 | NFR-02 | Operación local-first. | Inicio y terminal no dependen de cuenta o backend de Laural. |
 | NFR-03 | Protección de secretos. | Claves en Windows Credential Manager; nunca en JSON de perfiles ni logs de Laural. |
-| NFR-04 | Transporte remoto seguro. | HTTP solo en loopback; HTTPS obligatorio para hosts remotos. |
+| NFR-04 | Transporte remoto seguro. | HTTP solo en loopback; HTTPS obligatorio para hosts remotos; el cliente no sigue redirecciones del proveedor. |
 | NFR-05 | Control de alcance de archivos. | Escrituras limitadas al directorio canónico del proyecto abierto. |
 | NFR-06 | Contexto con límites. | Número y tamaño de archivos, salida terminal y mensajes acotados antes de enviar. |
 | NFR-07 | Accesibilidad básica. | Navegación por teclado, etiquetas accesibles, contraste suficiente y escalado de ventana. |
