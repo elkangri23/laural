@@ -73,6 +73,7 @@ test("recupera y guarda el tema y el modo desde Configuración", async () => {
   expect(host.querySelectorAll('[data-testid="terminal-pane"]')).toHaveLength(1);
 
   await act(async () => buttonIncluding("Configuración").click());
+  expect(host.textContent).toContain("Los filtros no aíslan el shell.");
   await act(async () => buttonIncluding("Apariencia").click());
 
   expect(host.querySelectorAll(".theme-choice")).toHaveLength(12);

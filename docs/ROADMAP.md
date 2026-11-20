@@ -1,6 +1,6 @@
 # Hoja de ruta
 
-Estado al 20 de noviembre de 2026. «Implementado» describe código presente; «validación pendiente» señala que hace falta ejecutar y comprobar el flujo en Windows.
+Estado al 21 de noviembre de 2026. «Implementado» describe código presente; «validación pendiente» señala que hace falta ejecutar y comprobar el flujo en Windows.
 
 ## M0 — Esqueleto de producto (implementado; validación de uso pendiente)
 
@@ -43,8 +43,8 @@ Estado al 20 de noviembre de 2026. «Implementado» describe código presente; �
 
 - Planes y estados por acción; modos de autorización configurables. El validador de rutas ahora se comparte entre la vista previa del plan y las operaciones de archivo; los nombres reservados de Windows y la carpeta interna se rechazan antes de presentar el plan.
 - Cancelación de generación, interrupción de comando activo y corte del ciclo automático implementados; probar cancelación y resultado en cada shell.
-- Implementada una primera validación de operadores por shell y detección de alias y operaciones comunes de borrado, copia, movimiento, truncado y escritura. Las reglas siguen siendo heurísticas, no aíslan comandos y no interpretan perfiles personalizados.
-- El filtro también requiere revisión para comandos frecuentes que alteran permisos o atributos, y para crear enlaces simbólicos. Los alias y funciones definidos por el usuario siguen fuera de su análisis.
+- Ampliada la revisión obligatoria para alias de alto riesgo conocidos de PowerShell, lanzadores de scripts y ejecutables con rutas explícitas; se añade una advertencia visible en Configuración. Los filtros siguen siendo heurísticos y no pueden interpretar alias, funciones ni perfiles personalizados del usuario.
+- Las pruebas cubren comandos habituales que alteran permisos, atributos o enlaces. La autorización sigue siendo heurística: no aísla procesos ni puede interpretar alias, funciones o perfiles personalizados del usuario.
 - En Windows, escritura, restauración y limpieza fijan la cadena canónica de directorios sin permitir su sustitución. El reemplazo usa handles de archivo y renombrados sin sobrescritura: guarda primero el original y solo coloca el temporal si el destino sigue libre. Las colisiones conservan el archivo concurrente y dejan el original en el backup; queda un intervalo breve entre ambos renombrados, recuperable desde las copias si el proceso se interrumpe.
 - Historial de actividad del agente en Configuración: guarda solo tipo, resultado y hora, está limitado a 200 eventos/64 KiB y se puede borrar; no incluye contenido sensible ni se sincroniza.
 - Retención optativa de 5/10/20/50/100 copias por archivo implementada; sin límite predeterminado para conservar el comportamiento. La limpieza es por archivo, no recursiva y está cubierta por regresión.

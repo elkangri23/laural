@@ -841,6 +841,7 @@ function App() {
               <BackupRetentionControl value={backupRetention} onChange={(value) => void changeBackupRetention(value)} />
               {policyNotice && <span className="policy-notice">{policyNotice}</span>}
               <p>Los cambios de archivos siempre requieren aprobación.</p>
+              <p>Los filtros no aíslan el shell. Alias, funciones y perfiles personalizados pueden cambiar el significado de un comando; revísalo antes de aprobarlo.</p>
             </div>
         <AgentActivity />
         <button className="action-quiet" onClick={clearChat} disabled={!chatMessages.length || chatBusy || agentPlanBusy || agentCommandBusy}>Borrar historial del chat</button>

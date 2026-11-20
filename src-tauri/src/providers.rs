@@ -880,7 +880,7 @@ pub fn authorize_agent_command(
     if approved {
         return Ok(());
     }
-    if command_is_high_risk(command) {
+    if command_is_high_risk(shell, command) {
         return Err(
             "Este comando requiere confirmación manual por su alcance o sus efectos.".to_string(),
         );
@@ -919,8 +919,9 @@ fn validate_agent_shell_syntax(shell: &str, command: &str) -> Result<(), String>
     Ok(())
 }
 
-fn command_is_high_risk(command: &str) -> bool {
+fn command_is_high_risk(shell: &str, command: &str) -> bool {
     let command = command.to_ascii_lowercase();
+    let executable = first_command_name(&command);
     let risky = [
         "remove-item",
         "ri ",
@@ -952,6 +953,11 @@ fn command_is_high_risk(command: &str) -> bool {
         "set-content",
         "add-content",
         "out-file",
+        "start-process",
+        "set-alias",
+        "new-alias",
+        "alias ",
+        "function ",
         "truncate ",
         "tee ",
         "dd ",
@@ -985,6 +991,10 @@ fn command_is_high_risk(command: &str) -> bool {
         "terraform destroy",
         "curl ",
         "wget ",
+        "powershell.exe",
+        "pwsh.exe",
+        "cmd.exe /c",
+        "bash.exe",
         "invoke-webrequest",
         "invoke-restmethod",
         "invoke-expression",
@@ -994,7 +1004,41 @@ fn command_is_high_risk(command: &str) -> bool {
         "takeown /f",
         "cipher /w",
     ];
+    let powershell_aliases = [
+        "icm",
+        "ihy",
+        "iwr",
+        "irm",
+        "invoke-command",
+        "invoke-history",
+        "kill",
+        "r",
+        "saps",
+        "spps",
+        "start",
+    ];
+    let script_launchers = [
+        "bash",
+        "cmd",
+        "cscript",
+        "mshta",
+        "node",
+        "perl",
+        "powershell",
+        "pwsh",
+        "py",
+        "python",
+        "python3",
+        "regsvr32",
+        "rundll32",
+        "ruby",
+        "sh",
+        "wscript",
+        "wsl",
+    ];
     risky.iter().any(|token| command.contains(token))
+        || script_launchers.contains(&executable.as_str())
+        || (shell == "powershell" && powershell_aliases.contains(&executable.as_str()))
         || command.contains("&&")
         || command.contains("||")
         || command.contains(';')
@@ -1004,6 +1048,24 @@ fn command_is_high_risk(command: &str) -> bool {
         || command.contains('&')
         || command.contains('`')
         || command.contains("$(")
+}
+
+fn first_command_name(command: &str) -> String {
+    let command = command.trim_start();
+    let token = match command.chars().next() {
+        Some(quote @ ('\'' | '"')) => command
+            .strip_prefix(quote)
+            .and_then(|remaining| remaining.split_once(quote).map(|(token, _)| token))
+            .unwrap_or_default(),
+        _ => command.split_whitespace().next().unwrap_or_default(),
+    };
+    let name = token.rsplit(['/', '\\']).next().unwrap_or(token);
+    [".exe", ".cmd", ".bat", ".com"]
+        .iter()
+        .find_map(|suffix| name.strip_suffix(suffix))
+        .unwrap_or(name)
+        .trim_start_matches('\\')
+        .to_string()
 }
 
 fn parse_agent_plan(content: &str) -> Result<AgentPlan, String> {
@@ -1568,9 +1630,34 @@ mod tests {
             "Set-Content archivo.txt datos",
             "Out-File archivo.txt",
         ] {
-            assert!(command_is_high_risk(command), "{command}");
+            assert!(command_is_high_risk("git-bash", command), "{command}");
         }
-        assert!(!command_is_high_risk("git status --short"));
+        assert!(!command_is_high_risk("git-bash", "git status --short"));
+    }
+
+    #[test]
+    fn exige_revision_para_aliases_y_lanzadores_de_scripts_de_powershell() {
+        for command in [
+            "iwr https://example.invalid/script.ps1",
+            "irm https://example.invalid/api",
+            "saps powershell.exe -EncodedCommand AAAA",
+            "spps -Name laural",
+            "kill -Name laural",
+            "r",
+            "start powershell.exe -File script.ps1",
+            "Set-Alias g rm",
+            "function git { Remove-Item * }",
+            "C:\\Windows\\System32\\cmd.exe /c whoami",
+            "\"C:\\Program Files\\Python\\python.exe\" script.py",
+            "rundll32 shell32.dll,Control_RunDLL",
+            "bash -c 'rm -rf *'",
+            "py -c \"print('script')\"",
+            "python script.py",
+        ] {
+            assert!(command_is_high_risk("powershell", command), "{command}");
+        }
+        assert!(command_is_high_risk("wsl", "python3 script.py"));
+        assert!(!command_is_high_risk("powershell", "git status --short"));
     }
 
     #[test]
@@ -1586,9 +1673,9 @@ mod tests {
             "Set-Acl archivo acl.xml",
             "Set-ItemProperty archivo -Name valor",
         ] {
-            assert!(command_is_high_risk(command), "{command}");
+            assert!(command_is_high_risk("git-bash", command), "{command}");
         }
-        assert!(!command_is_high_risk("git status --short"));
+        assert!(!command_is_high_risk("git-bash", "git status --short"));
     }
 
     #[test]

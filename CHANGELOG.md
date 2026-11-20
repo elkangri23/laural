@@ -20,6 +20,7 @@
 - Mejorada la navegación por teclado de Configuración: el diálogo enfoca el título al abrir y Escape cierra mediante el evento nativo; añadidas pruebas de apertura y cancelación.
 - Añadida regresión de cambio entre perfiles que comprueba que la clave en memoria del proveedor anterior no se envía al probar ni guardar el nuevo perfil.
 - Añadida prueba de arranque en frío simulado: tema y modo se recuperan del almacenamiento local, y el perfil activo vuelve a cargarse sin rellenar la clave en el formulario.
+- Endurecida la autorización del agente para exigir revisión ante alias peligrosos conocidos de PowerShell, ejecución de scripts y lanzadores de shells; Configuración explica que los perfiles personalizados no están aislados.
 
 ## 0.1.0-alpha.14
 
