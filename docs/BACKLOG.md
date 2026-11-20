@@ -19,3 +19,4 @@ Cobertura: ampliar los casos de regresión a cambios de permisos, interacción d
 | Alta · M3 | Retención de copias | Restauración confirmada implementada y probada. Limpieza confirmada por archivo implementada. Pendiente política de retención automática configurable. |
 Revisión de sintaxis del agente: comprobación inicial por shell para PowerShell, CMD, WSL y Git Bash, cubierta con casos de operadores. Sigue pendiente comprobar aliases, funciones y perfiles personalizados.
 M3: validación inicial por shell aplicada antes de reglas y automatización. Pendiente probar aliases, perfiles de inicio y variaciones de sintaxis en cada shell.
+Revisión de aliases destructivos: el filtro bloquea alias comunes de borrado y redirección de archivos. Pendiente ampliar revisión con perfiles personalizados de PowerShell y Bash.

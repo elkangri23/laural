@@ -52,3 +52,4 @@ No reemplazar un archivo externo que cambió simultáneamente sigue requiriendo 
 La restauración del agente requiere confirmación explícita y solo acepta versiones regulares bajo el directorio de copias. Cada restauración genera una nueva copia del archivo actual.
 La limpieza de copias requiere confirmación y solo elimina archivos regulares del archivo elegido bajo el almacén de copias. El archivo de trabajo actual se conserva.
 La autorización del agente considera metacaracteres de PowerShell, CMD, Bash y WSL para los modos automático y reglas. La confirmación humana permite expresamente comandos complejos. El shell, sus aliases y perfiles personalizados siguen fuera de una sandbox.
+El filtro inicial de comandos del agente también reconoce alias habituales de borrado y escritura de archivos en shells comunes. La lista es conservadora y no cubre alias o funciones definidos por el usuario.

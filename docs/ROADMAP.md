@@ -62,3 +62,4 @@ M3 ya permite restaurar desde la tarjeta del cambio, con confirmación y backup 
 M3 incluye limpieza manual de copias por archivo con confirmación. La retención automática configurable continúa pendiente.
 M3 añade una primera validación de operadores específica para cada shell antes de aplicar los modos automático o reglas. La validación de perfiles personalizados sigue pendiente.
 M3 aplica ahora filtros de sintaxis por shell en Rust antes de los modos automático y reglas. La aprobación explícita permite composiciones tras revisión humana.
+M3 reconoce alias comunes de borrado y escritura en el filtro de comandos que requieren aprobación manual.

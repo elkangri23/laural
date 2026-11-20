@@ -769,10 +769,21 @@ fn command_is_high_risk(command: &str) -> bool {
     let command = command.to_ascii_lowercase();
     let risky = [
         "remove-item",
+        "ri ",
+        "rm ",
         "del /",
         "del ",
         "rmdir",
+        "rd ",
+        "erase ",
+        "unlink ",
+        "shred ",
         "rm -",
+        "set-content",
+        "add-content",
+        "out-file",
+        "sc ",
+        "ac ",
         "format ",
         "diskpart",
         "shutdown",
@@ -1152,6 +1163,22 @@ mod tests {
             );
         }
         assert!(validate_agent_shell_syntax("unknown", "git status").is_err());
+    }
+
+    #[test]
+    fn detecta_aliases_comunes_de_borrado_y_escritura() {
+        for command in [
+            "rm archivo.txt",
+            "ri archivo.txt",
+            "erase archivo.txt",
+            "rd carpeta",
+            "unlink archivo.txt",
+            "Set-Content archivo.txt datos",
+            "Out-File archivo.txt",
+        ] {
+            assert!(command_is_high_risk(command), "{command}");
+        }
+        assert!(!command_is_high_risk("git status --short"));
     }
 
     #[tokio::test]
