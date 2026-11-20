@@ -37,7 +37,7 @@
 
 Se ejecutaron `git diff --check`, `npm audit`, `cargo audit`, pruebas frontend con cobertura, cobertura Rust y build NSIS de Windows con generación de `.sig`. La prueba estática no sustituye la validación manual del instalador y actualización real.
 
-- Interfaz: 24 pruebas pasadas; cobertura global 26,23 % de líneas. La suite no monta `App.tsx`; el gestor de actualizaciones tiene 95,29 % de líneas.
+- Interfaz: 26 pruebas pasadas; cobertura global 28,93 % de líneas. La suite no monta `App.tsx`; `TerminalPane.tsx` tiene 88,88 % de líneas y el gestor de actualizaciones 95,29 %.
 - Backend Rust: 30 pruebas pasadas, 0 fallidas, 1 ignorada; cobertura 51,58 % de líneas (53,99 % de regiones). `lib.rs` y `providers.rs` requieren más cobertura.
 - `npm audit`: 0 vulnerabilidades; `cargo check`, build frontend, build NSIS y `git diff --check` pasan. `cargo audit` conserva tres avisos heredados de mantenimiento/soundness de dependencias no usadas en el artefacto Windows.
 - Build NSIS: completado con firma de updater; generó `Laural_0.1.0-alpha.14_x64-setup.exe` (2,97 MiB) y su archivo `.sig`. Instalación limpia, aviso de Windows y actualización real aún requieren ejecución manual.

@@ -5,15 +5,15 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import TerminalPane from "../src/components/TerminalPane";
 import { themes } from "../src/themes";
 
-const { invoke, listen, write, onData } = vi.hoisted(() => ({
-  invoke: vi.fn(), listen: vi.fn(), write: vi.fn(), onData: vi.fn(),
+const { invoke, listen, write, onData, registerOscHandler } = vi.hoisted(() => ({
+  invoke: vi.fn(), listen: vi.fn(), write: vi.fn(), onData: vi.fn(), registerOscHandler: vi.fn(),
 }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 vi.mock("@tauri-apps/api/event", () => ({ listen }));
 vi.mock("@xterm/addon-fit", () => ({ FitAddon: class { fit() {} } }));
 vi.mock("@xterm/xterm", () => ({
   Terminal: class {
-    options = {}; parser = { registerOscHandler: () => ({ dispose() {} }) };
+    options = {}; parser = { registerOscHandler };
     write = write; writeln = write;
     loadAddon() {} open() {} focus() {} dispose() {}
     onData = onData;
@@ -42,6 +42,7 @@ beforeEach(() => {
     return name === "terminal-output" ? removeOutput : removeExit;
   });
   onData.mockReturnValue({ dispose() {} });
+  registerOscHandler.mockReturnValue({ dispose() {} });
   invoke.mockResolvedValue(undefined);
 });
 async function unmount() {
@@ -97,4 +98,40 @@ test("entrega la respuesta del cursor cuando termina el arranque", async () => {
   expect(invoke.mock.calls.map(([name]) => name)).toEqual(["create_terminal"]);
   await act(async () => started());
   expect(invoke).toHaveBeenCalledWith("write_terminal", { terminalId: "uno", data: "\x1b[1;1R" });
+});
+
+test("captura el comando enviado y el código de salida del bloque", async () => {
+  await act(async () => root!.render(pane()));
+  const input = onData.mock.calls[0][0];
+  const oscHandler = registerOscHandler.mock.calls[0][1];
+
+  await act(async () => {
+    input("  git status  ");
+    input("\r");
+    input("\n");
+    oscHandler("A");
+    oscHandler("B");
+    oscHandler("C");
+    oscHandler("D;37");
+  });
+
+  expect(submit).toHaveBeenCalledOnce();
+  expect(submit).toHaveBeenCalledWith("uno", "git status");
+  expect(finished).toHaveBeenCalledWith("uno", 37);
+  expect(oscHandler("D;código-inválido")).toBe(true);
+  expect(finished).toHaveBeenLastCalledWith("uno", null);
+});
+
+test("marca como editada la línea que el usuario modifica dentro del shell", async () => {
+  await act(async () => root!.render(pane()));
+  const input = onData.mock.calls[0][0];
+
+  await act(async () => {
+    input("comando original");
+    input("\x1b[A");
+    input("comando editado\r\n");
+  });
+
+  expect(submit).toHaveBeenCalledOnce();
+  expect(submit).toHaveBeenCalledWith("uno", "Comando editado en el shell; texto no capturado");
 });
