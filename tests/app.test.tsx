@@ -83,17 +83,31 @@ test("recupera y guarda el tema y el modo desde Configuración", async () => {
   expect(localStorage.getItem("laural.appearance")).toBe("dark");
   expect(document.documentElement.dataset.theme).toBe("ruby");
   expect(document.documentElement.dataset.mode).toBe("dark");
+
+  await act(async () => root!.unmount());
+  root = createRoot(host);
+  await act(async () => root!.render(<App />));
+
+  expect(document.documentElement.dataset.theme).toBe("ruby");
+  expect(document.documentElement.dataset.mode).toBe("dark");
 });
 
 test("cambiar de proveedor descarta la clave en memoria del perfil anterior", async () => {
   const first = { id: "profile-a", name: "Proveedor A", baseUrl: "https://a.example/v1", model: "modelo-a", hasApiKey: true };
   const second = { id: "profile-b", name: "Proveedor B", baseUrl: "https://b.example/v1", model: "modelo-b", hasApiKey: true };
+  let activeProvider = first;
   mocks.invoke.mockImplementation(async (command: string, args?: { providerId?: string }) => {
-    if (command === "get_provider") return first;
+    if (command === "get_provider") return activeProvider;
     if (command === "get_providers") return [first, second];
-    if (command === "select_provider") return args?.providerId === second.id ? second : first;
+    if (command === "select_provider") {
+      activeProvider = args?.providerId === second.id ? second : first;
+      return activeProvider;
+    }
     if (command === "test_provider") return ["modelo-b"];
-    if (command === "save_provider") return second;
+    if (command === "save_provider") {
+      activeProvider = second;
+      return second;
+    }
     if (command === "get_agent_settings") return { mode: "review", allowedPrefixes: ["git status", "git diff"], backupRetention: null };
     return undefined;
   });
@@ -129,6 +143,13 @@ test("cambiar de proveedor descarta la clave en memoria del perfil anterior", as
   expect(saveCall?.[1]).toEqual({
     input: { id: second.id, name: second.name, baseUrl: second.baseUrl, model: second.model, apiKey: null },
   });
+
+  await act(async () => root!.unmount());
+  root = createRoot(host);
+  await act(async () => root!.render(<App />));
+  expect(host.querySelector(".toolbar-chip")?.textContent).toContain("Proveedor B · modelo-b");
+  await act(async () => host.querySelector<HTMLButtonElement>(".toolbar-chip")!.click());
+  expect(host.querySelector<HTMLInputElement>('input[type="password"]')?.value).toBe("");
 });
 
 test("crea una pestaña del shell elegido y alterna la división de terminal", async () => {
