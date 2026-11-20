@@ -33,6 +33,7 @@ Estado al 20 de noviembre de 2026. «Implementado» describe código presente; �
 - La vista previa del contexto y sus límites de envío están implementados; verificar que coincide con cada proveedor.
 - Regresiones locales cubren los formatos de modelos OpenAI-compatible (`data[].id`) y Ollama (`models[].name`), incluidos duplicados, campos vacíos y fallback entre formatos. La conexión real de cada servicio sigue pendiente.
 - Chat normal y streaming ahora comparten el mismo constructor de mensajes, el recorte de contexto y los límites de historial; una prueba verifica los roles y las marcas de dato no confiable.
+- La cancelación interrumpe también el envío HTTP inicial de chat y de planes, además de la lectura de la respuesta; una regresión usa una solicitud pendiente y no requiere un proveedor activo.
 - El chat detecta respuestas truncadas o vacías, errores de formato y eventos demasiado grandes. La consulta de modelos reintenta una vez los fallos de conexión y HTTP 502–504 sin Retry-After. Pendiente la validación con proveedores reales.
 
 ## M3 — Agente (parcial)

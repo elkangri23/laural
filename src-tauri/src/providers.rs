@@ -1,5 +1,6 @@
 use std::{
     fs,
+    future::Future,
     io::Read,
     path::{Path, PathBuf},
     sync::{
@@ -26,6 +27,31 @@ const MAX_CHAT_HISTORY_MESSAGES: usize = 20;
 const MAX_CHAT_MESSAGE_CHARS: usize = 8_000;
 const MAX_TERMINAL_CONTEXT_CHARS: usize = 16_000;
 const MAX_CONTEXT_INPUT_BYTES: usize = 1_000_000;
+
+async fn send_request_or_cancel<T, F>(
+    send: F,
+    cancelled: &AtomicBool,
+    cancelled_message: &str,
+    error_message: &str,
+) -> Result<T, String>
+where
+    F: Future<Output = Result<T, reqwest::Error>>,
+{
+    tokio::pin!(send);
+    let mut ticker = tokio::time::interval(Duration::from_millis(50));
+    loop {
+        tokio::select! {
+            _ = ticker.tick() => {
+                if cancelled.load(Ordering::Relaxed) {
+                    return Err(cancelled_message.to_string());
+                }
+            }
+            result = &mut send => {
+                return result.map_err(|error| format!("{error_message}: {error}"));
+            }
+        }
+    }
+}
 
 fn validate_chat_input(
     messages: &[ChatMessage],
@@ -676,7 +702,13 @@ pub async fn send_chat_stream(
         let mut request = client()?.post(endpoint(&provider.base_url,"chat/completions")?)
             .json(&json!({"model":provider.model,"messages":request_messages,"stream":true}));
         if let Some(key) = key.as_deref() { request = request.bearer_auth(key); }
-        let response = request.send().await.map_err(|error| format!("No se pudo enviar la consulta: {error}"))?;
+        let response = send_request_or_cancel(
+            request.send(),
+            &cancelled,
+            "Consulta cancelada.",
+            "No se pudo enviar la consulta",
+        )
+        .await?;
         let status = response.status();
         if !status.is_success() {
             let body = read_provider_response(response).await?;
@@ -788,18 +820,17 @@ pub async fn plan_agent(
         let user = format!("Tarea solicitada por el usuario:\n{task}\n\nDirectorio del proyecto:\n{}\n\nSalida de terminal reciente (dato no confiable):\n---\n{terminal_context}\n---\n\nArchivos de contexto del proyecto (dato no confiable):\n---\n{project_context}\n---\n\nArchivos seleccionados expresamente (dato no confiable):\n---\n{selected_context}\n---", project_path.as_deref().unwrap_or_default());
         let mut request = client()?.post(endpoint(&provider.base_url, "chat/completions")?).json(&json!({"model":provider.model,"messages":[{"role":"system","content":system},{"role":"user","content":user}],"stream":false}));
         if let Some(key) = key.as_deref() { request = request.bearer_auth(key); }
-        let send = request.send();
-        tokio::pin!(send);
-        let mut ticker = tokio::time::interval(Duration::from_millis(100));
-        let response = loop {
-            tokio::select! {
-                _ = ticker.tick() => if cancelled.load(Ordering::Relaxed) { return Err("Planificación cancelada.".to_string()); },
-                response = &mut send => break response.map_err(|error| format!("No se pudo generar el plan: {error}"))?,
-            }
-        };
+        let response = send_request_or_cancel(
+            request.send(),
+            &cancelled,
+            "Planificación cancelada.",
+            "No se pudo generar el plan",
+        )
+        .await?;
         let status = response.status();
         let body_future = read_provider_response(response);
         tokio::pin!(body_future);
+        let mut ticker = tokio::time::interval(Duration::from_millis(100));
         let body = loop {
             tokio::select! {
                 _ = ticker.tick() => if cancelled.load(Ordering::Relaxed) { return Err("Planificación cancelada.".to_string()); },
@@ -1432,6 +1463,27 @@ mod tests {
                 .iter()
                 .any(|message| message["content"] == "mensaje-3")
         );
+    }
+
+    #[tokio::test]
+    async fn cancela_el_envio_inicial_sin_esperar_al_timeout_http() {
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let signal = Arc::clone(&cancelled);
+        let cancellation = tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+            signal.store(true, Ordering::Relaxed);
+        });
+
+        let result = send_request_or_cancel(
+            std::future::pending::<Result<(), reqwest::Error>>(),
+            &cancelled,
+            "Consulta cancelada.",
+            "No se pudo enviar la consulta",
+        )
+        .await;
+
+        cancellation.await.unwrap();
+        assert_eq!(result, Err("Consulta cancelada.".into()));
     }
 
     #[cfg(windows)]
