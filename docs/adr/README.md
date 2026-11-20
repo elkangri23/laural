@@ -16,11 +16,9 @@ Los ADR registran por qué se eligió una opción y qué costes trae. Un ADR ace
 | [0010](0010-theme-and-appearance-preferences.md) | Doce paletas y modo claro/oscuro local | Aceptada |
 | [0011](0011-streaming-chat-and-local-history.md) | Chat incremental y almacenamiento local de conversaciones | Aceptada |
 | [0012](0012-shell-integration-and-command-blocks.md) | Marcas OSC de shell y bloques de comando | Aceptada |
+| [0013](0013-configuracion-local.md) | Centro de configuración local | Aceptada |
+| [0014](0014-escritura-segura-agente.md) | Escritura segura de archivos del agente | Aceptada |
 
 ## Crear un ADR
 
 Copia [la plantilla](template.md), asigna el siguiente número y registra la decisión antes de implementar un cambio que afecte a arquitectura, privacidad, compatibilidad o formatos persistidos.
-
-[ADR-0013 — Configuración local unificada](0013-configuracion-local.md)
-[ADR-0014 — Escritura segura de archivos del agente](0014-escritura-segura-agente.md)
-[ADR-0014 — Escritura segura de archivos del agente](0014-escritura-segura-agente.md)

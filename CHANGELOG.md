@@ -5,6 +5,12 @@
 - Validar la instalación limpia, actualización y desinstalación de Windows en entornos de usuario.
 - Revisar la validación del agente con perfiles y alias personalizados de PowerShell, CMD, WSL y Git Bash.
 
+## 0.1.0-alpha.13
+
+- Las claves de API se guardan y recuperan mediante Windows Credential Manager; se verifica su persistencia antes de confirmar el guardado.
+- Los errores al leer credenciales ya no se silencian ni provocan peticiones sin autenticación por accidente.
+- Los instaladores MSI y NSIS se generan en español.
+
 ## 0.1.0-alpha.12
 
 - El agente aplica una primera validación de operadores según PowerShell, CMD, WSL o Git Bash antes de los modos automático y reglas.

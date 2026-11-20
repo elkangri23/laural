@@ -155,10 +155,18 @@ fn write_provider_store(app: &AppHandle, store: &ProviderStore) -> Result<(), St
     fs::write(&path, bytes).map_err(|error| format!("No se pudo guardar la configuración: {error}"))
 }
 
+fn read_api_key(provider_id: &str) -> Result<Option<String>, String> {
+    let entry = Entry::new(KEYRING_SERVICE, provider_id)
+        .map_err(|_| "No se pudo acceder al almacén seguro de credenciales.".to_string())?;
+    match entry.get_password() {
+        Ok(password) => Ok(Some(password)),
+        Err(keyring::Error::NoEntry) => Ok(None),
+        Err(_) => Err("No se pudo leer la clave del almacén seguro de credenciales.".to_string()),
+    }
+}
+
 fn public_provider(provider: &ProviderSettings) -> PublicProvider {
-    let has_api_key = Entry::new(KEYRING_SERVICE, &provider.id)
-        .and_then(|entry| entry.get_password())
-        .is_ok();
+    let has_api_key = matches!(read_api_key(&provider.id), Ok(Some(_)));
     PublicProvider {
         id: provider.id.clone(),
         name: provider.name.clone(),
@@ -386,13 +394,16 @@ pub async fn test_provider(app: AppHandle, input: ProviderInput) -> Result<Vec<S
             .as_deref()
             .is_none_or(|key| key.trim().is_empty())
     {
-        Entry::new(KEYRING_SERVICE, input.id.trim())
-            .and_then(|entry| entry.get_password())
-            .ok()
+        read_api_key(input.id.trim())?
     } else {
         None
     };
-    get_models(&base_url, input.api_key.as_deref().or(saved_key.as_deref())).await
+    let api_key = input
+        .api_key
+        .as_deref()
+        .filter(|key| !key.trim().is_empty())
+        .or(saved_key.as_deref());
+    get_models(&base_url, api_key).await
 }
 
 #[tauri::command]
@@ -414,9 +425,16 @@ pub fn save_provider(app: AppHandle, input: ProviderInput) -> Result<PublicProvi
         .as_deref()
         .filter(|key| !key.trim().is_empty())
     {
-        Entry::new(KEYRING_SERVICE, id)
-            .and_then(|entry| entry.set_password(api_key.trim()))
+        let entry = Entry::new(KEYRING_SERVICE, id)
+            .map_err(|_| "Windows no pudo acceder al almacén protegido.".to_string())?;
+        entry
+            .set_password(api_key.trim())
             .map_err(|_| "Windows no pudo guardar la clave en el almacén protegido.".to_string())?;
+        if !matches!(entry.get_password(), Ok(saved) if saved == api_key.trim()) {
+            return Err(
+                "Windows no pudo verificar la clave guardada en el almacén protegido.".into(),
+            );
+        }
     }
     let provider = ProviderSettings {
         id: id.to_string(),
@@ -452,9 +470,7 @@ pub async fn send_chat(
     {
         return Err("Escribe una pregunta antes de enviarla.".to_string());
     }
-    let key = Entry::new(KEYRING_SERVICE, &provider.id)
-        .and_then(|entry| entry.get_password())
-        .ok();
+    let key = read_api_key(&provider.id)?;
     let context = strip_terminal_ansi(&terminal_context);
     let context: String = context
         .chars()
@@ -553,7 +569,7 @@ pub async fn send_chat_stream(
         if !messages.iter().any(|message| message.role == "user" && !message.content.trim().is_empty()) {
             return Err("Escribe una pregunta antes de enviarla.".to_string());
         }
-        let key = Entry::new(KEYRING_SERVICE, &provider.id).and_then(|entry| entry.get_password()).ok();
+        let key = read_api_key(&provider.id)?;
         let context = strip_terminal_ansi(&terminal_context);
         let context: String = context.chars().rev().take(16_000).collect::<String>().chars().rev().collect();
         let project_context = project_path.as_deref().map(collect_project_context).transpose()?.unwrap_or_default();
@@ -663,7 +679,7 @@ pub async fn plan_agent(
         if project_path.is_none() { return Err("Abre un proyecto antes de pedir al agente que lea o modifique archivos.".to_string()); }
         let store = read_provider_store(&app)?;
         let provider = active_provider(&store).cloned().ok_or_else(|| "Configura un proveedor de modelos antes de usar el agente.".to_string())?;
-        let key = Entry::new(KEYRING_SERVICE, &provider.id).and_then(|entry| entry.get_password()).ok();
+        let key = read_api_key(&provider.id)?;
         let terminal_context = strip_terminal_ansi(&terminal_context);
         let terminal_context: String = terminal_context.chars().rev().take(12_000).collect::<String>().chars().rev().collect();
         let project_context = project_path.as_deref().map(collect_project_context).transpose()?.unwrap_or_default();
@@ -1135,6 +1151,31 @@ pub fn preview_context(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn persiste_claves_en_credential_manager_de_windows() {
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let unique_id = format!(
+            "prueba-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
+        let entry = Entry::new(KEYRING_SERVICE, &unique_id).unwrap();
+        let result = entry
+            .set_password("clave-de-prueba")
+            .map_err(|_| ())
+            .and_then(|_| read_api_key(&unique_id).map_err(|_| ()))
+            .map(|stored| stored.as_deref() == Some("clave-de-prueba"));
+        let _ = entry.delete_credential();
+
+        assert_eq!(result, Ok(true));
+        assert_eq!(read_api_key(&unique_id).unwrap(), None);
+    }
 
     #[test]
     fn bloquea_operadores_segun_el_shell() {

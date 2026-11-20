@@ -26,3 +26,5 @@ Guardar las claves mediante la API de keyring del sistema operativo, usando Wind
 - La aplicación debe evitar incluir cabeceras, claves o mensajes completos en logs de diagnóstico.
 
 Revisión posterior a alpha.5: cada perfil nuevo recibe un identificador aleatorio y queda vinculado a su URL base. Los perfiles anteriores conservan su identificador. Cambiar de destino requiere crear otro perfil.
+
+Implementación confirmada en alpha.13: la dependencia `keyring` activa su feature `windows-native`, que conecta con Windows Credential Manager. Guardar verifica de inmediato la lectura de la clave; las consultas devuelven un error si el almacén falla, en vez de enviar la solicitud silenciosamente sin autenticación. Una prueba de Windows valida el ciclo guardar/leer/eliminar con una credencial efímera.

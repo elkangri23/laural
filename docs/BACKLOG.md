@@ -6,8 +6,8 @@ La [hoja de ruta](ROADMAP.md) agrupa los hitos. Esta lista ordena el trabajo abi
 | --- | --- | --- |
 | Alta · M3 | Autorización del agente | Verificar comandos y rutas por shell, documentar límites y resolver los casos que permitan eludir aprobación. |
 | Alta · M1 | Terminal y bloques | Regresiones de montaje, cierre temprano, reinicio y recorte Unicode disponibles. La PTY real recibe la última de 1.500 líneas en los cuatro shells. Comprobar inicio, edición, salida, interrupción y cierre en PowerShell, CMD, WSL y Git Bash con y sin perfiles personalizados. |
-| Alta · M4 | Distribución | Registrar instalación limpia, actualización y desinstalación en Windows 10/11 x64, incluidos datos residuales. |
-| Alta · M2 | Proveedores y privacidad | El decodificador cuenta con regresiones de fragmentación, límites y cortes de conexión. Validar modelos, streaming, cancelación, errores y contenido enviado con cada proveedor admitido. |
+| Alta · M4 | Distribución | MSI en `es-ES` y NSIS en español configurados. Registrar instalación limpia, actualización y desinstalación en Windows 10/11 x64, incluidos datos residuales. |
+| Alta · M2 | Proveedores y privacidad | Credential Manager de Windows ya es el backend nativo y tiene prueba de persistencia. Validar modelos, streaming, cancelación, errores y contenido enviado con Ollama, LM Studio, FreeLLMAPI y cada proveedor admitido. |
 | Media · M0 | Configuración | Verificar navegación con teclado, guardado de preferencias tras reinicio y cambio de perfil sin exposición de claves. |
 | Media · M4 | Firma | Publicar paquetes firmados cuando haya certificado y comprobar el editor en Windows. |
 | Diferida | Sincronización opcional | Acordar alcance, cifrado y recuperación antes de implementar. |
@@ -15,8 +15,8 @@ La [hoja de ruta](ROADMAP.md) agrupa los hitos. Esta lista ordena el trabajo abi
 Avance de M2 y M3: perfiles vinculados al destino y reglas de coincidencia exacta implementados. Pendientes la validación entre proveedores y los ensayos por shell.
 Comprobación parcial de M1: los fragmentos de integración emiten las marcas esperadas en Windows PowerShell, CMD, Git Bash y Bash de Ubuntu en WSL. Sigue abierta la prueba de los cuatro shells dentro de la aplicación con perfiles de usuario.
 Cobertura: ampliar los casos de regresión a cambios de permisos, interacción del chat y ciclo de vida de sesiones al modificar esos flujos.
-| Alta · M3 | Ediciones de archivos | Escritura temporal y reemplazo con copia de seguridad implementados y cubiertos. Pendiente restauración de backups y coordinación con editores externos. |
+| Alta · M3 | Ediciones de archivos | Escritura, restauración y limpieza manual con copia de seguridad implementadas y cubiertas. Pendiente retención automática y coordinación con editores externos. |
 | Alta · M3 | Retención de copias | Restauración confirmada implementada y probada. Limpieza confirmada por archivo implementada. Pendiente política de retención automática configurable. |
-Revisión de sintaxis del agente: comprobación inicial por shell para PowerShell, CMD, WSL y Git Bash, cubierta con casos de operadores. Sigue pendiente comprobar aliases, funciones y perfiles personalizados.
+Revisión de sintaxis del agente: comprobación inicial por shell para PowerShell, CMD, WSL y Git Bash y detección de alias destructivos habituales, cubiertas con pruebas. Siguen pendientes funciones y perfiles personalizados.
 M3: validación inicial por shell aplicada antes de reglas y automatización. Pendiente probar aliases, perfiles de inicio y variaciones de sintaxis en cada shell.
-Revisión de aliases destructivos: el filtro bloquea alias comunes de borrado y redirección de archivos. Pendiente ampliar revisión con perfiles personalizados de PowerShell y Bash.
+Revisión de alias destructivos: el filtro bloquea alias comunes de borrado y escritura. Pendiente ampliar revisión con perfiles personalizados de PowerShell y Bash.

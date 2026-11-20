@@ -20,7 +20,7 @@ Versión inicial de Laural para escritorio Windows: frontend Tauri, procesos PTY
 | Comando peligroso propuesto | Borrar, exfiltrar, cambiar permisos o instalar software | Confirmación/reglas/automático; lista heurística bloquea patrones de alto impacto | Los patrones no entienden semántica; se pueden evadir. |
 | Ruta manipulada | Escribir fuera del proyecto | Ruta relativa, canonicalización de directorio, tamaño limitado, backup | Enlaces simbólicos/carreras necesitan revisión continua. |
 | Proveedor remoto | Retención o uso del contexto enviado | El usuario configura host; HTTPS requerido; contexto acotado | Política del proveedor controla retención y uso. |
-| Fuga de API key | Incluir clave en logs, archivos o repo | Keyring del sistema; no guardar en JSON de perfil | Plugins, malware del usuario o diagnóstico del SO quedan fuera del control de Laural. |
+| Fuga de API key | Incluir clave en logs, archivos o repo | Windows Credential Manager nativo; clave verificada tras guardar; no se guarda en JSON | Plugins, malware del usuario o diagnóstico del SO quedan fuera del control de Laural. |
 | Binario comprometido | Ejecutar código no revisado | Código fuente y release reproducible son objetivos de roadmap | Los instaladores actuales no están firmados ni verificados en clean install. |
 
 ## Límites de seguridad

@@ -5,7 +5,7 @@
 | Dato | Ubicación | Observación |
 | --- | --- | --- |
 | Nombres, URL y modelos de proveedores | `providers.json` en el directorio de configuración de Laural | La URL puede revelar un host privado. |
-| Claves de API | Windows Credential Manager | No incluir en issues, logs ni exportación. |
+| Claves de API | Windows Credential Manager mediante el backend nativo de `keyring` | Se comprueba la lectura tras guardar. No incluir en issues, logs ni exportación. |
 | Modo y comandos exactos del agente | `agent.json` | Son preferencias locales. |
 | Historial de chat | No se persiste en la versión actual | La memoria en UI dura solo lo que mantenga la sesión. |
 | Preferencia de apariencia | `localStorage` del WebView | Solo almacena modo y tema seleccionados. |

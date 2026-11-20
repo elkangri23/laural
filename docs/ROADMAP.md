@@ -22,6 +22,7 @@ Estado al 20 de noviembre de 2026. «Implementado» describe código presente; �
 ## M2 — Chat y proveedores (parcial)
 
 - Chat incremental cancelable e historial local borrable implementados.
+- Corregida la compilación de `keyring` para usar Windows Credential Manager; la clave se verifica tras guardar. Pendiente probar FreeLLMAPI, Ollama y LM Studio desde una instalación limpia.
 - Probar manualmente `/models` y streaming de chat con Ollama, LM Studio, FreeLLMAPI y un endpoint OpenAI-compatible.
 - La vista previa del contexto y sus límites de envío están implementados; verificar que coincide con cada proveedor.
 - El chat detecta respuestas truncadas o vacías, errores de formato y eventos demasiado grandes. La consulta de modelos reintenta una vez los fallos de conexión y HTTP 502–504 sin Retry-After. Pendiente la validación con proveedores reales.
@@ -36,7 +37,7 @@ Estado al 20 de noviembre de 2026. «Implementado» describe código presente; �
 
 ## M4 — Distribución pública (parcial)
 
-- Build de MSI/NSIS disponible localmente; alpha.12 adjunta instaladores Windows x64 y SHA-256. Workflow para GitHub Actions.
+- Build de MSI/NSIS disponible localmente; alpha.13 configura MSI `es-ES` y NSIS en español. Pendiente validar ambos instaladores en una instalación limpia.
 - Workflow de GitHub Actions ejecutado correctamente en GitHub y artefactos generados.
 - Validar instalación limpia, actualización y desinstalación.
 - Firma y procedencia verificable dependen de credenciales de publicación que no están configuradas.
@@ -56,13 +57,8 @@ El centro de configuración está implementado en el código posterior a alpha.4
 M2 y M3 incorporan vinculación del perfil a su URL y un conjunto acotado de consultas automáticas de Git. Consulta el backlog para el estado de validación.
 M1 incluye una prueba de PTY real ejecutada en los cuatro shells para inicio, redimensionamiento, lectura, escritura y cierre con código 37. Falta verificar los bloques en la interfaz instalada.
 La interfaz y el backend disponen de informes automáticos de cobertura en cada push y pull request.
-M3 incorpora escritura temporal, reemplazo con backup por versión, creación exclusiva y pruebas de archivo bloqueado y aprobaciones concurrentes. Pendiente restauración y limpieza de backups.
-La interfaz permite listar y restaurar las veinte copias recientes de un archivo del agente. Cada restauración respalda primero la versión actual. La limpieza sigue pendiente.
-M3 ya permite restaurar desde la tarjeta del cambio, con confirmación y backup del estado actual. Pendiente limpieza de versiones antiguas.
-M3 incluye limpieza manual de copias por archivo con confirmación. La retención automática configurable continúa pendiente.
-M3 añade una primera validación de operadores específica para cada shell antes de aplicar los modos automático o reglas. La validación de perfiles personalizados sigue pendiente.
+M3 incorpora escritura temporal, reemplazo con backup por versión, creación exclusiva y pruebas de archivo bloqueado y aprobaciones concurrentes. La interfaz permite restaurar y limpiar copias manualmente con confirmación. La retención automática configurable continúa pendiente.
+La interfaz lista las veinte copias recientes de un archivo del agente. Cada restauración respalda primero la versión actual.
 M3 aplica ahora filtros de sintaxis por shell en Rust antes de los modos automático y reglas. La aprobación explícita permite composiciones tras revisión humana.
-M3 reconoce alias comunes de borrado y escritura en el filtro de comandos que requieren aprobación manual.
-
-
-La alpha.12 publica instaladores Windows reproducidos localmente. La validación de comandos del agente continúa siendo heurística: queda pendiente revisar perfiles de shell personalizados y completar pruebas manuales de instalación y de los cuatro shells.
+M3 reconoce alias comunes de borrado y escritura en el filtro de comandos que requieren aprobación manual. La validación sigue siendo heurística y no interpreta perfiles personalizados.
+La alpha.12 publica instaladores Windows x64. La alpha.13 configura el MSI en `es-ES` y NSIS en español; queda pendiente la instalación limpia y la comprobación visual del idioma.
