@@ -18,7 +18,7 @@ Versión inicial de Laural para escritorio Windows: frontend Tauri, procesos PTY
 | Actor / evento | Amenaza | Mitigación actual | Riesgo residual |
 | --- | --- | --- | --- |
 | Modelo equivocado o prompt injection en proyecto | Proponer acciones que ignoran la solicitud | Contexto se etiqueta como dato no confiable; UI presenta un plan | El modelo puede generar texto dañino o confuso. |
-| Comando peligroso propuesto | Borrar, exfiltrar, cambiar permisos o instalar software | Confirmación/reglas/automático; lista heurística bloquea patrones de alto impacto | Los patrones no entienden semántica; se pueden evadir. |
+| Comando peligroso propuesto | Borrar, exfiltrar, cambiar permisos o instalar software | Confirmación/reglas/automático; lista heurística detecta operaciones de archivo, permisos, atributos y enlaces frecuentes | Los patrones no entienden semántica y no detectan aliases, funciones o perfiles personalizados; se pueden evadir. |
 | Ruta manipulada o directorio reemplazado concurrentemente | Escribir o eliminar fuera del proyecto | Rutas relativas, cadena canónica de directorios fijada, rechazo de reparse points, renombrado por handle sin sobrescritura y backup | El proceso podría interrumpirse entre los dos renombrados; el original queda recuperable desde el backup. |
 | Proveedor remoto | Retención o uso del contexto enviado | El usuario configura host; HTTPS requerido; contexto acotado | Política del proveedor controla retención y uso. |
 | Proveedor redirige la petición autenticada | Reenviar clave o contexto a un host distinto | El cliente HTTP no sigue redirecciones; regresión local comprueba el rechazo | El host configurado recibe la solicitud original y puede procesar los datos según su política. |

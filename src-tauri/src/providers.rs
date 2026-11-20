@@ -895,12 +895,21 @@ fn command_is_high_risk(command: &str) -> bool {
         "clc ",
         "new-item",
         "ni ",
+        "set-acl",
+        "set-itemproperty",
         "set-content",
         "add-content",
         "out-file",
         "truncate ",
         "tee ",
         "dd ",
+        "chmod ",
+        "chown ",
+        "icacls ",
+        "cacls ",
+        "attrib ",
+        "mklink ",
+        "ln ",
         "install ",
         "sc ",
         "ac ",
@@ -1430,6 +1439,24 @@ mod tests {
             "dd if=entrada of=disco",
             "Set-Content archivo.txt datos",
             "Out-File archivo.txt",
+        ] {
+            assert!(command_is_high_risk(command), "{command}");
+        }
+        assert!(!command_is_high_risk("git status --short"));
+    }
+
+    #[test]
+    fn exige_revision_para_cambios_de_permisos_y_enlaces() {
+        for command in [
+            "chmod -R 777 proyecto",
+            "chown usuario archivo",
+            "icacls proyecto /grant usuario:F",
+            "cacls archivo /E /G usuario:F",
+            "attrib +R archivo",
+            "mklink enlace destino",
+            "ln -s destino enlace",
+            "Set-Acl archivo acl.xml",
+            "Set-ItemProperty archivo -Name valor",
         ] {
             assert!(command_is_high_risk(command), "{command}");
         }
