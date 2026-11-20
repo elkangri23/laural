@@ -365,6 +365,14 @@ fn restore_agent_backup(
 ) -> Result<String, String> {
     agent_files::restore(Path::new(&project_path), &relative_path, &version, approved)
 }
+#[tauri::command]
+fn clear_agent_backups(
+    project_path: String,
+    relative_path: String,
+    approved: bool,
+) -> Result<usize, String> {
+    agent_files::clear_backups(Path::new(&project_path), &relative_path, approved)
+}
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -381,6 +389,7 @@ pub fn run() {
             apply_agent_file,
             list_agent_backups,
             restore_agent_backup,
+            clear_agent_backups,
             providers::get_provider,
             providers::get_providers,
             providers::select_provider,

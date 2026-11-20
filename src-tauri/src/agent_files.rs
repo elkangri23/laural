@@ -302,6 +302,61 @@ pub(crate) fn restore(
         true,
     )
 }
+pub(crate) fn clear_backups(root: &Path, relative: &str, approved: bool) -> Result<usize, String> {
+    if !approved {
+        return Err("Eliminar copias requiere confirmación explícita.".into());
+    }
+    let relative = Path::new(relative);
+    if relative.file_name().is_none()
+        || !relative
+            .components()
+            .all(|part| matches!(part, Component::Normal(s) if s.to_str().is_some_and(valid_name)))
+    {
+        return Err("La ruta del archivo no es válida.".into());
+    }
+    let _edit = EDIT.lock().map_err(|_| "No se pudo iniciar la limpieza.")?;
+    let root = root
+        .canonicalize()
+        .map_err(|_| "No se encontró el proyecto.")?;
+    let backups = root.join(BACKUPS);
+    if !backups.exists() {
+        return Ok(0);
+    }
+    let _root_pin = pin_directory(&root).map_err(|_| "No se pudo comprobar el proyecto.")?;
+    let _backup_pin =
+        pin_directory(&backups).map_err(|_| "No se pudo comprobar el almacén de copias.")?;
+    let mut removed = 0;
+    for entry in fs::read_dir(&backups).map_err(|_| "No se pudieron listar las copias.")? {
+        let entry = entry.map_err(|_| "No se pudo leer una copia.")?;
+        let version = entry.file_name().to_string_lossy().into_owned();
+        if !version.starts_with("edicion-")
+            || !version
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-')
+        {
+            continue;
+        }
+        let version_root = entry.path();
+        if pin_directory(&version_root).is_err() {
+            continue;
+        }
+        let candidate = version_root.join(relative);
+        let Some(parent) = candidate.parent() else {
+            continue;
+        };
+        if !parent
+            .canonicalize()
+            .is_ok_and(|canonical| canonical.starts_with(&version_root))
+        {
+            continue;
+        }
+        if fs::symlink_metadata(&candidate).is_ok_and(|meta| meta.file_type().is_file()) {
+            fs::remove_file(candidate).map_err(|_| "No se pudo eliminar una copia.")?;
+            removed += 1;
+        }
+    }
+    Ok(removed)
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -370,6 +425,20 @@ mod tests {
         drop(held);
         assert_eq!(fs::read(target).unwrap(), b"original");
         assert_eq!(root.path().join(BACKUPS).read_dir().unwrap().count(), 0);
+    }
+
+    #[test]
+    fn limpia_solo_las_copias_del_archivo_confirmado() {
+        let root = tempfile::tempdir().unwrap();
+        save(root.path(), "a.txt", b"a0", true).unwrap();
+        save(root.path(), "a.txt", b"a1", true).unwrap();
+        save(root.path(), "b.txt", b"b0", true).unwrap();
+        save(root.path(), "b.txt", b"b1", true).unwrap();
+        assert!(clear_backups(root.path(), "a.txt", false).is_err());
+        assert_eq!(clear_backups(root.path(), "a.txt", true).unwrap(), 1);
+        assert!(list_backups(root.path(), "a.txt").unwrap().is_empty());
+        assert_eq!(list_backups(root.path(), "b.txt").unwrap().len(), 1);
+        assert_eq!(fs::read(root.path().join("a.txt")).unwrap(), b"a1");
     }
 
     #[test]

@@ -16,4 +16,4 @@ Avance de M2 y M3: perfiles vinculados al destino y reglas de coincidencia exact
 Comprobación parcial de M1: los fragmentos de integración emiten las marcas esperadas en Windows PowerShell, CMD, Git Bash y Bash de Ubuntu en WSL. Sigue abierta la prueba de los cuatro shells dentro de la aplicación con perfiles de usuario.
 Cobertura: ampliar los casos de regresión a cambios de permisos, interacción del chat y ciclo de vida de sesiones al modificar esos flujos.
 | Alta · M3 | Ediciones de archivos | Escritura temporal y reemplazo con copia de seguridad implementados y cubiertos. Pendiente restauración de backups y coordinación con editores externos. |
-| Alta · M3 | Retención de copias | Restauración confirmada implementada y probada. Pendiente limpieza manual y política de retención configurable. |
+| Alta · M3 | Retención de copias | Restauración confirmada implementada y probada. Limpieza confirmada por archivo implementada. Pendiente política de retención automática configurable. |

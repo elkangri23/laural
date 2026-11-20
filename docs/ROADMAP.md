@@ -59,3 +59,4 @@ La interfaz y el backend disponen de informes automáticos de cobertura en cada 
 M3 incorpora escritura temporal, reemplazo con backup por versión, creación exclusiva y pruebas de archivo bloqueado y aprobaciones concurrentes. Pendiente restauración y limpieza de backups.
 La interfaz permite listar y restaurar las veinte copias recientes de un archivo del agente. Cada restauración respalda primero la versión actual. La limpieza sigue pendiente.
 M3 ya permite restaurar desde la tarjeta del cambio, con confirmación y backup del estado actual. Pendiente limpieza de versiones antiguas.
+M3 incluye limpieza manual de copias por archivo con confirmación. La retención automática configurable continúa pendiente.

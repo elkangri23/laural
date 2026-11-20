@@ -50,3 +50,4 @@ Los cambios aprobados del agente se preparan en el mismo directorio antes de ree
 
 No reemplazar un archivo externo que cambió simultáneamente sigue requiriendo la coordinación de otras aplicaciones. Si el archivo está bloqueado, Laural informa el error y conserva los datos previos. La carpeta `.laural-backups` ocupa espacio hasta que el usuario la limpie manualmente. La restauración desde la interfaz sigue pendiente.
 La restauración del agente requiere confirmación explícita y solo acepta versiones regulares bajo el directorio de copias. Cada restauración genera una nueva copia del archivo actual.
+La limpieza de copias requiere confirmación y solo elimina archivos regulares del archivo elegido bajo el almacén de copias. El archivo de trabajo actual se conserva.

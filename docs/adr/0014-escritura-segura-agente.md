@@ -19,3 +19,4 @@ Cada cambio aprobado se escribe primero en un archivo temporal del mismo directo
 - La restauración de backups y la limpieza automática quedan pendientes.
 Actualización: la persona puede listar y restaurar las veinte copias más recientes. La restauración pide confirmación y genera a su vez una copia de la versión que reemplaza.
 La lista solo incluye versiones recientes con archivos regulares dentro de su carpeta. Restaurar requiere confirmación y pasa por el mismo guardado atómico, de modo que también conserva el contenido desplazado.
+La interfaz permite eliminar las copias de un archivo concreto después de confirmar. La operación no afecta el archivo actual ni las copias de otras rutas.

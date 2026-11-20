@@ -461,6 +461,14 @@ function App() {
       await showBackups(index, path);
     } catch (error) { updateAgentAction(index, { result: String(error) }); }
   }
+  async function clearBackups(index: number, path: string) {
+    if (!projectPath || !window.confirm(`¿Eliminar todas las copias de ${path}? El archivo actual permanecerá intacto.`)) return;
+    try {
+      const removed = await invoke<number>("clear_agent_backups", { projectPath, relativePath: path, approved: true });
+      setBackupVersions(current => ({ ...current, [index]: [] }));
+      updateAgentAction(index, { result: `Copias eliminadas: ${removed}.` });
+    } catch (error) { updateAgentAction(index, { result: String(error) }); }
+  }
   async function changeExecutionMode(mode: ExecutionMode) {
     setExecutionMode(mode);
     setPolicyNotice("");
@@ -684,7 +692,7 @@ function App() {
                   <div className="agent-action-top"><span className="action-number">{index + 1}</span><span className="action-type">{action.type === "run_command" ? "COMANDO" : "CAMBIO DE ARCHIVO"}</span><span className="action-status">{action.status === "completed" ? "COMPLETADO" : action.status === "cancelled" ? "DETENIDO" : action.status === "submitted" ? "ENVIADO" : action.status === "needs_review" ? "REVISAR" : action.status === "applied" ? "APLICADO" : action.status === "running" || action.status === "applying" ? "EN CURSO" : action.status === "error" ? "ERROR" : action.status === "rejected" ? "DESCARTADO" : "PENDIENTE"}</span></div>
                   <p className="action-reason">{action.reason}</p>
                   {action.type === "run_command" ? <pre className="action-code">{action.command}</pre> : <details className="file-preview"><summary>{action.path}</summary><pre>{action.content}</pre></details>}
-                  {action.type === "write_file" && backupVersions[index]?.length ? <div className="backup-controls"><select aria-label="Versión de copia" value={selectedBackups[index] ?? ""} onChange={event => setSelectedBackups(current => ({ ...current, [index]: event.currentTarget.value }))}>{backupVersions[index].map(version => <option key={version} value={version}>{version}</option>)}</select><button className="action-quiet" onClick={() => void restoreBackup(index, action.path)}>Restaurar copia</button></div> : null}{action.result && <p className={`action-result ${action.status === "error" || action.status === "needs_review" ? "warning" : ""}`}>{action.result}</p>}
+                  {action.type === "write_file" && backupVersions[index]?.length ? <div className="backup-controls"><select aria-label="Versión de copia" value={selectedBackups[index] ?? ""} onChange={event => setSelectedBackups(current => ({ ...current, [index]: event.currentTarget.value }))}>{backupVersions[index].map(version => <option key={version} value={version}>{version}</option>)}</select><button className="action-quiet" onClick={() => void restoreBackup(index, action.path)}>Restaurar copia</button><button className="action-quiet" onClick={() => void clearBackups(index, action.path)}>Eliminar copias</button></div> : null}{action.result && <p className={`action-result ${action.status === "error" || action.status === "needs_review" ? "warning" : ""}`}>{action.result}</p>}
                   <div className="action-buttons">{action.type === "write_file" && action.status === "applied" ? <button className="action-quiet" onClick={() => void showBackups(index, action.path)}>Copias de seguridad</button> : null}{action.type === "run_command" ? !["submitted", "completed", "cancelled", "rejected", "running"].includes(action.status ?? "") && <button className="action-primary" onClick={() => void executeAgentCommand(index, true)}>{action.status === "needs_review" ? "Revisar y ejecutar" : "Aprobar y ejecutar"}</button> : action.status !== "applied" && action.status !== "rejected" && <button className="action-primary" onClick={() => void applyAgentFile(index)} disabled={!projectPath || action.status === "applying"}>Aplicar cambio</button>}
                     {!(["submitted", "completed", "cancelled", "applied", "rejected", "running", "applying"].includes(action.status ?? "")) && <button className="action-quiet" onClick={() => updateAgentAction(index, { status: "rejected", result: "Acción descartada." })}>Descartar</button>}</div>
                 </article>)}</div>
