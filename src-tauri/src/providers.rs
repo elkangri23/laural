@@ -1674,6 +1674,54 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn respeta_retry_after_y_no_repite_la_solicitud() {
+        use std::{
+            io::{BufRead, BufReader, Write},
+            net::TcpListener,
+            time::Instant,
+        };
+
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let url = format!("http://{}/v1", listener.local_addr().unwrap());
+        let server = std::thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+            let reader = BufReader::new(&socket);
+            let mut lines = reader.lines().map(Result::unwrap);
+            assert_eq!(lines.next().unwrap(), "GET /v1/models HTTP/1.1");
+            for line in lines {
+                if line.is_empty() {
+                    break;
+                }
+            }
+            write!(
+                socket,
+                "HTTP/1.1 503 Service Unavailable\r\nRetry-After: 1\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
+            )
+            .unwrap();
+            listener.set_nonblocking(true).unwrap();
+
+            let deadline = Instant::now() + Duration::from_millis(700);
+            while Instant::now() < deadline {
+                match listener.accept() {
+                    Ok(_) => return true,
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        std::thread::sleep(Duration::from_millis(10));
+                    }
+                    Err(error) => panic!("No se pudo comprobar el reintento: {error}"),
+                }
+            }
+            false
+        });
+
+        let error = get_models(&url, None).await.unwrap_err();
+        assert!(error.contains("503"), "{error}");
+        assert!(
+            !server.join().unwrap(),
+            "Se repitió una consulta que incluía Retry-After."
+        );
+    }
+
+    #[tokio::test]
     async fn no_sigue_redirecciones_del_proveedor_a_otro_destino() {
         use std::{
             io::{BufRead, BufReader, Write},

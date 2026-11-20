@@ -42,6 +42,6 @@
 Se ejecutaron `git diff --check`, `npm audit`, `cargo audit`, pruebas frontend con cobertura, cobertura Rust y build NSIS de Windows con generación de `.sig`. La prueba estática no sustituye la validación manual del instalador y actualización real.
 
 - Interfaz (20-11-2026): 33 pruebas pasadas; cobertura global 56,15 % de líneas. `App.tsx` alcanza 38,62 %; `TerminalPane.tsx`, 89,09 %; el gestor de actualizaciones, 95,29 %; y el panel de actividad, 100 % de líneas.
-- Backend Rust (20-11-2026): 41 pruebas pasadas, 0 fallidas, 1 ignorada; cobertura 55,95 % de líneas (58,47 % de regiones). `providers.rs` alcanza 51,77 % de líneas; `agent_files.rs`, 91,55 %; `lib.rs` sigue requiriendo más cobertura.
+- Backend Rust (20-11-2026): 42 pruebas pasadas, 0 fallidas, 1 ignorada; cobertura 56,44 % de líneas (58,92 % de regiones). `providers.rs` alcanza 52,84 % de líneas; `agent_files.rs`, 91,55 %; `lib.rs` sigue requiriendo más cobertura.
 - `npm audit`: 0 vulnerabilidades; `cargo check`, build frontend, formato Rust y `git diff --check` pasan en la entrega actual. `cargo audit` conserva tres avisos heredados de mantenimiento/soundness de dependencias no usadas en el artefacto Windows. El build frontend advierte que el chunk JavaScript principal supera 500 kB.
 - Build NSIS: completado con firma de updater; generó `Laural_0.1.0-alpha.14_x64-setup.exe` (2,97 MiB) y su archivo `.sig`. Instalación limpia, aviso de Windows y actualización real aún requieren ejecución manual.

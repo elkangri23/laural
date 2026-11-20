@@ -16,6 +16,7 @@
 - Ampliada la revisión obligatoria a comandos habituales que cambian permisos, atributos o crean enlaces simbólicos en Windows y shells tipo Bash.
 - Añadida regresión de proveedor que comprueba que una redirección HTTP no reenvía la solicitud autenticada a otro destino.
 - La cancelación de chat y planes interrumpe el envío HTTP y la lectura de los cuerpos de respuesta; añadida regresión local con una operación pendiente.
+- Añadida prueba local que confirma que el descubrimiento de modelos respeta `Retry-After` y no duplica solicitudes cuando el proveedor pide esperar.
 
 ## 0.1.0-alpha.14
 
