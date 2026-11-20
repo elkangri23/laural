@@ -7,8 +7,9 @@ import App from "../src/App";
 const mocks = vi.hoisted(() => ({ invoke: vi.fn(), open: vi.fn(), terminalPaneRenderCount: 0 }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: mocks.invoke }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open: mocks.open }));
-vi.mock("../src/components/TerminalPane", () => ({
-  default: (props: { terminalId: string; onTextOutput: (id: string, text: string) => void; onCommandSubmit: (id: string, command: string) => void; onCommandFinish: (id: string, code: number) => void }) => {
+vi.mock("../src/components/TerminalPane", async () => {
+  const { memo } = await import("react");
+  const MockTerminalPane = (props: { terminalId: string; onTextOutput: (id: string, text: string) => void; onCommandSubmit: (id: string, command: string) => void; onCommandFinish: (id: string, code: number) => void }) => {
     mocks.terminalPaneRenderCount += 1;
     return <div data-testid="terminal-pane">
       <button data-testid="begin-command" onClick={() => props.onCommandSubmit(props.terminalId, "git status")}>Iniciar comando</button>
@@ -17,8 +18,9 @@ vi.mock("../src/components/TerminalPane", () => ({
       <button data-testid="output-final" onClick={() => props.onTextOutput(props.terminalId, " final")}>Salida final</button>
       <button data-testid="finish-command" onClick={() => props.onCommandFinish(props.terminalId, 0)}>Terminar comando</button>
     </div>;
-  },
-}));
+  };
+  return { default: memo(MockTerminalPane) };
+});
 vi.mock("../src/components/UpdateManager", () => ({ UpdateManager: () => null }));
 vi.mock("../src/components/AgentActivity", () => ({ AgentActivity: () => null }));
 vi.mock("../src/components/BackupRetentionControl", () => ({ BackupRetentionControl: () => null }));
@@ -111,11 +113,12 @@ test("agrupa fragmentos de salida y vacía el último lote al cerrar el bloque",
   expect(mocks.terminalPaneRenderCount).toBe(rendersAfterCommandStart);
 
   await act(async () => new Promise((resolve) => window.setTimeout(resolve, 50)));
-  expect(mocks.terminalPaneRenderCount).toBe(rendersAfterCommandStart + 1);
+  expect(mocks.terminalPaneRenderCount).toBe(rendersAfterCommandStart);
   expect(host.querySelector(".command-block pre")?.textContent).toBe("primera segunda");
 
   await act(async () => host.querySelector<HTMLButtonElement>('[data-testid="output-final"]')!.click());
   await act(async () => host.querySelector<HTMLButtonElement>('[data-testid="finish-command"]')!.click());
   expect(host.querySelector(".command-block pre")?.textContent).toBe("primera segunda final");
   expect(host.querySelector(".block-exit")?.textContent).toBe("Salida 0");
+  expect(mocks.terminalPaneRenderCount).toBe(rendersAfterCommandStart);
 });

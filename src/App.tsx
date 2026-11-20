@@ -253,19 +253,19 @@ function App() {
     }
   }
 
-  function releaseTabContext(tabId: string) {
+  const releaseTabContext = useCallback((tabId: string) => {
     finishCommandBlock(tabId, null);
     delete terminalContextRef.current[tabId];
     setCommandBlocks(blocks => blocks.filter(block => block.terminalId !== tabId));
-  }
+  }, [finishCommandBlock]);
 
-  function restartTab(tabId: string) {
+  const restartTab = useCallback((tabId: string) => {
     releaseTabContext(tabId);
     const id = crypto.randomUUID();
     setTabs(current => current.map(tab => tab.id === tabId ? { ...tab, id } : tab));
-    if (activeTabId === tabId) setActiveTabId(id);
-    if (splitTabId === tabId) setSplitTabId(id);
-  }
+    setActiveTabId(current => current === tabId ? id : current);
+    setSplitTabId(current => current === tabId ? id : current);
+  }, [releaseTabContext]);
 
   function selectTab(tabId: string) {
     if (splitTabId === tabId) setSplitTabId(activeTabId);
@@ -699,7 +699,7 @@ function App() {
               <div className="terminal-heading-actions"><button className={`small-action ${blocksOpen ? "selected" : ""}`} onClick={() => setBlocksOpen((open) => !open)} aria-pressed={blocksOpen}>Bloques <span className="block-count">{visibleBlocks.length}</span></button><button className="small-action"><CopyIcon /> Copiar</button><button className="small-action"><ClearIcon /> Limpiar</button></div>
             </div>
             <div className={`terminal-frame ${blocksOpen ? "with-blocks" : ""} ${splitTabId ? `is-split split-${splitOrientation}` : ""}`}>
-              {tabs.map((tab) => <TerminalPane key={tab.id} terminalId={tab.id} active={tab.id === activeTabId} onRestart={() => restartTab(tab.id)} shell={tab.shell} cwd={tab.cwd} visible={tab.id === activeTabId || tab.id === splitTabId} theme={activeTheme} appearance={appearance} onTextOutput={captureTerminalOutput} onCommandSubmit={startCommandBlock} onCommandFinish={finishCommandBlock} />)}
+              {tabs.map((tab) => <TerminalPane key={tab.id} terminalId={tab.id} active={tab.id === activeTabId} onRestart={restartTab} shell={tab.shell} cwd={tab.cwd} visible={tab.id === activeTabId || tab.id === splitTabId} theme={activeTheme} appearance={appearance} onTextOutput={captureTerminalOutput} onCommandSubmit={startCommandBlock} onCommandFinish={finishCommandBlock} />)}
               <div className="terminal-caption"><span className="shortcut-hint"><kbd>Ctrl</kbd> + <kbd>`</kbd> alternar terminal</span><span><span className="activity-pulse" /> Shell conectado</span></div>
             </div>
             {blocksOpen && <section className="command-blocks-panel" aria-label="Bloques de comandos">

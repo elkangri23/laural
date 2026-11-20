@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { invoke } from "@tauri-apps/api/core";
@@ -8,7 +8,7 @@ import "@xterm/xterm/css/xterm.css";
 
 type Shell = "powershell" | "cmd" | "wsl" | "git-bash";
 type OutputEvent = { terminalId: string; data: number[] };
-type TerminalPaneProps = { terminalId: string; shell: Shell; cwd: string | null; visible: boolean; active: boolean; onRestart: () => void; theme: ThemeDefinition; appearance: AppearanceMode; onTextOutput: (terminalId: string, text: string) => void; onCommandSubmit: (terminalId: string, command: string) => void; onCommandFinish: (terminalId: string, exitCode: number | null) => void };
+type TerminalPaneProps = { terminalId: string; shell: Shell; cwd: string | null; visible: boolean; active: boolean; onRestart: (terminalId: string) => void; theme: ThemeDefinition; appearance: AppearanceMode; onTextOutput: (terminalId: string, text: string) => void; onCommandSubmit: (terminalId: string, command: string) => void; onCommandFinish: (terminalId: string, exitCode: number | null) => void };
 
 function TerminalPane({ terminalId, shell, cwd, visible, active, onRestart, theme, appearance, onTextOutput, onCommandSubmit, onCommandFinish }: TerminalPaneProps) {
   const [ended, setEnded] = useState(false);
@@ -161,8 +161,8 @@ function TerminalPane({ terminalId, shell, cwd, visible, active, onRestart, them
   }, [visible, active]);
 
   return <div className={`terminal-pane ${visible ? "visible" : "hidden"}`} ><div className="terminal-host" ref={hostRef} />
-    {ended && <div className="terminal-ended" role="status">Sesión finalizada <button onClick={onRestart}>Reiniciar terminal</button></div>}
+    {ended && <div className="terminal-ended" role="status">Sesión finalizada <button onClick={() => onRestart(terminalId)}>Reiniciar terminal</button></div>}
   </div>;
 }
 
-export default TerminalPane;
+export default memo(TerminalPane);
