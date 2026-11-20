@@ -3,6 +3,7 @@ use std::{
     io::{self, Write},
     path::{Component, Path, PathBuf},
     sync::Mutex,
+    time::{SystemTime, UNIX_EPOCH},
 };
 use tempfile::NamedTempFile;
 
@@ -108,14 +109,28 @@ fn replace(target: &Path, staged: &Path, backup: &Path) -> io::Result<()> {
     fs::rename(staged, target)
 }
 
+#[cfg(test)]
 pub(crate) fn save(
     root: &Path,
     relative: &str,
     content: &[u8],
     approved: bool,
 ) -> Result<String, String> {
+    save_with_retention(root, relative, content, approved, None)
+}
+
+pub(crate) fn save_with_retention(
+    root: &Path,
+    relative: &str,
+    content: &[u8],
+    approved: bool,
+    keep_backups: Option<usize>,
+) -> Result<String, String> {
     if !approved {
         return Err("Los cambios de archivos requieren aprobación explícita.".into());
+    }
+    if keep_backups.is_some_and(|limit| !(1..=100).contains(&limit)) {
+        return Err("El límite de copias debe estar entre 1 y 100.".into());
     }
     if content.len() > 100_000 {
         return Err("El archivo supera el límite de 100 KB.".into());
@@ -129,8 +144,20 @@ pub(crate) fn save(
         return Err("La ruta debe ser relativa y usar nombres de archivo válidos.".into());
     }
     let _edit = EDIT.lock().map_err(|_| "No se pudo iniciar la edición.")?;
-    write_file(root, relative, content)
-        .map_err(|e| format!("No se pudo guardar {}: {e}", relative.display()))
+    let message = write_file(root, relative, content)
+        .map_err(|e| format!("No se pudo guardar {}: {e}", relative.display()))?;
+    if let Some(limit) = keep_backups {
+        return match prune_backups(root, relative, limit) {
+            Ok(removed) if removed > 0 => {
+                Ok(format!("{message}. Copias antiguas eliminadas: {removed}."))
+            }
+            Ok(_) => Ok(message),
+            Err(_) => Ok(format!(
+                "{message}. No se pudieron eliminar todas las copias antiguas."
+            )),
+        };
+    }
+    Ok(message)
 }
 
 fn write_file(root: &Path, relative: &Path, content: &[u8]) -> io::Result<String> {
@@ -206,22 +233,28 @@ pub(crate) fn list_backups(root: &Path, relative: &str) -> Result<Vec<String>, S
     let root = root
         .canonicalize()
         .map_err(|_| "No se encontró el proyecto.")?;
+    let _root_pin = pin_directory(&root).map_err(|_| "No se pudo comprobar el proyecto.")?;
+    let mut entries =
+        backup_entries(&root, relative).map_err(|_| "No se pudieron listar las copias.")?;
+    entries.sort_by(|left, right| right.0.cmp(&left.0).then_with(|| right.1.cmp(&left.1)));
+    Ok(entries.into_iter().take(20).map(|entry| entry.1).collect())
+}
+
+fn backup_entries(root: &Path, relative: &Path) -> io::Result<Vec<(SystemTime, String, PathBuf)>> {
     let backups = root.join(BACKUPS);
     if !backups.exists() {
         return Ok(Vec::new());
     }
-    let _root_pin = pin_directory(&root).map_err(|_| "No se pudo comprobar el proyecto.")?;
-    let _backup_pin =
-        pin_directory(&backups).map_err(|_| "No se pudo comprobar el almacén de copias.")?;
-    let name = relative.file_name().unwrap();
+    let _backup_pin = pin_directory(&backups)?;
+    let backups = backups.canonicalize()?;
     let mut result = Vec::new();
-    for entry in fs::read_dir(backups).map_err(|_| "No se pudieron listar las copias.")? {
-        let entry = entry.map_err(|_| "No se pudo leer una copia.")?;
+    for entry in fs::read_dir(&backups)? {
+        let entry = entry?;
         let version = entry.file_name().to_string_lossy().into_owned();
         if !version.starts_with("edicion-")
             || !version
                 .chars()
-                .all(|c| c.is_ascii_alphanumeric() || c == '-')
+                .all(|character| character.is_ascii_alphanumeric() || character == '-')
         {
             continue;
         }
@@ -229,31 +262,115 @@ pub(crate) fn list_backups(root: &Path, relative: &str) -> Result<Vec<String>, S
         let Ok(_version_pin) = pin_directory(&version_root) else {
             continue;
         };
+        let Ok(canonical_version) = version_root.canonicalize() else {
+            continue;
+        };
+        if !canonical_version.starts_with(&backups) {
+            continue;
+        }
         let candidate = version_root.join(relative);
         let safe_parent = candidate.parent().is_some_and(|parent| {
             parent
                 .canonicalize()
-                .is_ok_and(|canonical| canonical.starts_with(&version_root))
+                .is_ok_and(|canonical| canonical.starts_with(&canonical_version))
         });
-        if safe_parent
-            && fs::symlink_metadata(&candidate)
-                .is_ok_and(|meta| meta.file_type().is_file() && meta.len() <= 100_000)
-        {
-            result.push(version);
+        let Ok(metadata) = fs::symlink_metadata(&candidate) else {
+            continue;
+        };
+        if !safe_parent || !metadata.file_type().is_file() || metadata.len() > 100_000 {
+            continue;
         }
+        let version_time = fs::metadata(&version_root)
+            .and_then(|metadata| metadata.created().or_else(|_| metadata.modified()))
+            .unwrap_or(UNIX_EPOCH);
+        result.push((version_time, version, version_root));
     }
-    result.sort();
-    result.reverse();
-    result.truncate(20);
-    let _ = name;
     Ok(result)
 }
 
+fn prune_backups(root: &Path, relative: &Path, keep: usize) -> io::Result<usize> {
+    let root = root.canonicalize()?;
+    let entries = backup_entries(&root, relative)?;
+    let mut entries = entries;
+    entries.sort_by(|left, right| right.0.cmp(&left.0).then_with(|| right.1.cmp(&left.1)));
+    let mut removed = 0;
+    for (_, _, version_root) in entries.into_iter().skip(keep) {
+        if remove_backup_file(&root, &version_root, relative)? {
+            removed += 1;
+        }
+    }
+    Ok(removed)
+}
+
+fn remove_backup_file(root: &Path, version_root: &Path, relative: &Path) -> io::Result<bool> {
+    let backups = root.join(BACKUPS).canonicalize()?;
+    let version_root = version_root.canonicalize()?;
+    if !version_root.starts_with(backups) {
+        return Ok(false);
+    }
+    let version_pin = match pin_directory(&version_root) {
+        Ok(pin) => pin,
+        Err(_) => return Ok(false),
+    };
+    let candidate = version_root.join(relative);
+    let mut pins = Vec::new();
+    let mut parent = version_root.clone();
+    for part in relative.parent().unwrap_or(Path::new("")).iter() {
+        parent.push(part);
+        match pin_directory(&parent) {
+            Ok(pin) => pins.push(pin),
+            Err(_) => return Ok(false),
+        }
+    }
+    let Some(candidate_parent) = candidate.parent() else {
+        return Ok(false);
+    };
+    if !candidate_parent
+        .canonicalize()
+        .is_ok_and(|canonical| canonical.starts_with(&version_root))
+    {
+        return Ok(false);
+    }
+    let Ok(metadata) = fs::symlink_metadata(&candidate) else {
+        return Ok(false);
+    };
+    if !metadata.file_type().is_file() {
+        return Ok(false);
+    }
+    fs::remove_file(&candidate)?;
+    drop(pins);
+    drop(version_pin);
+
+    let mut directory = candidate_parent.to_path_buf();
+    while directory != version_root {
+        if fs::remove_dir(&directory).is_err() {
+            break;
+        }
+        let Some(parent) = directory.parent() else {
+            break;
+        };
+        directory = parent.to_path_buf();
+    }
+    let _ = fs::remove_dir(&version_root);
+    Ok(true)
+}
+
+#[cfg(test)]
 pub(crate) fn restore(
     root: &Path,
     relative: &str,
     version: &str,
     approved: bool,
+) -> Result<String, String> {
+    restore_with_retention(root, relative, version, approved, None)
+}
+
+pub(crate) fn restore_with_retention(
+    root: &Path,
+    relative: &str,
+    version: &str,
+    approved: bool,
+    keep_backups: Option<usize>,
 ) -> Result<String, String> {
     if !approved {
         return Err("Restaurar una copia requiere aprobación explícita.".into());
@@ -295,11 +412,12 @@ pub(crate) fn restore(
         return Err("La copia no es un archivo válido.".into());
     }
     let content = fs::read(&backup).map_err(|_| "No se pudo leer la copia.")?;
-    save(
+    save_with_retention(
         &root_path,
         relative.to_str().unwrap_or_default(),
         &content,
         true,
+        keep_backups,
     )
 }
 pub(crate) fn clear_backups(root: &Path, relative: &str, approved: bool) -> Result<usize, String> {
@@ -396,6 +514,49 @@ mod tests {
             .collect();
         backups.sort();
         assert_eq!(backups, [b"dos", b"uno"]);
+    }
+
+    #[test]
+    fn retencion_automatica_conserva_las_versiones_recientes_por_archivo() {
+        let root = tempfile::tempdir().unwrap();
+        let path = "src/config.json";
+        save(root.path(), "otro.txt", b"otro-uno", true).unwrap();
+        save(root.path(), "otro.txt", b"otro-dos", true).unwrap();
+        save_with_retention(root.path(), path, b"uno", true, Some(2)).unwrap();
+        for content in [&b"dos"[..], &b"tres"[..], &b"cuatro"[..], &b"cinco"[..]] {
+            std::thread::sleep(std::time::Duration::from_millis(5));
+            save_with_retention(root.path(), path, content, true, Some(2)).unwrap();
+        }
+
+        assert_eq!(fs::read(root.path().join(path)).unwrap(), b"cinco");
+        let versions = list_backups(root.path(), path).unwrap();
+        assert_eq!(versions.len(), 2);
+        let values: Vec<_> = versions
+            .iter()
+            .map(|version| fs::read(root.path().join(BACKUPS).join(version).join(path)).unwrap())
+            .collect();
+        assert_eq!(values, [b"cuatro".to_vec(), b"tres".to_vec()]);
+        assert_eq!(
+            fs::read_dir(root.path().join(BACKUPS)).unwrap().count(),
+            3,
+            "se conservan las dos versiones recientes y la copia del otro archivo"
+        );
+        assert_eq!(
+            list_backups(root.path(), "otro.txt").unwrap().len(),
+            1,
+            "la retención de un archivo no elimina copias de otro"
+        );
+    }
+
+    #[test]
+    fn retencion_desactivada_conserva_historial_y_se_validan_limites() {
+        let root = tempfile::tempdir().unwrap();
+        let path = "nota.txt";
+        save_with_retention(root.path(), path, b"uno", true, None).unwrap();
+        save_with_retention(root.path(), path, b"dos", true, None).unwrap();
+        assert!(save_with_retention(root.path(), path, b"x", true, Some(0)).is_err());
+        assert!(save_with_retention(root.path(), path, b"x", true, Some(101)).is_err());
+        assert_eq!(list_backups(root.path(), path).unwrap().len(), 1);
     }
 
     #[cfg(windows)]

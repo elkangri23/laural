@@ -19,7 +19,7 @@ Avance de M2 y M3: perfiles vinculados al destino y reglas de coincidencia exact
 Comprobación de M1: la prueba de PTY real pasó en los cuatro shells locales. Sigue abierta la validación visual de bloques dentro de la aplicación y la prueba con perfiles de usuario.
 Cobertura: ampliar los casos de regresión a cambios de permisos, interacción del chat y ciclo de vida de sesiones al modificar esos flujos.
 | Alta · M3 | Ediciones de archivos | Escritura, restauración y limpieza manual con copia de seguridad implementadas y cubiertas. Pendiente retención automática y coordinación con editores externos. |
-| Alta · M3 | Retención de copias | Restauración confirmada implementada y probada. Limpieza confirmada por archivo implementada. Pendiente política de retención automática configurable. |
+| Alta · M3 | Retención de copias | Retención optativa de 5/10/20/50/100 copias por archivo implementada con valor predeterminado sin límite, limpieza segura no recursiva y regresiones. El selector visual se comprobó; queda probar la persistencia tras reinicio y el flujo con una edición aprobada. |
 Revisión de sintaxis del agente: comprobación inicial por shell para PowerShell, CMD, WSL y Git Bash y detección de alias destructivos habituales, cubiertas con pruebas. Siguen pendientes funciones y perfiles personalizados.
 M3: validación inicial por shell aplicada antes de reglas y automatización. Pendiente probar aliases, perfiles de inicio y variaciones de sintaxis en cada shell.
 Revisión de alias destructivos: el filtro bloquea alias comunes de borrado y escritura. Pendiente ampliar revisión con perfiles personalizados de PowerShell y Bash.

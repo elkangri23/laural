@@ -2,6 +2,8 @@
 
 ## Sin publicar
 
+- Configuración opcional para conservar 5, 10, 20, 50 o 100 copias recientes por archivo y limpiar las antiguas después de guardar/restaurar; por defecto no se elimina historial.
+- La lista de copias se ordena por fecha de creación en vez de por el nombre aleatorio de la carpeta.
 - Aplicada CSP local estricta en WebView y retirado el permiso de apertura externa no utilizado.
 - Limitadas las respuestas no streaming de proveedores a 2 MB, la exploración de proyectos a 1.000 entradas y 200 archivos, la concurrencia a ocho solicitudes, las escrituras/contexto del terminal a 1 MB y los datos IPC de chat/proveedor.
 - Añadidos regresiones para respuestas sobredimensionadas, identificadores/concurrencia y límites del escaneo del proyecto.

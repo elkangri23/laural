@@ -34,6 +34,7 @@ Estado al 20 de noviembre de 2026. «Implementado» describe código presente; �
 - Implementada una primera validación de operadores por shell y detección de alias de riesgo comunes. Las reglas siguen siendo heurísticas, no aíslan comandos y no interpretan perfiles personalizados.
 - Revisar límites de rutas y respaldos bajo condiciones de carrera.
 - Registrar acciones localmente sin guardar secretos ni enviar telemetría.
+- Retención optativa de 5/10/20/50/100 copias por archivo implementada; sin límite predeterminado para conservar el comportamiento. La limpieza es por archivo, no recursiva y está cubierta por regresión.
 
 ## M4 — Distribución pública (parcial)
 
@@ -65,7 +66,7 @@ M2 y M3 incorporan vinculación del perfil a su URL y un conjunto acotado de con
 M1: prueba de PTY real superada en los cuatro shells locales el 20 de noviembre de 2026. La prueba que queda ignorada por defecto en CI se ejecutó explícitamente y pasó; la comprobación visual de bloques en la ventana de Laural sigue pendiente.
 La interfaz y el backend disponen de informes automáticos de cobertura en cada push y pull request.
 M3 incorpora escritura temporal, reemplazo con backup por versión, creación exclusiva y pruebas de archivo bloqueado y aprobaciones concurrentes. La interfaz permite restaurar y limpiar copias manualmente con confirmación. La retención automática configurable continúa pendiente.
-La interfaz lista las veinte copias recientes de un archivo del agente. Cada restauración respalda primero la versión actual.
+La interfaz lista las veinte copias más recientes por fecha. La retención automática por archivo es optativa y está implementada; su valor inicial conserva todas las versiones.
 M3 aplica ahora filtros de sintaxis por shell en Rust antes de los modos automático y reglas. La aprobación explícita permite composiciones tras revisión humana.
 M3 reconoce alias comunes de borrado y escritura en el filtro de comandos que requieren aprobación manual. La validación sigue siendo heurística y no interpreta perfiles personalizados.
 La alpha.12 publica instaladores Windows x64. La alpha.13 configura el MSI en `es-ES` y NSIS en español; queda pendiente la instalación limpia y la comprobación visual del idioma.

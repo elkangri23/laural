@@ -131,6 +131,8 @@ pub struct ChatMessage {
 pub struct AgentSettings {
     pub mode: String,
     pub allowed_prefixes: Vec<String>,
+    #[serde(default)]
+    pub backup_retention: Option<usize>,
 }
 
 impl Default for AgentSettings {
@@ -138,8 +140,16 @@ impl Default for AgentSettings {
         Self {
             mode: "review".to_string(),
             allowed_prefixes: vec!["git status".to_string(), "git diff".to_string()],
+            backup_retention: None,
         }
     }
+}
+
+fn validate_backup_retention(retention: Option<usize>) -> Result<(), String> {
+    if retention.is_some_and(|limit| !(1..=100).contains(&limit)) {
+        return Err("La retención debe conservar entre 1 y 100 copias por archivo.".into());
+    }
+    Ok(())
 }
 
 #[derive(Deserialize, Serialize)]
@@ -263,6 +273,7 @@ pub fn save_agent_settings(
     if !matches!(settings.mode.as_str(), "review" | "rules" | "automatic") {
         return Err("El modo de ejecución no es válido.".to_string());
     }
+    validate_backup_retention(settings.backup_retention)?;
     settings.allowed_prefixes = settings
         .allowed_prefixes
         .into_iter()
@@ -1268,6 +1279,25 @@ pub fn preview_context(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn retencion_de_copias_es_compatible_y_se_valida() {
+        let legacy: AgentSettings =
+            serde_json::from_str(r#"{"mode":"review","allowedPrefixes":[]}"#).unwrap();
+        assert_eq!(legacy.backup_retention, None);
+        let configured: AgentSettings = serde_json::from_value(json!({
+            "mode": "review",
+            "allowedPrefixes": [],
+            "backupRetention": 20
+        }))
+        .unwrap();
+        assert_eq!(configured.backup_retention, Some(20));
+        assert!(validate_backup_retention(None).is_ok());
+        assert!(validate_backup_retention(Some(1)).is_ok());
+        assert!(validate_backup_retention(Some(100)).is_ok());
+        assert!(validate_backup_retention(Some(0)).is_err());
+        assert!(validate_backup_retention(Some(101)).is_err());
+    }
 
     #[test]
     fn limita_consultas_simultaneas_y_rechaza_identificadores_repetidos() {

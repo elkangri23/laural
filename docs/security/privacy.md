@@ -9,7 +9,7 @@
 | Modo y comandos exactos del agente | `agent.json` | Son preferencias locales. |
 | Historial de chat | No se persiste en la versión actual | La memoria en UI dura solo lo que mantenga la sesión. |
 | Preferencia de apariencia | `localStorage` del WebView | Solo almacena modo y tema seleccionados. |
-| Respaldo de archivo sobrescrito por agente | `.laural-backups` en el proyecto | Permanece con el proyecto hasta que el usuario lo elimine. |
+| Respaldo de archivo sobrescrito por agente | `.laural-backups` en el proyecto | Se conservan todas por defecto; el usuario puede habilitar retención y eliminación automática de versiones antiguas por archivo. |
 
 ## Qué puede salir del equipo
 
@@ -26,4 +26,4 @@ El WebView aplica una política CSP local: bloquea scripts externos, `eval`, obj
 ## Solicitudes de soporte
 
 Antes de compartir un log o captura, inspecciónala y elimina rutas privadas, prompts, salida del terminal, URLs internas y tokens. La clave API nunca debe ser parte de un reporte.
-La escritura del agente prepara un temporal y sincroniza sus datos antes de aplicar el cambio. En Windows, cada sustitución deja la versión previa en `.laural-backups/edicion-<id>/`. No existe restauración o limpieza automática. Un programa externo puede modificar el mismo archivo entre la aprobación y el guardado, y los backups crecen hasta su eliminación manual.
+La escritura del agente prepara un temporal y sincroniza sus datos antes de aplicar el cambio. En Windows, cada sustitución deja la versión previa en `.laural-backups/edicion-<id>/`. Un programa externo puede modificar el mismo archivo entre la aprobación y el guardado. La retención automática es optativa; cuando se habilita, el límite se aplica tras sobrescribir o restaurar un archivo y elimina versiones antiguas que lo excedan. Revisa [restaurar copias](../restaurar-copias.md) antes de activarla.

@@ -19,6 +19,7 @@ Los ADR registran por qué se eligió una opción y qué costes trae. Un ADR ace
 | [0013](0013-configuracion-local.md) | Centro de configuración local | Aceptada |
 | [0014](0014-escritura-segura-agente.md) | Escritura segura de archivos del agente | Aceptada |
 | [0015](0015-csp-y-minimo-de-permisos.md) | CSP estricta y permisos mínimos en WebView | Aceptada |
+| [0016](0016-retencion-configurable-copias.md) | Retención opcional de copias del agente | Aceptada |
 
 ## Crear un ADR
 

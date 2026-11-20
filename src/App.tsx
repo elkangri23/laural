@@ -1,5 +1,6 @@
 import { appendTerminalOutput } from "./terminalOutput";
 import { SettingsDialog } from "./components/SettingsDialog";
+import { BackupRetentionControl } from "./components/BackupRetentionControl";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -78,6 +79,7 @@ function App() {
   const [agentCommandBusy, setAgentCommandBusy] = useState(false);
   const [executionMode, setExecutionMode] = useState<ExecutionMode>("review");
   const [allowedPrefixes, setAllowedPrefixes] = useState(["git status", "git diff"]);
+  const [backupRetention, setBackupRetention] = useState<number | null>(null);
   const [ruleDraft, setRuleDraft] = useState("git status\ngit diff");
   const [policyNotice, setPolicyNotice] = useState("");
   const terminalContextRef = useRef<Record<string, string>>({});
@@ -118,9 +120,10 @@ function App() {
   }
 
   useEffect(() => {
-    void invoke<{ mode: ExecutionMode; allowedPrefixes: string[] }>("get_agent_settings").then((settings) => {
+    void invoke<{ mode: ExecutionMode; allowedPrefixes: string[]; backupRetention?: number | null }>("get_agent_settings").then((settings) => {
       setExecutionMode(settings.mode);
       setAllowedPrefixes(settings.allowedPrefixes);
+      setBackupRetention(settings.backupRetention ?? null);
       setRuleDraft(settings.allowedPrefixes.join("\n"));
     }).catch(() => undefined);
   }, []);
@@ -473,7 +476,7 @@ function App() {
     setExecutionMode(mode);
     setPolicyNotice("");
     try {
-      await invoke("save_agent_settings", { settings: { mode, allowedPrefixes } });
+      await invoke("save_agent_settings", { settings: { mode, allowedPrefixes, backupRetention } });
       setPolicyNotice("Política guardada.");
     } catch (error) {
       setPolicyNotice(`No se pudo guardar: ${String(error)}`);
@@ -484,10 +487,21 @@ function App() {
     const prefixes = ruleDraft.split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
     setAllowedPrefixes(prefixes);
     try {
-      await invoke("save_agent_settings", { settings: { mode: executionMode, allowedPrefixes: prefixes } });
+      await invoke("save_agent_settings", { settings: { mode: executionMode, allowedPrefixes: prefixes, backupRetention } });
       setPolicyNotice("Reglas guardadas.");
     } catch (error) {
       setPolicyNotice(`No se pudieron guardar las reglas: ${String(error)}`);
+    }
+  }
+
+  async function changeBackupRetention(value: number | null) {
+    setBackupRetention(value);
+    setPolicyNotice("");
+    try {
+      await invoke("save_agent_settings", { settings: { mode: executionMode, allowedPrefixes, backupRetention: value } });
+      setPolicyNotice("Retención guardada.");
+    } catch (error) {
+      setPolicyNotice(`No se pudo guardar: ${String(error)}`);
     }
   }
 
@@ -785,6 +799,7 @@ function App() {
                 <textarea value={ruleDraft} onChange={(event) => setRuleDraft(event.currentTarget.value)} placeholder="Un comando exacto por línea" aria-label="Comandos exactos permitidos, uno por línea" rows={3} />
                 <button onClick={() => void saveExecutionRules()}>Guardar reglas</button>
               </div>}
+              <BackupRetentionControl value={backupRetention} onChange={(value) => void changeBackupRetention(value)} />
               {policyNotice && <span className="policy-notice">{policyNotice}</span>}
               <p>Los cambios de archivos siempre requieren aprobación.</p>
             </div>

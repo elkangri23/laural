@@ -360,16 +360,19 @@ fn run_agent_command(
 
 #[tauri::command]
 fn apply_agent_file(
+    app: AppHandle,
     project_path: String,
     relative_path: String,
     content: String,
     approved: bool,
 ) -> Result<String, String> {
-    agent_files::save(
+    let keep_backups = providers::get_agent_settings(app)?.backup_retention;
+    agent_files::save_with_retention(
         Path::new(&project_path),
         &relative_path,
         content.as_bytes(),
         approved,
+        keep_backups,
     )
 }
 
@@ -380,12 +383,20 @@ fn list_agent_backups(project_path: String, relative_path: String) -> Result<Vec
 
 #[tauri::command]
 fn restore_agent_backup(
+    app: AppHandle,
     project_path: String,
     relative_path: String,
     version: String,
     approved: bool,
 ) -> Result<String, String> {
-    agent_files::restore(Path::new(&project_path), &relative_path, &version, approved)
+    let keep_backups = providers::get_agent_settings(app)?.backup_retention;
+    agent_files::restore_with_retention(
+        Path::new(&project_path),
+        &relative_path,
+        &version,
+        approved,
+        keep_backups,
+    )
 }
 #[tauri::command]
 fn clear_agent_backups(
