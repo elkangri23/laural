@@ -18,6 +18,7 @@
 - La cancelación de chat y planes interrumpe el envío HTTP y la lectura de los cuerpos de respuesta; añadida regresión local con una operación pendiente.
 - Añadida prueba local que confirma que el descubrimiento de modelos respeta `Retry-After` y no duplica solicitudes cuando el proveedor pide esperar.
 - Mejorada la navegación por teclado de Configuración: el diálogo enfoca el título al abrir y Escape cierra mediante el evento nativo; añadidas pruebas de apertura y cancelación.
+- Añadida regresión de cambio entre perfiles que comprueba que la clave en memoria del proveedor anterior no se envía al probar ni guardar el nuevo perfil.
 
 ## 0.1.0-alpha.14
 

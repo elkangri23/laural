@@ -10,6 +10,7 @@ Estado al 20 de noviembre de 2026. «Implementado» describe código presente; �
 - Doce temas de color, modo claro/oscuro y preferencias locales.
 - Regresiones de la app principal verifican que tema y modo se recuperan/guardan y que se ofrecen doce temas; también cubren creación de pestañas y alternancia de panel dividido.
 - Configuración usa un diálogo modal nativo, enfoca su título al abrir y admite Escape; pruebas de interfaz cubren su apertura y cierre por teclado.
+- Cambiar de perfil limpia la clave del formulario en memoria; una regresión confirma que probar y guardar envían el ID del perfil seleccionado y no la clave escrita para el anterior.
 - Planes de agente, modos revisar/reglas/automático y aprobación explícita para cambios de archivos.
 - Icono y favicon propios; build de Windows automatizable desde GitHub Actions.
 - README, arquitectura, requisitos, ADR, casos de uso y documentación de contribución.
