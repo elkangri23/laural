@@ -4,10 +4,21 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import App from "../src/App";
 
-const mocks = vi.hoisted(() => ({ invoke: vi.fn(), open: vi.fn() }));
+const mocks = vi.hoisted(() => ({ invoke: vi.fn(), open: vi.fn(), terminalPaneRenderCount: 0 }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: mocks.invoke }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open: mocks.open }));
-vi.mock("../src/components/TerminalPane", () => ({ default: () => <div data-testid="terminal-pane" /> }));
+vi.mock("../src/components/TerminalPane", () => ({
+  default: (props: { terminalId: string; onTextOutput: (id: string, text: string) => void; onCommandSubmit: (id: string, command: string) => void; onCommandFinish: (id: string, code: number) => void }) => {
+    mocks.terminalPaneRenderCount += 1;
+    return <div data-testid="terminal-pane">
+      <button data-testid="begin-command" onClick={() => props.onCommandSubmit(props.terminalId, "git status")}>Iniciar comando</button>
+      <button data-testid="output-one" onClick={() => props.onTextOutput(props.terminalId, "primera ")}>Salida uno</button>
+      <button data-testid="output-two" onClick={() => props.onTextOutput(props.terminalId, "segunda")}>Salida dos</button>
+      <button data-testid="output-final" onClick={() => props.onTextOutput(props.terminalId, " final")}>Salida final</button>
+      <button data-testid="finish-command" onClick={() => props.onCommandFinish(props.terminalId, 0)}>Terminar comando</button>
+    </div>;
+  },
+}));
 vi.mock("../src/components/UpdateManager", () => ({ UpdateManager: () => null }));
 vi.mock("../src/components/AgentActivity", () => ({ AgentActivity: () => null }));
 vi.mock("../src/components/BackupRetentionControl", () => ({ BackupRetentionControl: () => null }));
@@ -39,6 +50,7 @@ beforeEach(() => {
     return undefined;
   });
   mocks.open.mockReset();
+  mocks.terminalPaneRenderCount = 0;
   host = document.createElement("div");
   root = createRoot(host);
 });
@@ -86,4 +98,24 @@ test("crea una pestaña del shell elegido y alterna la división de terminal", a
   expect(host.querySelector<HTMLButtonElement>('[aria-label^="División horizontal"]')).not.toBeNull();
   await act(async () => host.querySelector<HTMLButtonElement>('[aria-label^="División horizontal"]')!.click());
   expect(host.querySelector<HTMLButtonElement>('[aria-label="Dividir panel"]')).not.toBeNull();
+});
+
+test("agrupa fragmentos de salida y vacía el último lote al cerrar el bloque", async () => {
+  await act(async () => root!.render(<App />));
+  await act(async () => buttonIncluding("Bloques").click());
+  await act(async () => host.querySelector<HTMLButtonElement>('[data-testid="begin-command"]')!.click());
+  const rendersAfterCommandStart = mocks.terminalPaneRenderCount;
+
+  await act(async () => host.querySelector<HTMLButtonElement>('[data-testid="output-one"]')!.click());
+  await act(async () => host.querySelector<HTMLButtonElement>('[data-testid="output-two"]')!.click());
+  expect(mocks.terminalPaneRenderCount).toBe(rendersAfterCommandStart);
+
+  await act(async () => new Promise((resolve) => window.setTimeout(resolve, 50)));
+  expect(mocks.terminalPaneRenderCount).toBe(rendersAfterCommandStart + 1);
+  expect(host.querySelector(".command-block pre")?.textContent).toBe("primera segunda");
+
+  await act(async () => host.querySelector<HTMLButtonElement>('[data-testid="output-final"]')!.click());
+  await act(async () => host.querySelector<HTMLButtonElement>('[data-testid="finish-command"]')!.click());
+  expect(host.querySelector(".command-block pre")?.textContent).toBe("primera segunda final");
+  expect(host.querySelector(".block-exit")?.textContent).toBe("Salida 0");
 });

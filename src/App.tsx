@@ -22,6 +22,7 @@ type PlanAction =
   | { type: "run_command"; command: string; reason: string; status?: string; result?: string }
   | { type: "write_file"; path: string; content: string; reason: string; status?: string; result?: string };
 type AgentPlan = { summary: string; actions: PlanAction[] };
+const COMMAND_OUTPUT_BATCH_MS = 33;
 
 const shellNames: Record<Shell, string> = {
   powershell: "PowerShell",
@@ -86,6 +87,8 @@ function App() {
   const [ruleDraft, setRuleDraft] = useState("git status\ngit diff");
   const [policyNotice, setPolicyNotice] = useState("");
   const terminalContextRef = useRef<Record<string, string>>({});
+  const pendingCommandOutputRef = useRef<Record<string, string>>({});
+  const outputFlushTimerRef = useRef<number | null>(null);
   const activeChatRequestRef = useRef<string | null>(null);
   const activeCommandBlockRef = useRef<Record<string, string>>({});
   const activeAgentRequestRef = useRef<string | null>(null);
@@ -131,14 +134,39 @@ function App() {
     }).catch(() => undefined);
   }, []);
 
+  const flushCommandOutput = useCallback(() => {
+    if (outputFlushTimerRef.current !== null) {
+      window.clearTimeout(outputFlushTimerRef.current);
+      outputFlushTimerRef.current = null;
+    }
+    const pending = pendingCommandOutputRef.current;
+    pendingCommandOutputRef.current = {};
+    const outputByBlock = new Map<string, string>();
+    for (const [terminalId, text] of Object.entries(pending)) {
+      const blockId = activeCommandBlockRef.current[terminalId];
+      if (blockId) outputByBlock.set(blockId, text);
+    }
+    if (outputByBlock.size === 0) return;
+    setCommandBlocks((blocks) => blocks.map((block) => {
+      const text = outputByBlock.get(block.id);
+      return text ? { ...block, output: appendTerminalOutput(block.output, text) } : block;
+    }));
+  }, []);
+
   const captureTerminalOutput = useCallback((terminalId: string, text: string) => {
     const current = terminalContextRef.current[terminalId] ?? "";
     terminalContextRef.current[terminalId] = appendTerminalOutput(current, text);
     const blockId = activeCommandBlockRef.current[terminalId];
-    if (blockId) setCommandBlocks((blocks) => blocks.map((block) => block.id === blockId ? { ...block, output: appendTerminalOutput(block.output, text) } : block));
-  }, []);
+    if (!blockId) return;
+    const pending = pendingCommandOutputRef.current;
+    pending[terminalId] = appendTerminalOutput(pending[terminalId] ?? "", text);
+    if (outputFlushTimerRef.current === null) {
+      outputFlushTimerRef.current = window.setTimeout(flushCommandOutput, COMMAND_OUTPUT_BATCH_MS);
+    }
+  }, [flushCommandOutput]);
 
   const startCommandBlock = useCallback((terminalId: string, command: string) => {
+    flushCommandOutput();
     const id = crypto.randomUUID();
     const previous = activeCommandBlockRef.current[terminalId];
     const pendingCompletion = commandCompletionRef.current[terminalId];
@@ -152,9 +180,10 @@ function App() {
       ...blocks.map((block) => block.id === previous ? { ...block, status: "finished" as const } : block),
       { id, terminalId, command, output: "", status: "running" as const, exitCode: null },
     ].slice(-160));
-  }, []);
+  }, [flushCommandOutput]);
 
   const finishCommandBlock = useCallback((terminalId: string, exitCode: number | null) => {
+    flushCommandOutput();
     const id = activeCommandBlockRef.current[terminalId];
     if (!id) return;
     setCommandBlocks((blocks) => blocks.map((block) => block.id === id ? { ...block, status: "finished", exitCode } : block));
@@ -165,7 +194,7 @@ function App() {
       delete commandCompletionRef.current[terminalId];
       completion.resolve(exitCode);
     }
-  }, []);
+  }, [flushCommandOutput]);
 
   const activeTab = useMemo(
     () => tabs.find((tab) => tab.id === activeTabId) ?? tabs[0],
@@ -187,6 +216,10 @@ function App() {
     localStorage.setItem("laural.theme", activeTheme.id);
     localStorage.setItem("laural.appearance", appearance);
   }, [activeTheme, appearance]);
+
+  useEffect(() => () => {
+    if (outputFlushTimerRef.current !== null) window.clearTimeout(outputFlushTimerRef.current);
+  }, []);
 
   function addTerminal(shell: Shell, cwd: string | null = projectPath) {
     const count = tabs.filter((tab) => tab.shell === shell).length + 1;
