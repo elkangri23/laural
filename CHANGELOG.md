@@ -2,6 +2,7 @@
 
 ## Sin publicar
 
+- El reemplazo del archivo del proyecto vuelve a comprobar que el destino sigue siendo un archivo ordinario justo antes del cambio atómico.
 - Endurecidas la restauración y limpieza de copias en Windows: se fijan los directorios del recorrido; la restauración abre el archivo sin seguir reparse points ni permitir su sustitución mientras se lee.
 - El filtro del agente requiere confirmación para comandos habituales de copia, movimiento, truncado y escritura de archivos en Windows y shells tipo Bash.
 - Añadida regresión de proveedor que comprueba que una redirección HTTP no reenvía la solicitud autenticada a otro destino.

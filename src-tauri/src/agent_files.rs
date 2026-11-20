@@ -106,6 +106,24 @@ fn descend(parent: &Path, name: &std::ffi::OsStr, pins: &mut Vec<File>) -> io::R
     Ok(next)
 }
 
+fn is_regular_file(path: &Path) -> io::Result<bool> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_file() => {
+            #[cfg(windows)]
+            if std::os::windows::fs::MetadataExt::file_attributes(&metadata)
+                & windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT
+                != 0
+            {
+                return Err(invalid("El destino debe ser un archivo ordinario."));
+            }
+            Ok(true)
+        }
+        Ok(_) => Err(invalid("El destino debe ser un archivo ordinario.")),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(error),
+    }
+}
+
 #[cfg(windows)]
 fn replace(target: &Path, staged: &Path, backup: &Path) -> io::Result<()> {
     use std::{os::windows::ffi::OsStrExt, ptr};
@@ -206,21 +224,7 @@ fn write_file(root: &Path, relative: &Path, content: &[u8]) -> io::Result<String
         .file_name()
         .ok_or_else(|| invalid("Falta el nombre del archivo."))?;
     let target = parent.join(name);
-    let existing = match fs::symlink_metadata(&target) {
-        Ok(m) if m.file_type().is_file() => {
-            #[cfg(windows)]
-            if std::os::windows::fs::MetadataExt::file_attributes(&m)
-                & windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT
-                != 0
-            {
-                return Err(invalid("El destino debe ser un archivo ordinario."));
-            }
-            true
-        }
-        Ok(_) => return Err(invalid("El destino debe ser un archivo ordinario.")),
-        Err(e) if e.kind() == io::ErrorKind::NotFound => false,
-        Err(e) => return Err(e),
-    };
+    let existing = is_regular_file(&target)?;
     let mut staged = NamedTempFile::new_in(&parent)?;
     staged.write_all(content)?;
     staged.as_file().sync_all()?;
@@ -239,6 +243,12 @@ fn write_file(root: &Path, relative: &Path, content: &[u8]) -> io::Result<String
     }
     let backup = backup_dir.join(name);
     let staged = staged.into_temp_path();
+    if !is_regular_file(&target)? {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "El archivo de destino cambió antes de reemplazarlo.",
+        ));
+    }
     // Keep a backup left by the OS even if replacement reports a partial failure.
     let result = replace(&target, &staged, &backup);
     if result.is_ok() || backup.exists() {
@@ -668,6 +678,7 @@ mod tests {
         let version = root.path().join(BACKUPS).join("edicion-prueba");
         fs::create_dir_all(&version).unwrap();
         symlink_file(outside.path(), version.join("secreto.txt")).unwrap();
+        assert!(is_regular_file(&version.join("secreto.txt")).is_err());
         assert!(list_backups(root.path(), "secreto.txt").unwrap().is_empty());
         assert!(open_backup_file(&version.join("secreto.txt")).is_err());
         assert!(restore(root.path(), "secreto.txt", "edicion-prueba", true).is_err());
