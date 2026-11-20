@@ -14,7 +14,7 @@ La [hoja de ruta](ROADMAP.md) agrupa los hitos. Esta lista ordena el trabajo abi
 | Alta · M4 | Seguridad de distribución | CSP y permisos mínimos aplicados; límites de memoria/recorrido añadidos. Antes de estable: instalar limpio, firmar/verificar actualizaciones y revisar el modelo de confianza del agente por shell. |
 | Alta · M4 | Actualizador | Release alpha.14, instalador, firma y manifiesto publicados correctamente. Validar en Windows la actualización real de alpha.14 a una release posterior, fallos de red/firma, preferencia automática y reinicio con terminales abiertas. |
 
-Auditoría inicial: [informe de seguridad](security/audit-report.md). Los filtros de comandos siguen siendo heurísticos y Laural no aísla los procesos del shell.
+Auditoría inicial: [informe de seguridad](security/audit-report.md). Los filtros de comandos siguen siendo heurísticos y Laural no aísla los procesos del shell. La detección cubre ahora comandos frecuentes de copia, movimiento, truncado y escritura; siguen pendientes aliases y perfiles personalizados.
 
 Avance de M2 y M3: perfiles vinculados al destino y reglas de coincidencia exacta implementados. Pendientes la validación entre proveedores y los ensayos por shell.
 Comprobación de M1: la prueba de PTY real pasó en los cuatro shells locales. Sigue abierta la validación visual de bloques dentro de la aplicación y la prueba con perfiles de usuario.
@@ -23,4 +23,4 @@ Cobertura: ampliar los casos de regresión a cambios de permisos, interacción d
 | Alta · M3 | Retención de copias | Retención optativa de 5/10/20/50/100 copias por archivo implementada con valor predeterminado sin límite, limpieza segura no recursiva y regresiones. El selector visual se comprobó; queda probar la persistencia tras reinicio y el flujo con una edición aprobada. |
 Revisión de sintaxis del agente: comprobación inicial por shell para PowerShell, CMD, WSL y Git Bash y detección de alias destructivos habituales, cubiertas con pruebas. Siguen pendientes funciones y perfiles personalizados.
 M3: validación inicial por shell aplicada antes de reglas y automatización. Pendiente probar aliases, perfiles de inicio y variaciones de sintaxis en cada shell.
-Revisión de alias destructivos: el filtro bloquea alias comunes de borrado y escritura. Pendiente ampliar revisión con perfiles personalizados de PowerShell y Bash.
+Revisión de alias y operaciones de archivo: el filtro requiere aprobación manual para comandos comunes de borrado, copia, movimiento, truncado y escritura. Pendiente revisar perfiles personalizados, aliases definidos por el usuario y las diferencias de sintaxis por shell.

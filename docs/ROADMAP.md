@@ -32,7 +32,7 @@ Estado al 20 de noviembre de 2026. «Implementado» describe código presente; �
 
 - Planes y estados por acción; modos de autorización configurables.
 - Cancelación de generación, interrupción de comando activo y corte del ciclo automático implementados; probar cancelación y resultado en cada shell.
-- Implementada una primera validación de operadores por shell y detección de alias de riesgo comunes. Las reglas siguen siendo heurísticas, no aíslan comandos y no interpretan perfiles personalizados.
+- Implementada una primera validación de operadores por shell y detección de alias y operaciones comunes de borrado, copia, movimiento, truncado y escritura. Las reglas siguen siendo heurísticas, no aíslan comandos y no interpretan perfiles personalizados.
 - Revisar límites de rutas y respaldos bajo condiciones de carrera.
 - Registrar acciones localmente sin guardar secretos ni enviar telemetría.
 - Retención optativa de 5/10/20/50/100 copias por archivo implementada; sin límite predeterminado para conservar el comportamiento. La limpieza es por archivo, no recursiva y está cubierta por regresión.

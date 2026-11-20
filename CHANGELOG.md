@@ -2,6 +2,7 @@
 
 ## Sin publicar
 
+- El filtro del agente requiere confirmación para comandos habituales de copia, movimiento, truncado y escritura de archivos en Windows y shells tipo Bash.
 - Añadida regresión de proveedor que comprueba que una redirección HTTP no reenvía la solicitud autenticada a otro destino.
 
 ## 0.1.0-alpha.14
