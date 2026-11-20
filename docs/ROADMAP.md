@@ -43,6 +43,13 @@ Estado al 20 de noviembre de 2026. «Implementado» describe código presente; �
 - Firma y procedencia verificable dependen de credenciales de publicación que no están configuradas.
 - Resolver incidencias críticas de validación manual antes de declarar estable.
 
+## Auditoría de seguridad (primera revisión completada; validación manual pendiente)
+
+- Aplicada CSP local y retirada la capacidad `opener` no utilizada.
+- Acotadas respuestas de proveedor, enumeración de proyectos, escrituras, datos IPC y concurrencia de consultas.
+- npm audit sin vulnerabilidades conocidas. Cargo audit conserva avisos de mantenimiento y una advertencia GLib de la cadena Linux de Tauri; revisar el árbol al actualizar Tauri.
+- Pendiente una prueba manual de instalación limpia, revisión de firma/actualización y ensayos de agente con perfiles personalizados. La auditoría no certifica sandbox del terminal.
+
 ## Después del MVP
 
 - Sincronización opcional de configuración y proveedores, diferida según decisión del producto. No sincronizar secretos sin cifrado de extremo a extremo, consentimiento, revocación y recuperación documentados.

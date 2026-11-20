@@ -36,6 +36,23 @@ struct PtyState {
     shutting_down: bool,
 }
 
+const MAX_TERMINAL_ID_BYTES: usize = 100;
+const MAX_TERMINAL_INPUT_BYTES: usize = 1_000_000;
+
+fn valid_terminal_id(terminal_id: &str) -> bool {
+    !terminal_id.trim().is_empty()
+        && terminal_id.len() <= MAX_TERMINAL_ID_BYTES
+        && !terminal_id.chars().any(char::is_control)
+}
+
+fn validate_terminal_input(data: &str) -> Result<(), String> {
+    if data.len() > MAX_TERMINAL_INPUT_BYTES {
+        Err("La entrada supera el límite de 1 MB por envío.".into())
+    } else {
+        Ok(())
+    }
+}
+
 impl Drop for TerminalSession {
     fn drop(&mut self) {
         if !matches!(self.child.try_wait(), Ok(Some(_))) && self.child.kill().is_ok() {
@@ -154,8 +171,8 @@ fn create_terminal(
     rows: u16,
     cols: u16,
 ) -> Result<(), String> {
-    if terminal_id.trim().is_empty() {
-        return Err("Falta el identificador de la terminal.".to_string());
+    if !valid_terminal_id(&terminal_id) {
+        return Err("El identificador de la terminal no es válido.".to_string());
     }
 
     let mut state = state
@@ -250,6 +267,7 @@ fn write_terminal(
     terminal_id: String,
     data: String,
 ) -> Result<(), String> {
+    validate_terminal_input(&data)?;
     let session = state
         .state
         .lock()
@@ -382,7 +400,6 @@ pub fn run() {
     tauri::Builder::default()
         .manage(PtyStore::default())
         .manage(providers::ChatStreamRegistry::default())
-        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             create_terminal,
@@ -422,6 +439,15 @@ mod terminal_tests {
     use super::*;
     use std::sync::mpsc;
     use std::time::{Duration, Instant};
+
+    #[test]
+    fn limita_identificadores_y_entradas_de_terminal() {
+        assert!(valid_terminal_id("sesion-1"));
+        assert!(!valid_terminal_id(&"x".repeat(MAX_TERMINAL_ID_BYTES + 1)));
+        assert!(!valid_terminal_id("sesion\n1"));
+        assert!(validate_terminal_input(&"x".repeat(MAX_TERMINAL_INPUT_BYTES)).is_ok());
+        assert!(validate_terminal_input(&"x".repeat(MAX_TERMINAL_INPUT_BYTES + 1)).is_err());
+    }
 
     #[test]
     fn el_cierre_de_la_aplicacion_termina_el_shell_con_la_entrada_ocupada() {

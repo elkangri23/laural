@@ -21,6 +21,8 @@ La lista y límites de contexto son protección contra exceso accidental, no una
 
 No existe telemetría ni cuenta de Laural en el MVP. La sincronización queda diferida; perfiles y credenciales no se envían a servicio alguno de Laural.
 
+El WebView aplica una política CSP local: bloquea scripts externos, `eval`, objetos y frames; conserva estilos inline requeridos por la interfaz, e IPC de Tauri. Las conexiones del frontend a endpoints de modelos se realizan desde Rust, no desde el navegador.
+
 ## Solicitudes de soporte
 
 Antes de compartir un log o captura, inspecciónala y elimina rutas privadas, prompts, salida del terminal, URLs internas y tokens. La clave API nunca debe ser parte de un reporte.

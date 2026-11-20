@@ -18,6 +18,7 @@ Los ADR registran por qué se eligió una opción y qué costes trae. Un ADR ace
 | [0012](0012-shell-integration-and-command-blocks.md) | Marcas OSC de shell y bloques de comando | Aceptada |
 | [0013](0013-configuracion-local.md) | Centro de configuración local | Aceptada |
 | [0014](0014-escritura-segura-agente.md) | Escritura segura de archivos del agente | Aceptada |
+| [0015](0015-csp-y-minimo-de-permisos.md) | CSP estricta y permisos mínimos en WebView | Aceptada |
 
 ## Crear un ADR
 

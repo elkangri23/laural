@@ -1,5 +1,6 @@
 use std::{
     fs,
+    io::Read,
     path::{Component, Path, PathBuf},
     sync::{
         Arc, Mutex,
@@ -15,6 +16,53 @@ use serde_json::{Value, json};
 use tauri::{AppHandle, Emitter, Manager, State};
 
 const KEYRING_SERVICE: &str = "laural.provider";
+const MAX_PROVIDER_RESPONSE_BYTES: usize = 2_000_000;
+const MAX_ACTIVE_AI_REQUESTS: usize = 8;
+const MAX_PROJECT_SCAN_ENTRIES: usize = 1_000;
+const MAX_PROJECT_FILES: usize = 200;
+const MAX_CHAT_MESSAGES: usize = 100;
+const MAX_CONTEXT_INPUT_BYTES: usize = 1_000_000;
+
+fn validate_chat_input(
+    messages: &[ChatMessage],
+    terminal_context: &str,
+    selected_files: &[String],
+) -> Result<(), String> {
+    if messages.len() > MAX_CHAT_MESSAGES
+        || messages
+            .iter()
+            .any(|message| message.content.len() > 64_000)
+        || terminal_context.len() > MAX_CONTEXT_INPUT_BYTES
+        || selected_files.len() > 12
+        || selected_files.iter().any(|path| path.len() > 4_096)
+    {
+        return Err("La consulta supera los límites de mensajes o contexto.".into());
+    }
+    Ok(())
+}
+
+fn register_ai_request(
+    registry: &ChatStreamRegistry,
+    request_id: &str,
+    cancelled: Arc<AtomicBool>,
+) -> Result<(), String> {
+    let mut requests = registry
+        .0
+        .lock()
+        .map_err(|_| "No se pudo iniciar la consulta.".to_string())?;
+    if requests.contains_key(request_id) {
+        return Err("Ya existe una consulta con ese identificador.".into());
+    }
+    if requests.len() >= MAX_ACTIVE_AI_REQUESTS {
+        return Err("Se alcanzó el límite de 8 consultas simultáneas.".into());
+    }
+    requests.insert(request_id.to_string(), cancelled);
+    Ok(())
+}
+
+fn valid_request_id(request_id: &str) -> bool {
+    !request_id.is_empty() && request_id.len() <= 100 && !request_id.chars().any(char::is_control)
+}
 
 #[derive(Default)]
 pub struct ChatStreamRegistry(Mutex<std::collections::HashMap<String, Arc<AtomicBool>>>);
@@ -236,6 +284,9 @@ pub fn save_agent_settings(
 }
 
 fn validate_base_url(input: &str) -> Result<String, String> {
+    if input.len() > 2_048 {
+        return Err("La URL del proveedor supera el límite de 2.048 caracteres.".into());
+    }
     let url = reqwest::Url::parse(input.trim())
         .map_err(|_| "Escribe una URL válida, por ejemplo http://127.0.0.1:1234/v1.".to_string())?;
     if !matches!(url.scheme(), "http" | "https") {
@@ -274,6 +325,25 @@ fn client() -> Result<reqwest::Client, String> {
         .map_err(|error| format!("No se pudo preparar la conexión: {error}"))
 }
 
+async fn read_provider_response(response: reqwest::Response) -> Result<String, String> {
+    if response
+        .content_length()
+        .is_some_and(|length| length > MAX_PROVIDER_RESPONSE_BYTES as u64)
+    {
+        return Err("El proveedor devolvió una respuesta superior al límite de 2 MB.".into());
+    }
+    let mut stream = response.bytes_stream();
+    let mut body = Vec::new();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|_| "No se pudo leer la respuesta del proveedor.".to_string())?;
+        if body.len().saturating_add(chunk.len()) > MAX_PROVIDER_RESPONSE_BYTES {
+            return Err("El proveedor devolvió una respuesta superior al límite de 2 MB.".into());
+        }
+        body.extend_from_slice(&chunk);
+    }
+    String::from_utf8(body).map_err(|_| "El proveedor devolvió texto UTF-8 no válido.".to_string())
+}
+
 async fn get_models(base_url: &str, api_key: Option<&str>) -> Result<Vec<String>, String> {
     let http = client()?;
     let url = endpoint(base_url, "models")?;
@@ -303,10 +373,7 @@ async fn get_models(base_url: &str, api_key: Option<&str>) -> Result<Vec<String>
     }
     .map_err(|error| format!("No se pudo conectar con el proveedor: {error}"))?;
     let status = response.status();
-    let body = response
-        .text()
-        .await
-        .map_err(|error| format!("No se pudo leer la respuesta del proveedor: {error}"))?;
+    let body = read_provider_response(response).await?;
     if !status.is_success() {
         return Err(format!(
             "El proveedor respondió HTTP {status}: {}",
@@ -414,8 +481,11 @@ pub fn save_provider(app: AppHandle, input: ProviderInput) -> Result<PublicProvi
     }
     let name = input.name.trim();
     let model = input.model.trim();
-    if name.is_empty() || model.is_empty() {
+    if name.is_empty() || model.is_empty() || name.len() > 128 || model.len() > 256 {
         return Err("Indica un nombre de proveedor y un modelo.".to_string());
+    }
+    if input.api_key.as_ref().is_some_and(|key| key.len() > 16_384) {
+        return Err("La clave del proveedor supera el límite permitido.".into());
     }
     let base_url = validate_base_url(&input.base_url)?;
     let mut store = read_provider_store(&app)?;
@@ -460,6 +530,7 @@ pub async fn send_chat(
     project_path: Option<String>,
     selected_files: Vec<String>,
 ) -> Result<String, String> {
+    validate_chat_input(&messages, &terminal_context, &selected_files)?;
     let store = read_provider_store(&app)?;
     let provider = active_provider(&store)
         .cloned()
@@ -521,10 +592,7 @@ pub async fn send_chat(
         .await
         .map_err(|error| format!("No se pudo enviar la consulta: {error}"))?;
     let status = request.status();
-    let body = request
-        .text()
-        .await
-        .map_err(|error| format!("No se pudo leer la respuesta: {error}"))?;
+    let body = read_provider_response(request).await?;
     if !status.is_success() {
         return Err(format!(
             "El proveedor respondió HTTP {status}: {}",
@@ -553,15 +621,12 @@ pub async fn send_chat_stream(
     project_path: Option<String>,
     selected_files: Vec<String>,
 ) -> Result<(), String> {
-    if request_id.is_empty() || request_id.len() > 100 {
+    if !valid_request_id(&request_id) {
         return Err("El identificador de la consulta no es válido.".to_string());
     }
+    validate_chat_input(&messages, &terminal_context, &selected_files)?;
     let cancelled = Arc::new(AtomicBool::new(false));
-    registry
-        .0
-        .lock()
-        .map_err(|_| "No se pudo iniciar la consulta.".to_string())?
-        .insert(request_id.clone(), cancelled.clone());
+    register_ai_request(&registry, &request_id, cancelled.clone())?;
     let result = async {
         let store = read_provider_store(&app)?;
         let provider = active_provider(&store).cloned()
@@ -588,7 +653,7 @@ pub async fn send_chat_stream(
         let response = request.send().await.map_err(|error| format!("No se pudo enviar la consulta: {error}"))?;
         let status = response.status();
         if !status.is_success() {
-            let body = response.text().await.unwrap_or_default();
+            let body = read_provider_response(response).await?;
             return Err(format!("El proveedor respondió HTTP {status}: {}", short_body(&body)));
         }
         let mut stream = response.bytes_stream();
@@ -621,6 +686,9 @@ pub fn cancel_chat_stream(
     registry: State<'_, ChatStreamRegistry>,
     request_id: String,
 ) -> Result<(), String> {
+    if !valid_request_id(&request_id) {
+        return Err("El identificador de la consulta no es válido.".into());
+    }
     if let Some(cancelled) = registry
         .0
         .lock()
@@ -637,6 +705,9 @@ pub fn cancel_agent_plan(
     registry: State<'_, ChatStreamRegistry>,
     request_id: String,
 ) -> Result<(), String> {
+    if !valid_request_id(&request_id) {
+        return Err("El identificador de la consulta no es válido.".into());
+    }
     if let Some(cancelled) = registry
         .0
         .lock()
@@ -659,23 +730,26 @@ pub async fn plan_agent(
     project_path: Option<String>,
     selected_files: Vec<String>,
 ) -> Result<AgentPlan, String> {
-    if request_id.is_empty() || request_id.len() > 100 {
+    if !valid_request_id(&request_id) {
         return Err("El identificador de la consulta no es válido.".to_string());
     }
     let cancelled = Arc::new(AtomicBool::new(false));
-    {
-        let mut requests = registry
-            .0
-            .lock()
-            .map_err(|_| "No se pudo iniciar la consulta del agente.".to_string())?;
-        if requests.contains_key(&request_id) {
-            return Err("Ya existe una consulta con ese identificador.".to_string());
-        }
-        requests.insert(request_id.clone(), cancelled.clone());
-    }
+    register_ai_request(&registry, &request_id, cancelled.clone())?;
     let result = async {
         let task = task.trim();
         if task.is_empty() { return Err("Describe la tarea que quieres que prepare el agente.".to_string()); }
+        if task.len() > 12_000 {
+            return Err("La tarea del agente supera el límite de 12 KB.".to_string());
+        }
+        if terminal_context.len() > MAX_CONTEXT_INPUT_BYTES
+            || selected_files.len() > 12
+            || selected_files.iter().any(|path| path.len() > 4_096)
+        {
+            return Err("El contexto del agente supera los límites permitidos.".into());
+        }
+        if !matches!(shell.as_str(), "cmd" | "powershell" | "git-bash" | "wsl") {
+            return Err("El shell seleccionado no es válido.".to_string());
+        }
         if project_path.is_none() { return Err("Abre un proyecto antes de pedir al agente que lea o modifique archivos.".to_string()); }
         let store = read_provider_store(&app)?;
         let provider = active_provider(&store).cloned().ok_or_else(|| "Configura un proveedor de modelos antes de usar el agente.".to_string())?;
@@ -698,12 +772,12 @@ pub async fn plan_agent(
             }
         };
         let status = response.status();
-        let body_future = response.text();
+        let body_future = read_provider_response(response);
         tokio::pin!(body_future);
         let body = loop {
             tokio::select! {
                 _ = ticker.tick() => if cancelled.load(Ordering::Relaxed) { return Err("Planificación cancelada.".to_string()); },
-                body = &mut body_future => break body.map_err(|error| format!("No se pudo leer la respuesta del agente: {error}"))?,
+                body = &mut body_future => break body?,
             }
         };
         if !status.is_success() { return Err(format!("El proveedor respondió HTTP {status}: {}", short_body(&body))); }
@@ -905,6 +979,11 @@ fn read_selected_files(paths: &[String]) -> Result<String, String> {
     const MAX_FILES: usize = 12;
     const MAX_FILE_BYTES: usize = 32_000;
     const MAX_TOTAL_BYTES: usize = 80_000;
+    if paths.len() > MAX_FILES || paths.iter().any(|path| path.len() > 4_096) {
+        return Err(
+            "La selección supera el límite de 12 archivos o una ruta es demasiado larga.".into(),
+        );
+    }
     let mut output = String::new();
     let mut total: usize = 0;
     for path in paths.iter().take(MAX_FILES) {
@@ -921,17 +1000,32 @@ fn read_selected_files(paths: &[String]) -> Result<String, String> {
         if size > MAX_FILE_BYTES || total.saturating_add(size) > MAX_TOTAL_BYTES {
             continue;
         }
-        let bytes = fs::read(&canonical)
-            .map_err(|error| format!("No se pudo leer un archivo seleccionado: {error}"))?;
-        let Ok(content) = String::from_utf8(bytes) else {
-            continue;
+        let content = match read_limited_text(&canonical, MAX_FILE_BYTES)
+            .map_err(|error| format!("No se pudo leer un archivo seleccionado: {error}"))?
+        {
+            Some(content) => content,
+            None => continue,
         };
-        total += size;
+        if total.saturating_add(content.len()) > MAX_TOTAL_BYTES {
+            continue;
+        }
+        total += content.len();
         output.push_str(&format!("\n### {}\n", canonical.display()));
         output.push_str(&content);
         output.push('\n');
     }
     Ok(output)
+}
+
+fn read_limited_text(path: &Path, limit: usize) -> std::io::Result<Option<String>> {
+    let mut bytes = Vec::with_capacity(limit.min(8_192));
+    fs::File::open(path)?
+        .take(limit.saturating_add(1) as u64)
+        .read_to_end(&mut bytes)?;
+    if bytes.len() > limit {
+        return Ok(None);
+    }
+    Ok(String::from_utf8(bytes).ok())
 }
 
 fn collect_project_context(project_path: &str) -> Result<String, String> {
@@ -946,7 +1040,8 @@ fn collect_project_context(project_path: &str) -> Result<String, String> {
     }
 
     let mut candidates = Vec::new();
-    collect_project_files(&root, &root, 0, &mut candidates)?;
+    let mut scanned_entries = 0;
+    collect_project_files(&root, &root, 0, &mut scanned_entries, &mut candidates)?;
     candidates.sort_by_key(|path| {
         let relative = path
             .strip_prefix(&root)
@@ -973,12 +1068,16 @@ fn collect_project_context(project_path: &str) -> Result<String, String> {
         if size > MAX_FILE_BYTES || total.saturating_add(size) > MAX_TOTAL_BYTES {
             continue;
         }
-        let bytes = fs::read(&path)
-            .map_err(|error| format!("No se pudo leer parte del proyecto: {error}"))?;
-        let Ok(content) = String::from_utf8(bytes) else {
-            continue;
+        let content = match read_limited_text(&path, MAX_FILE_BYTES)
+            .map_err(|error| format!("No se pudo leer parte del proyecto: {error}"))?
+        {
+            Some(content) => content,
+            None => continue,
         };
-        total += size;
+        if total.saturating_add(content.len()) > MAX_TOTAL_BYTES {
+            continue;
+        }
+        total += content.len();
         output.push_str(&format!(
             "\n### {}\n",
             path.strip_prefix(&root).unwrap_or(&path).display()
@@ -993,18 +1092,30 @@ fn collect_project_files(
     root: &Path,
     directory: &Path,
     depth: usize,
+    scanned_entries: &mut usize,
     output: &mut Vec<PathBuf>,
 ) -> Result<(), String> {
-    if depth > 4 || output.len() >= 200 {
+    if depth > 4
+        || output.len() >= MAX_PROJECT_FILES
+        || *scanned_entries >= MAX_PROJECT_SCAN_ENTRIES
+    {
         return Ok(());
     }
-    let mut entries: Vec<_> = fs::read_dir(directory)
-        .map_err(|error| format!("No se pudo examinar el proyecto: {error}"))?
-        .filter_map(Result::ok)
-        .collect();
+    let directory_entries = fs::read_dir(directory)
+        .map_err(|error| format!("No se pudo examinar el proyecto: {error}"))?;
+    let mut entries = Vec::new();
+    for entry in directory_entries {
+        if *scanned_entries >= MAX_PROJECT_SCAN_ENTRIES {
+            break;
+        }
+        *scanned_entries += 1;
+        if let Ok(entry) = entry {
+            entries.push(entry);
+        }
+    }
     entries.sort_by_key(|entry| entry.file_name());
     for entry in entries {
-        if output.len() >= 200 {
+        if output.len() >= MAX_PROJECT_FILES || *scanned_entries >= MAX_PROJECT_SCAN_ENTRIES {
             break;
         }
         let file_type = entry
@@ -1031,7 +1142,7 @@ fn collect_project_files(
             ) {
                 continue;
             }
-            collect_project_files(root, &entry.path(), depth + 1, output)?;
+            collect_project_files(root, &entry.path(), depth + 1, scanned_entries, output)?;
         } else if file_type.is_file() && is_project_text_file(&name) {
             let path = entry.path();
             if path.starts_with(root) {
@@ -1123,6 +1234,12 @@ pub fn preview_context(
     project_path: Option<String>,
     selected_files: Vec<String>,
 ) -> Result<ContextPreview, String> {
+    if terminal_context.len() > MAX_CONTEXT_INPUT_BYTES
+        || selected_files.len() > 12
+        || selected_files.iter().any(|path| path.len() > 4_096)
+    {
+        return Err("La vista previa supera los límites de contexto permitidos.".into());
+    }
     let clean = strip_terminal_ansi(&terminal_context);
     let terminal: String = clean
         .chars()
@@ -1151,6 +1268,49 @@ pub fn preview_context(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn limita_consultas_simultaneas_y_rechaza_identificadores_repetidos() {
+        let registry = ChatStreamRegistry::default();
+        for index in 0..MAX_ACTIVE_AI_REQUESTS {
+            register_ai_request(
+                &registry,
+                &format!("consulta-{index}"),
+                Arc::new(AtomicBool::new(false)),
+            )
+            .unwrap();
+        }
+        assert!(
+            register_ai_request(&registry, "consulta-0", Arc::new(AtomicBool::new(false))).is_err()
+        );
+        assert!(
+            register_ai_request(
+                &registry,
+                "consulta-extra",
+                Arc::new(AtomicBool::new(false))
+            )
+            .is_err()
+        );
+        assert_eq!(registry.0.lock().unwrap().len(), MAX_ACTIVE_AI_REQUESTS);
+    }
+
+    #[test]
+    fn rechaza_contextos_y_mensajes_sobredimensionados_antes_de_procesarlos() {
+        let messages = vec![ChatMessage {
+            role: "user".into(),
+            content: "x".repeat(64_001),
+        }];
+        assert!(validate_chat_input(&messages, "", &[]).is_err());
+
+        let messages = (0..=MAX_CHAT_MESSAGES)
+            .map(|_| ChatMessage {
+                role: "user".into(),
+                content: "x".into(),
+            })
+            .collect::<Vec<_>>();
+        assert!(validate_chat_input(&messages, "", &[]).is_err());
+        assert!(validate_chat_input(&[], &"x".repeat(MAX_CONTEXT_INPUT_BYTES + 1), &[]).is_err());
+    }
 
     #[cfg(windows)]
     #[test]
@@ -1297,5 +1457,52 @@ mod tests {
             assert!(!is_project_text_file(name), "{name}");
         }
         assert!(is_project_text_file("README.md"));
+    }
+
+    #[test]
+    fn limita_la_lectura_de_archivos_seleccionados_y_el_escaneo_de_proyectos() {
+        let root = tempfile::tempdir().unwrap();
+        let oversized = root.path().join("grande.txt");
+        fs::write(&oversized, vec![b'x'; 33_000]).unwrap();
+        assert!(read_limited_text(&oversized, 32_000).unwrap().is_none());
+        assert!(read_selected_files(&vec![String::new(); 13]).is_err());
+
+        for index in 0..1_005 {
+            fs::write(root.path().join(format!("archivo-{index}.bin")), []).unwrap();
+        }
+        let canonical = root.path().canonicalize().unwrap();
+        let mut scanned = 0;
+        let mut files = Vec::new();
+        collect_project_files(&canonical, &canonical, 0, &mut scanned, &mut files).unwrap();
+        assert_eq!(scanned, MAX_PROJECT_SCAN_ENTRIES);
+        assert!(files.is_empty());
+    }
+
+    #[tokio::test]
+    async fn rechaza_respuestas_de_modelos_mayores_a_dos_megabytes() {
+        use std::io::{BufRead, BufReader, Write};
+        use std::net::TcpListener;
+
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let url = format!("http://{}/v1", listener.local_addr().unwrap());
+        let server = std::thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+            let reader = BufReader::new(&socket);
+            for line in reader.lines().map(Result::unwrap) {
+                if line.is_empty() {
+                    break;
+                }
+            }
+            write!(
+                socket,
+                "HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: {}\r\n\r\n",
+                MAX_PROVIDER_RESPONSE_BYTES + 1
+            )
+            .unwrap();
+        });
+
+        let error = get_models(&url, None).await.unwrap_err();
+        assert!(error.contains("límite de 2 MB"));
+        server.join().unwrap();
     }
 }

@@ -20,6 +20,8 @@ Versión inicial de Laural para escritorio Windows: frontend Tauri, procesos PTY
 | Comando peligroso propuesto | Borrar, exfiltrar, cambiar permisos o instalar software | Confirmación/reglas/automático; lista heurística bloquea patrones de alto impacto | Los patrones no entienden semántica; se pueden evadir. |
 | Ruta manipulada | Escribir fuera del proyecto | Ruta relativa, canonicalización de directorio, tamaño limitado, backup | Enlaces simbólicos/carreras necesitan revisión continua. |
 | Proveedor remoto | Retención o uso del contexto enviado | El usuario configura host; HTTPS requerido; contexto acotado | Política del proveedor controla retención y uso. |
+| Contenido web o XSS en WebView | Ejecutar JavaScript con acceso a comandos Tauri | CSP local con `script-src 'self'`, sin scripts remotos ni `unsafe-eval`; se eliminó el plugin de apertura no usado | Código local comprometido o una vulnerabilidad del WebView aún puede alcanzar permisos de la ventana. |
+| Endpoint o proyecto hostil | Agotar memoria con respuestas HTTP o árboles de archivos grandes | Límites de tamaño de respuesta y presupuesto de entradas al recorrer proyectos | El usuario aún puede consumir recursos al abrir voluntariamente un proyecto grande o iniciar muchas terminales. |
 | Fuga de API key | Incluir clave en logs, archivos o repo | Windows Credential Manager nativo; clave verificada tras guardar; no se guarda en JSON | Plugins, malware del usuario o diagnóstico del SO quedan fuera del control de Laural. |
 | Binario comprometido | Ejecutar código no revisado | Código fuente y release reproducible son objetivos de roadmap | Los instaladores actuales no están firmados ni verificados en clean install. |
 
@@ -44,6 +46,8 @@ La política debe preferir confirmación para eliminación amplia, cambios de si
 5. Instalar desde cero y revisar permisos, firma y actualizaciones de la aplicación.
 
 El backend comprueba la URL completa del perfil antes de consultar su clave al probar la conexión o actualizar el perfil. Las reglas de comandos exigen coincidencia exacta. Incluso una consulta de Git depende del ejecutable, la configuración y el entorno del shell del usuario.
+
+La auditoría inicial está registrada en [audit-report.md](audit-report.md). Los límites de respuesta HTTP, recorrido de proyectos, escrituras y concurrencia se aplican en backend. La CSP no convierte la aplicación en sandbox: la sesión de terminal hereda los permisos de Windows del usuario.
 # Actualización de seguridad de M3
 
 Los cambios aprobados del agente se preparan en el mismo directorio antes de reemplazar un archivo. Windows conserva la versión anterior en `.laural-backups`. La creación usa una operación exclusiva para no pisar un archivo creado entre la revisión y la aplicación.

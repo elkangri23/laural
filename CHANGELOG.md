@@ -2,6 +2,10 @@
 
 ## Sin publicar
 
+- Aplicada CSP local estricta en WebView y retirado el permiso de apertura externa no utilizado.
+- Limitadas las respuestas no streaming de proveedores a 2 MB, la exploración de proyectos a 1.000 entradas y 200 archivos, la concurrencia a ocho solicitudes, las escrituras/contexto del terminal a 1 MB y los datos IPC de chat/proveedor.
+- Añadidos regresiones para respuestas sobredimensionadas, identificadores/concurrencia y límites del escaneo del proyecto.
+- Documentada la primera auditoría, incluidas dependencias con avisos de mantenimiento y riesgos residuales del agente.
 - Validar la instalación limpia, actualización y desinstalación de Windows en entornos de usuario.
 - Revisar la validación del agente con perfiles y alias personalizados de PowerShell, CMD, WSL y Git Bash.
 
