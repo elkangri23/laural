@@ -14,7 +14,7 @@ Estado al 20 de noviembre de 2026. «Implementado» describe código presente; �
 
 ## M1 — Estabilidad de terminal (parcial)
 
-- Prueba con PTY real completada en los cuatro shells: arranque, redimensionamiento, salida larga y cierre. El reinicio desde la interfaz instalada sigue pendiente.
+- Prueba manual de PTY superada en PowerShell, CMD, Git Bash y WSL Ubuntu: entrada, redimensionamiento, recepción de las 1.500 líneas y código de salida 37. El reinicio y la comprobación de bloques en la interfaz instalada siguen pendientes.
 - El panel espera a sus suscripciones antes de arrancar y coordina el cierre durante el arranque. Las regresiones cubren ocultar y mostrar una sesión y el cierre temprano. El evento de salida de Tauri vacía el registro y termina los procesos aunque la entrada esté ocupada. Probado con CMD real desde el backend. Pendiente validar el cierre desde la ventana instalada.
 - Validar bloques de comandos, entrada editada y resultados en PowerShell, CMD, Git Bash y WSL; bash/prompt de usuario pueden sustituir las marcas de integración.
 - Probar instalación y desinstalación limpia en Windows 10 y 11.
@@ -55,7 +55,7 @@ Backend obligatorio, cuentas de usuario, monetización, telemetría por defecto,
 El centro de configuración está implementado en el código posterior a alpha.4. Consulta el [backlog con criterios de cierre](BACKLOG.md).
 
 M2 y M3 incorporan vinculación del perfil a su URL y un conjunto acotado de consultas automáticas de Git. Consulta el backlog para el estado de validación.
-M1 incluye una prueba de PTY real ejecutada en los cuatro shells para inicio, redimensionamiento, lectura, escritura y cierre con código 37. Falta verificar los bloques en la interfaz instalada.
+M1: prueba de PTY real superada en los cuatro shells locales el 20 de noviembre de 2026. La prueba que queda ignorada por defecto en CI se ejecutó explícitamente y pasó; la comprobación visual de bloques en la ventana de Laural sigue pendiente.
 La interfaz y el backend disponen de informes automáticos de cobertura en cada push y pull request.
 M3 incorpora escritura temporal, reemplazo con backup por versión, creación exclusiva y pruebas de archivo bloqueado y aprobaciones concurrentes. La interfaz permite restaurar y limpiar copias manualmente con confirmación. La retención automática configurable continúa pendiente.
 La interfaz lista las veinte copias recientes de un archivo del agente. Cada restauración respalda primero la versión actual.
