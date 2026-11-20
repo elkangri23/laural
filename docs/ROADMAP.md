@@ -1,6 +1,6 @@
 # Hoja de ruta
 
-Estado al 19 de noviembre de 2026. «Implementado» describe código presente; «validación pendiente» señala que hace falta ejecutar y comprobar el flujo en Windows.
+Estado al 20 de noviembre de 2026. «Implementado» describe código presente; «validación pendiente» señala que hace falta ejecutar y comprobar el flujo en Windows.
 
 ## M0 — Esqueleto de producto (implementado; validación de uso pendiente)
 
@@ -30,13 +30,13 @@ Estado al 19 de noviembre de 2026. «Implementado» describe código presente; �
 
 - Planes y estados por acción; modos de autorización configurables.
 - Cancelación de generación, interrupción de comando activo y corte del ciclo automático implementados; probar cancelación y resultado en cada shell.
-- Añadir análisis de riesgo por shell; las reglas actuales son heurísticas y no aíslan comandos.
+- Implementada una primera validación de operadores por shell y detección de alias de riesgo comunes. Las reglas siguen siendo heurísticas, no aíslan comandos y no interpretan perfiles personalizados.
 - Revisar límites de rutas y respaldos bajo condiciones de carrera.
 - Registrar acciones localmente sin guardar secretos ni enviar telemetría.
 
 ## M4 — Distribución pública (parcial)
 
-- Build de MSI/NSIS disponible localmente y workflow para GitHub Actions.
+- Build de MSI/NSIS disponible localmente; alpha.12 adjunta instaladores Windows x64 y SHA-256. Workflow para GitHub Actions.
 - Workflow de GitHub Actions ejecutado correctamente en GitHub y artefactos generados.
 - Validar instalación limpia, actualización y desinstalación.
 - Firma y procedencia verificable dependen de credenciales de publicación que no están configuradas.
@@ -63,3 +63,6 @@ M3 incluye limpieza manual de copias por archivo con confirmación. La retenció
 M3 añade una primera validación de operadores específica para cada shell antes de aplicar los modos automático o reglas. La validación de perfiles personalizados sigue pendiente.
 M3 aplica ahora filtros de sintaxis por shell en Rust antes de los modos automático y reglas. La aprobación explícita permite composiciones tras revisión humana.
 M3 reconoce alias comunes de borrado y escritura en el filtro de comandos que requieren aprobación manual.
+
+
+La alpha.12 publica instaladores Windows reproducidos localmente. La validación de comandos del agente continúa siendo heurística: queda pendiente revisar perfiles de shell personalizados y completar pruebas manuales de instalación y de los cuatro shells.

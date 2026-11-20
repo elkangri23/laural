@@ -2,24 +2,31 @@
 
 ## Sin publicar
 
-- Se pueden listar y restaurar copias anteriores de los archivos modificados por el agente, con confirmación y respaldo del contenido actual.
+- Validar la instalación limpia, actualización y desinstalación de Windows en entornos de usuario.
+- Revisar la validación del agente con perfiles y alias personalizados de PowerShell, CMD, WSL y Git Bash.
 
-- El agente prepara los cambios de archivo antes de aplicarlos, preserva versiones anteriores y rechaza rutas de dispositivos y enlaces simbólicos.
+## 0.1.0-alpha.12
+
+- El agente aplica una primera validación de operadores según PowerShell, CMD, WSL o Git Bash antes de los modos automático y reglas.
+- Se reconocen alias habituales de borrado y escritura para exigir aprobación manual.
+- Se generan instaladores MSI y NSIS de Windows x64 y se publican sus sumas SHA-256.
+
+## 0.1.0-alpha.11 y anteriores
+
+- Se pueden listar y restaurar copias anteriores de archivos modificados por el agente; cada restauración respalda el estado actual.
+- Añadida limpieza manual confirmada de copias de seguridad por archivo.
+- Los cambios del agente se preparan y preservan mediante archivos temporales y copias versionadas; se rechazan rutas de dispositivos y enlaces simbólicos.
 
 ## 0.1.0-alpha.7
 
 - Al salir de la aplicación se cierran las sesiones activas aunque haya una escritura en curso. El contexto de salida larga y los bloques comparten un recorte que respeta caracteres Unicode.
-
 - La terminal registra los eventos antes de iniciar el shell, conserva la sesión al ocultar una pestaña y ofrece reiniciar una sesión terminada. Al cerrar una pestaña se libera su contexto.
-
 - La consulta de modelos repite una vez los fallos temporales de conexión o pasarela.
-
 - El chat conserva los caracteres divididos entre paquetes, procesa eventos de varias líneas y avisa si la respuesta está incompleta, vacía, mal formada o supera el límite.
 
 ## 0.1.0-alpha.6
 
 - Corregidas las marcas de bloque en Windows PowerShell 5 y Bash, incluida la primera orden de una sesión de PowerShell.
-
 - Cada perfil conserva su URL y sus credenciales. Las reglas del agente autorizan solo líneas completas y el modo automático admite tres consultas de Git.
 
 ## 0.1.0-alpha.5
@@ -34,25 +41,18 @@
 - Respuestas incrementales del chat con cancelación e historial local borrable, limitado a 100 mensajes.
 - División de terminal horizontal además de la vertical.
 - Bloqueo adicional de operadores de composición y sustitución en comandos del agente.
-- Icono/favico propio y workflow de build de Windows para GitHub Actions.
+- Icono propio y workflow de build de Windows para GitHub Actions.
 - Hoja de ruta y requisitos actualizados para separar implementación y validación manual.
-
-Los cambios relevantes se anotan por versión. La versión `0.1.0` es un prototipo de desarrollo, no una release estable.
 
 ## 0.1.0 — Prototipo inicial
 
-- Terminal Tauri con PowerShell, CMD, WSL y Git Bash.
-- Pestañas y división vertical.
+- Terminal Tauri con PowerShell, CMD, WSL y Git Bash, pestañas y división vertical.
 - Configuración de proveedores, descubrimiento de modelos y chat contextual inicial.
 - Planificación del agente, políticas iniciales de comandos y cambios de archivo con aprobación.
-- Selector de doce paletas, modos claro/oscuro y preferencia local.
+- Selector de doce paletas, modos claro/oscuro y preferencias locales.
 - Sistema visual documentado y accesible desde el panel Apariencia.
-- Paquetes Windows x64 MSI y NSIS generados; falta validación de instalación limpia.
 - Escritura temporal y reemplazo de archivos aprobados con copia de seguridad por versión.
 - Rechazo de nombres de dispositivos y destinos con puntos de reanálisis.
-## Sin publicar
+- Paquetes Windows x64 MSI y NSIS; la instalación limpia sigue pendiente de validación.
 
-- Se pueden listar y restaurar copias anteriores de los archivos modificados por el agente, con confirmación y respaldo del contenido actual.
-- Añade limpieza confirmada de copias de seguridad por archivo.
-- Los modos automático y reglas bloquean operadores y expansiones de variables según el shell de la terminal.
-- El filtro del agente reconoce alias habituales de borrado y escritura de archivos.
+La versión `0.1.0` es un prototipo de desarrollo, no una release estable.
