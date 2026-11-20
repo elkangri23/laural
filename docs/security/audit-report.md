@@ -19,6 +19,7 @@
 | Media | El filtro del agente omitía operaciones habituales de copia, movimiento y truncado | Ampliada la lista de comandos que requieren confirmación en PowerShell, CMD y shells tipo Bash; incluye regresiones. La detección sigue siendo heurística y no evalúa perfiles personalizados. |
 | Media | La restauración y limpieza de copias podían sufrir sustitución de directorios entre validación y acceso | En Windows se fijan los directorios intermedios; la restauración abre el archivo como objeto ordinario sin permitir escritura o borrado concurrente. Regresiones rechazan enlaces y verifican el bloqueo durante lectura y que limpiar no afecta archivos externos. |
 | Media | El destino de una edición podía convertirse en un reparse point después de la validación inicial | Se vuelve a verificar que el destino sea un archivo ordinario inmediatamente antes de `ReplaceFileW`. La operación Win32 aún es por ruta y conserva una ventana de carrera pequeña; resolverla requiere una operación relativa al handle del directorio. |
+| Media | El plan del agente podía aceptar rutas que la operación posterior rechazaría, incluidos nombres reservados de Windows o rutas con espacios externos | La vista previa del plan, la escritura, la restauración y las copias usan el mismo validador. Los espacios al inicio o final se rechazan sin normalizarlos. |
 | Alta | Las releases anteriores no tenían un instalador desde la app ni autenticación criptográfica de los paquetes de actualización | Integrado updater Tauri, HTTPS, clave pública fija, artefactos NSIS firmados y secreto privado en GitHub Actions. Falta validar el salto real entre versiones publicadas. |
 
 ## Dependencias
@@ -38,6 +39,6 @@
 Se ejecutaron `git diff --check`, `npm audit`, `cargo audit`, pruebas frontend con cobertura, cobertura Rust y build NSIS de Windows con generación de `.sig`. La prueba estática no sustituye la validación manual del instalador y actualización real.
 
 - Interfaz: 26 pruebas pasadas; cobertura global 28,93 % de líneas. La suite no monta `App.tsx`; `TerminalPane.tsx` tiene 88,88 % de líneas y el gestor de actualizaciones 95,29 %.
-- Backend Rust: 30 pruebas pasadas, 0 fallidas, 1 ignorada; cobertura 51,58 % de líneas (53,99 % de regiones). `lib.rs` y `providers.rs` requieren más cobertura.
+- Backend Rust (20-11-2026): 31 pruebas pasadas, 0 fallidas, 1 ignorada; cobertura 52,96 % de líneas (55,22 % de regiones). `lib.rs` y `providers.rs` requieren más cobertura.
 - `npm audit`: 0 vulnerabilidades; `cargo check`, build frontend, build NSIS y `git diff --check` pasan. `cargo audit` conserva tres avisos heredados de mantenimiento/soundness de dependencias no usadas en el artefacto Windows.
 - Build NSIS: completado con firma de updater; generó `Laural_0.1.0-alpha.14_x64-setup.exe` (2,97 MiB) y su archivo `.sig`. Instalación limpia, aviso de Windows y actualización real aún requieren ejecución manual.

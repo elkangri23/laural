@@ -1,7 +1,7 @@
 use std::{
     fs,
     io::Read,
-    path::{Component, Path, PathBuf},
+    path::{Path, PathBuf},
     sync::{
         Arc, Mutex,
         atomic::{AtomicBool, Ordering},
@@ -9,6 +9,7 @@ use std::{
     time::Duration,
 };
 
+use crate::agent_files;
 use futures_util::StreamExt;
 use keyring::Entry;
 use serde::{Deserialize, Serialize};
@@ -979,20 +980,14 @@ fn parse_agent_plan(content: &str) -> Result<AgentPlan, String> {
                 content,
                 reason,
             } => {
-                *path = path.trim().to_string();
+                if path.trim() != path {
+                    return Err(
+                        "El plan contiene una ruta con espacios al inicio o al final.".into(),
+                    );
+                }
                 *reason = reason.trim().chars().take(400).collect();
                 let relative = Path::new(path);
-                if relative.as_os_str().is_empty()
-                    || relative.is_absolute()
-                    || relative.components().any(|component| {
-                        matches!(
-                            component,
-                            Component::ParentDir | Component::RootDir | Component::Prefix(_)
-                        )
-                    })
-                    || relative.starts_with(".laural-backups")
-                    || content.len() > 100_000
-                {
+                if !agent_files::is_valid_relative_path(relative) || content.len() > 100_000 {
                     return Err(
                         "El plan contiene una ruta inválida o un archivo demasiado grande."
                             .to_string(),
@@ -1439,6 +1434,32 @@ mod tests {
             assert!(command_is_high_risk(command), "{command}");
         }
         assert!(!command_is_high_risk("git status --short"));
+    }
+
+    #[test]
+    fn rechaza_rutas_de_archivo_invalidas_antes_de_mostrar_el_plan() {
+        for path in [
+            "CON",
+            "archivo.",
+            "archivo ",
+            "carpeta/.laural-backups/datos.txt",
+            "carpeta/../fuera.txt",
+        ] {
+            let content = json!({
+                "summary": "Actualizar el proyecto",
+                "actions": [{
+                    "type": "write_file",
+                    "path": path,
+                    "content": "contenido",
+                    "reason": "Prueba"
+                }]
+            })
+            .to_string();
+            assert!(parse_agent_plan(&content).is_err(), "{path}");
+        }
+
+        let content = r#"{"summary":"Crear archivo","actions":[{"type":"write_file","path":"src/nuevo.rs","content":"fn main() {}","reason":"Agregar ejemplo"}]}"#;
+        assert!(parse_agent_plan(content).is_ok());
     }
 
     #[tokio::test]

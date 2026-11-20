@@ -40,6 +40,13 @@ fn valid_name(name: &str) -> bool {
             .any(|c| c.is_control() || "<>:\"|?*".contains(c))
 }
 
+pub(crate) fn is_valid_relative_path(path: &Path) -> bool {
+    path.file_name().is_some()
+        && path.components().all(
+            |part| matches!(part, Component::Normal(name) if name.to_str().is_some_and(valid_name)),
+        )
+}
+
 #[cfg(windows)]
 fn pin_directory(path: &Path) -> io::Result<File> {
     use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
@@ -185,11 +192,7 @@ pub(crate) fn save_with_retention(
         return Err("El archivo supera el límite de 100 KB.".into());
     }
     let relative = Path::new(relative);
-    if relative.file_name().is_none()
-        || !relative
-            .components()
-            .all(|part| matches!(part, Component::Normal(s) if s.to_str().is_some_and(valid_name)))
-    {
+    if !is_valid_relative_path(relative) {
         return Err("La ruta debe ser relativa y usar nombres de archivo válidos.".into());
     }
     let _edit = EDIT.lock().map_err(|_| "No se pudo iniciar la edición.")?;
@@ -264,11 +267,7 @@ fn write_file(root: &Path, relative: &Path, content: &[u8]) -> io::Result<String
 
 pub(crate) fn list_backups(root: &Path, relative: &str) -> Result<Vec<String>, String> {
     let relative = Path::new(relative);
-    if relative.file_name().is_none()
-        || !relative
-            .components()
-            .all(|part| matches!(part, Component::Normal(s) if s.to_str().is_some_and(valid_name)))
-    {
+    if !is_valid_relative_path(relative) {
         return Err("La ruta del archivo no es válida.".into());
     }
     let root = root
@@ -427,11 +426,7 @@ pub(crate) fn restore_with_retention(
         return Err("La versión de copia no es válida.".into());
     }
     let relative = Path::new(relative);
-    if relative.file_name().is_none()
-        || !relative
-            .components()
-            .all(|part| matches!(part, Component::Normal(s) if s.to_str().is_some_and(valid_name)))
-    {
+    if !is_valid_relative_path(relative) {
         return Err("La ruta del archivo no es válida.".into());
     }
     let root_path = root
@@ -483,11 +478,7 @@ pub(crate) fn clear_backups(root: &Path, relative: &str, approved: bool) -> Resu
         return Err("Eliminar copias requiere confirmación explícita.".into());
     }
     let relative = Path::new(relative);
-    if relative.file_name().is_none()
-        || !relative
-            .components()
-            .all(|part| matches!(part, Component::Normal(s) if s.to_str().is_some_and(valid_name)))
-    {
+    if !is_valid_relative_path(relative) {
         return Err("La ruta del archivo no es válida.".into());
     }
     let _edit = EDIT.lock().map_err(|_| "No se pudo iniciar la limpieza.")?;

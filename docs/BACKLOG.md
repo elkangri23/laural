@@ -4,7 +4,7 @@ La [hoja de ruta](ROADMAP.md) agrupa los hitos. Esta lista ordena el trabajo abi
 
 | Prioridad | Entrega | Criterio de cierre |
 | --- | --- | --- |
-| Alta · M3 | Autorización del agente | Verificar comandos y rutas por shell, documentar límites y resolver los casos que permitan eludir aprobación. |
+| Alta · M3 | Autorización del agente | El plan y las operaciones de archivo comparten la validación de rutas; se rechazan nombres reservados de Windows y la carpeta interna antes de mostrar el plan. Siguen pendientes casos de comandos por shell, perfiles personalizados y límites heurísticos. |
 | Alta · M3 | Carreras en archivos del proyecto | La restauración y limpieza fijan directorios del respaldo; restaurar mantiene abierto el archivo sin permitir reemplazo en Windows. La escritura vuelve a validar que el destino sea un archivo ordinario antes del reemplazo atómico. Sigue pendiente una primitiva Win32 relativa a directorio que elimine la carrera residual del destino basada en ruta. |
 | Alta · M1 | Terminal y bloques | PTY real superada en PowerShell, CMD, Git Bash y WSL Ubuntu: entrada, resize, recepción de 1.500 líneas y código 37. Las regresiones de interfaz cubren captura de comandos, OSC de bloques/códigos de salida y líneas editadas. El ejecutable local abrió, pero Windows no permitió activar su ventana tras dos intentos; pendiente validar visualmente bloques, interrupción, cierre y reinicio desde la ventana instalada con perfiles personalizados. |
 | Alta · M4 | Distribución | MSI en `es-ES` y NSIS en español configurados. Registrar instalación limpia, actualización y desinstalación en Windows 10/11 x64, incluidos datos residuales. |

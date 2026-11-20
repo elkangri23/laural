@@ -31,7 +31,7 @@ Estado al 20 de noviembre de 2026. «Implementado» describe código presente; �
 
 ## M3 — Agente (parcial)
 
-- Planes y estados por acción; modos de autorización configurables.
+- Planes y estados por acción; modos de autorización configurables. El validador de rutas ahora se comparte entre la vista previa del plan y las operaciones de archivo; los nombres reservados de Windows y la carpeta interna se rechazan antes de presentar el plan.
 - Cancelación de generación, interrupción de comando activo y corte del ciclo automático implementados; probar cancelación y resultado en cada shell.
 - Implementada una primera validación de operadores por shell y detección de alias y operaciones comunes de borrado, copia, movimiento, truncado y escritura. Las reglas siguen siendo heurísticas, no aíslan comandos y no interpretan perfiles personalizados.
 - La restauración y limpieza fijan los directorios intermedios de las copias en Windows; la restauración además abre el archivo sin seguir reparse points. El reemplazo vuelve a validar el destino justo antes de la operación atómica; queda revisar la carrera residual de la operación Win32 basada en ruta.
