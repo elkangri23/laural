@@ -1,17 +1,16 @@
 use std::{
     collections::HashMap,
-    fs,
     io::{Read, Write},
-    path::{Component, Path, PathBuf},
+    path::{Path, PathBuf},
     sync::{Arc, Mutex},
     thread,
-    time::{SystemTime, UNIX_EPOCH},
 };
 
 use portable_pty::{Child, CommandBuilder, MasterPty, PtySize, native_pty_system};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 
+mod agent_files;
 mod chat_stream;
 mod providers;
 
@@ -344,82 +343,12 @@ fn apply_agent_file(
     content: String,
     approved: bool,
 ) -> Result<String, String> {
-    if !approved {
-        return Err("Los cambios de archivos siempre requieren aprobación explícita.".to_string());
-    }
-    if content.len() > 100_000 {
-        return Err("El archivo supera el límite de 100 KB.".to_string());
-    }
-    let root = Path::new(&project_path)
-        .canonicalize()
-        .map_err(|error| format!("No se pudo abrir el proyecto: {error}"))?;
-    if !root.is_dir() {
-        return Err("La carpeta de proyecto ya no está disponible.".to_string());
-    }
-    let relative = Path::new(&relative_path);
-    if relative.as_os_str().is_empty()
-        || relative.is_absolute()
-        || relative
-            .components()
-            .any(|component| !matches!(component, Component::Normal(_)))
-        || relative.starts_with(".laural-backups")
-    {
-        return Err("La ruta debe ser relativa y permanecer dentro del proyecto.".to_string());
-    }
-    let target = root.join(relative);
-    let parent = target
-        .parent()
-        .ok_or_else(|| "La ruta del archivo no es válida.".to_string())?;
-    fs::create_dir_all(parent)
-        .map_err(|error| format!("No se pudo crear la carpeta del archivo: {error}"))?;
-    let canonical_parent = parent
-        .canonicalize()
-        .map_err(|error| format!("No se pudo comprobar la carpeta del archivo: {error}"))?;
-    if !canonical_parent.starts_with(&root) {
-        return Err("La ruta sale de la carpeta del proyecto.".to_string());
-    }
-    if target.exists() {
-        let canonical_target = target
-            .canonicalize()
-            .map_err(|error| format!("No se pudo comprobar el archivo existente: {error}"))?;
-        if !canonical_target.starts_with(&root) || !canonical_target.is_file() {
-            return Err(
-                "El destino existente no es un archivo seguro dentro del proyecto.".to_string(),
-            );
-        }
-        let backup_root = root.join(".laural-backups");
-        fs::create_dir_all(&backup_root)
-            .map_err(|error| format!("No se pudo crear la copia de seguridad: {error}"))?;
-        let canonical_backup_root = backup_root
-            .canonicalize()
-            .map_err(|error| format!("No se pudo comprobar la carpeta de copias: {error}"))?;
-        if !canonical_backup_root.starts_with(&root) {
-            return Err("La carpeta de copias de seguridad sale del proyecto.".to_string());
-        }
-        let relative_target = canonical_target
-            .strip_prefix(&root)
-            .map_err(|_| "La ruta sale de la carpeta del proyecto.".to_string())?;
-        let mut backup = canonical_backup_root.join(relative_target);
-        let stamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis();
-        let file_name = relative_target
-            .file_name()
-            .ok_or_else(|| "El archivo no tiene un nombre válido.".to_string())?
-            .to_string_lossy();
-        backup.set_file_name(format!("{file_name}.{stamp}.bak"));
-        let backup_parent = backup
-            .parent()
-            .ok_or_else(|| "No se pudo crear la carpeta de copias.".to_string())?;
-        fs::create_dir_all(backup_parent)
-            .map_err(|error| format!("No se pudo crear la carpeta de copias: {error}"))?;
-        fs::copy(&canonical_target, &backup)
-            .map_err(|error| format!("No se pudo guardar la copia de seguridad: {error}"))?;
-    }
-    fs::write(&target, content)
-        .map_err(|error| format!("No se pudo guardar el archivo: {error}"))?;
-    Ok(format!("Archivo guardado: {}", relative.display()))
+    agent_files::save(
+        Path::new(&project_path),
+        &relative_path,
+        content.as_bytes(),
+        approved,
+    )
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

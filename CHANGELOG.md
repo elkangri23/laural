@@ -1,5 +1,9 @@
 # Registro de cambios
 
+## Sin publicar
+
+- El agente prepara los cambios de archivo antes de aplicarlos, preserva versiones anteriores y rechaza rutas de dispositivos y enlaces simbólicos.
+
 ## 0.1.0-alpha.7
 
 - Al salir de la aplicación se cierran las sesiones activas aunque haya una escritura en curso. El contexto de salida larga y los bloques comparten un recorte que respeta caracteres Unicode.
@@ -42,3 +46,5 @@ Los cambios relevantes se anotan por versión. La versión `0.1.0` es un prototi
 - Selector de doce paletas, modos claro/oscuro y preferencia local.
 - Sistema visual documentado y accesible desde el panel Apariencia.
 - Paquetes Windows x64 MSI y NSIS generados; falta validación de instalación limpia.
+- Escritura temporal y reemplazo de archivos aprobados con copia de seguridad por versión.
+- Rechazo de nombres de dispositivos y destinos con puntos de reanálisis.

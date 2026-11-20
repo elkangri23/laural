@@ -112,7 +112,7 @@ Si la conexión se corta antes del final o el proveedor envía un evento inváli
 
 **Objetivo:** permitir que una propuesta edite un archivo dentro del proyecto.
 
-**Flujo principal:** el modelo propone una ruta relativa y contenido; la persona revisa la propuesta; al aprobar, Laural comprueba canonical path, guarda respaldo si el archivo existía y escribe el contenido.
+**Flujo principal:** el modelo propone una ruta relativa y contenido; la persona revisa la propuesta; al aprobar, Laural valida la ruta, prepara el contenido y sustituye el archivo. Si ya existía, conserva su versión anterior en `.laural-backups`.
 
 **Criterios:** nunca sobrescribir fuera de la carpeta canónica; rechazar rutas absolutas y `..`; limitar tamaño; mantener respaldos excluidos del contexto automático.
 

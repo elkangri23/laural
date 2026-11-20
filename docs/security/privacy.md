@@ -24,3 +24,4 @@ No existe telemetría ni cuenta de Laural en el MVP. La sincronización queda di
 ## Solicitudes de soporte
 
 Antes de compartir un log o captura, inspecciónala y elimina rutas privadas, prompts, salida del terminal, URLs internas y tokens. La clave API nunca debe ser parte de un reporte.
+La escritura del agente prepara un temporal y sincroniza sus datos antes de aplicar el cambio. En Windows, cada sustitución deja la versión previa en `.laural-backups/edicion-<id>/`. No existe restauración o limpieza automática. Un programa externo puede modificar el mismo archivo entre la aprobación y el guardado, y los backups crecen hasta su eliminación manual.

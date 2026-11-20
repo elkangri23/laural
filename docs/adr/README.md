@@ -22,3 +22,5 @@ Los ADR registran por qué se eligió una opción y qué costes trae. Un ADR ace
 Copia [la plantilla](template.md), asigna el siguiente número y registra la decisión antes de implementar un cambio que afecte a arquitectura, privacidad, compatibilidad o formatos persistidos.
 
 [ADR-0013 — Configuración local unificada](0013-configuracion-local.md)
+[ADR-0014 — Escritura segura de archivos del agente](0014-escritura-segura-agente.md)
+[ADR-0014 — Escritura segura de archivos del agente](0014-escritura-segura-agente.md)

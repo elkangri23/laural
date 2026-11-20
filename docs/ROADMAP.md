@@ -56,3 +56,4 @@ El centro de configuración está implementado en el código posterior a alpha.4
 M2 y M3 incorporan vinculación del perfil a su URL y un conjunto acotado de consultas automáticas de Git. Consulta el backlog para el estado de validación.
 M1 incluye una prueba de PTY real ejecutada en los cuatro shells para inicio, redimensionamiento, lectura, escritura y cierre con código 37. Falta verificar los bloques en la interfaz instalada.
 La interfaz y el backend disponen de informes automáticos de cobertura en cada push y pull request.
+M3 incorpora escritura temporal, reemplazo con backup por versión, creación exclusiva y pruebas de archivo bloqueado y aprobaciones concurrentes. Pendiente restauración y limpieza de backups.
