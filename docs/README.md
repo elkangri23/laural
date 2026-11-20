@@ -26,3 +26,4 @@ Este índice reúne las decisiones y requisitos de la etapa inicial. El código 
 ## Guías de uso y mantenimiento
 
 [Instalación](instalacion.md) · [Configuración](configuracion.md) · [Backlog](BACKLOG.md) · [Hoja de ruta](ROADMAP.md) · [Decisiones de arquitectura](adr/README.md) · [Casos de uso](use-cases/README.md)
+[Restaurar copias de cambios del agente](restaurar-copias.md)

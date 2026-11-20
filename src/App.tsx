@@ -71,6 +71,8 @@ function App() {
   });
   const [chatBusy, setChatBusy] = useState(false);
   const [contextFiles, setContextFiles] = useState<string[]>([]);
+  const [backupVersions, setBackupVersions] = useState<Record<number, string[]>>({});
+  const [selectedBackups, setSelectedBackups] = useState<Record<number, string>>({});
   const [agentPlan, setAgentPlan] = useState<AgentPlan | null>(null);
   const [agentPlanBusy, setAgentPlanBusy] = useState(false);
   const [agentCommandBusy, setAgentCommandBusy] = useState(false);
@@ -440,6 +442,25 @@ function App() {
     }
   }
 
+  async function showBackups(index: number, path: string) {
+    if (!projectPath) return;
+    try {
+      const versions = await invoke<string[]>("list_agent_backups", { projectPath, relativePath: path });
+      setBackupVersions(current => ({ ...current, [index]: versions }));
+      if (versions[0]) setSelectedBackups(current => ({ ...current, [index]: versions[0] }));
+      else updateAgentAction(index, { result: "No hay copias para este archivo." });
+    } catch (error) { updateAgentAction(index, { result: String(error) }); }
+  }
+
+  async function restoreBackup(index: number, path: string) {
+    const version = selectedBackups[index];
+    if (!projectPath || !version || !window.confirm(`¿Restaurar ${path} desde ${version}? La versión actual se guardará como otra copia.`)) return;
+    try {
+      const result = await invoke<string>("restore_agent_backup", { projectPath, relativePath: path, version, approved: true });
+      updateAgentAction(index, { result });
+      await showBackups(index, path);
+    } catch (error) { updateAgentAction(index, { result: String(error) }); }
+  }
   async function changeExecutionMode(mode: ExecutionMode) {
     setExecutionMode(mode);
     setPolicyNotice("");
@@ -663,8 +684,8 @@ function App() {
                   <div className="agent-action-top"><span className="action-number">{index + 1}</span><span className="action-type">{action.type === "run_command" ? "COMANDO" : "CAMBIO DE ARCHIVO"}</span><span className="action-status">{action.status === "completed" ? "COMPLETADO" : action.status === "cancelled" ? "DETENIDO" : action.status === "submitted" ? "ENVIADO" : action.status === "needs_review" ? "REVISAR" : action.status === "applied" ? "APLICADO" : action.status === "running" || action.status === "applying" ? "EN CURSO" : action.status === "error" ? "ERROR" : action.status === "rejected" ? "DESCARTADO" : "PENDIENTE"}</span></div>
                   <p className="action-reason">{action.reason}</p>
                   {action.type === "run_command" ? <pre className="action-code">{action.command}</pre> : <details className="file-preview"><summary>{action.path}</summary><pre>{action.content}</pre></details>}
-                  {action.result && <p className={`action-result ${action.status === "error" || action.status === "needs_review" ? "warning" : ""}`}>{action.result}</p>}
-                  <div className="action-buttons">{action.type === "run_command" ? !["submitted", "completed", "cancelled", "rejected", "running"].includes(action.status ?? "") && <button className="action-primary" onClick={() => void executeAgentCommand(index, true)}>{action.status === "needs_review" ? "Revisar y ejecutar" : "Aprobar y ejecutar"}</button> : action.status !== "applied" && action.status !== "rejected" && <button className="action-primary" onClick={() => void applyAgentFile(index)} disabled={!projectPath || action.status === "applying"}>Aplicar cambio</button>}
+                  {action.type === "write_file" && backupVersions[index]?.length ? <div className="backup-controls"><select aria-label="Versión de copia" value={selectedBackups[index] ?? ""} onChange={event => setSelectedBackups(current => ({ ...current, [index]: event.currentTarget.value }))}>{backupVersions[index].map(version => <option key={version} value={version}>{version}</option>)}</select><button className="action-quiet" onClick={() => void restoreBackup(index, action.path)}>Restaurar copia</button></div> : null}{action.result && <p className={`action-result ${action.status === "error" || action.status === "needs_review" ? "warning" : ""}`}>{action.result}</p>}
+                  <div className="action-buttons">{action.type === "write_file" && action.status === "applied" ? <button className="action-quiet" onClick={() => void showBackups(index, action.path)}>Copias de seguridad</button> : null}{action.type === "run_command" ? !["submitted", "completed", "cancelled", "rejected", "running"].includes(action.status ?? "") && <button className="action-primary" onClick={() => void executeAgentCommand(index, true)}>{action.status === "needs_review" ? "Revisar y ejecutar" : "Aprobar y ejecutar"}</button> : action.status !== "applied" && action.status !== "rejected" && <button className="action-primary" onClick={() => void applyAgentFile(index)} disabled={!projectPath || action.status === "applying"}>Aplicar cambio</button>}
                     {!(["submitted", "completed", "cancelled", "applied", "rejected", "running", "applying"].includes(action.status ?? "")) && <button className="action-quiet" onClick={() => updateAgentAction(index, { status: "rejected", result: "Acción descartada." })}>Descartar</button>}</div>
                 </article>)}</div>
               </div>}

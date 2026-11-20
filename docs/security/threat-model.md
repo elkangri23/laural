@@ -49,3 +49,4 @@ El backend comprueba la URL completa del perfil antes de consultar su clave al p
 Los cambios aprobados del agente se preparan en el mismo directorio antes de reemplazar un archivo. Windows conserva la versión anterior en `.laural-backups`. La creación usa una operación exclusiva para no pisar un archivo creado entre la revisión y la aplicación.
 
 No reemplazar un archivo externo que cambió simultáneamente sigue requiriendo la coordinación de otras aplicaciones. Si el archivo está bloqueado, Laural informa el error y conserva los datos previos. La carpeta `.laural-backups` ocupa espacio hasta que el usuario la limpie manualmente. La restauración desde la interfaz sigue pendiente.
+La restauración del agente requiere confirmación explícita y solo acepta versiones regulares bajo el directorio de copias. Cada restauración genera una nueva copia del archivo actual.

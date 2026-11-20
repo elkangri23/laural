@@ -194,6 +194,114 @@ fn write_file(root: &Path, relative: &Path, content: &[u8]) -> io::Result<String
     ))
 }
 
+pub(crate) fn list_backups(root: &Path, relative: &str) -> Result<Vec<String>, String> {
+    let relative = Path::new(relative);
+    if relative.file_name().is_none()
+        || !relative
+            .components()
+            .all(|part| matches!(part, Component::Normal(s) if s.to_str().is_some_and(valid_name)))
+    {
+        return Err("La ruta del archivo no es válida.".into());
+    }
+    let root = root
+        .canonicalize()
+        .map_err(|_| "No se encontró el proyecto.")?;
+    let backups = root.join(BACKUPS);
+    if !backups.exists() {
+        return Ok(Vec::new());
+    }
+    let _root_pin = pin_directory(&root).map_err(|_| "No se pudo comprobar el proyecto.")?;
+    let _backup_pin =
+        pin_directory(&backups).map_err(|_| "No se pudo comprobar el almacén de copias.")?;
+    let name = relative.file_name().unwrap();
+    let mut result = Vec::new();
+    for entry in fs::read_dir(backups).map_err(|_| "No se pudieron listar las copias.")? {
+        let entry = entry.map_err(|_| "No se pudo leer una copia.")?;
+        let version = entry.file_name().to_string_lossy().into_owned();
+        if !version.starts_with("edicion-")
+            || !version
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-')
+        {
+            continue;
+        }
+        let version_root = entry.path();
+        let Ok(_version_pin) = pin_directory(&version_root) else {
+            continue;
+        };
+        let candidate = version_root.join(relative);
+        let safe_parent = candidate.parent().is_some_and(|parent| {
+            parent
+                .canonicalize()
+                .is_ok_and(|canonical| canonical.starts_with(&version_root))
+        });
+        if safe_parent
+            && fs::symlink_metadata(&candidate)
+                .is_ok_and(|meta| meta.file_type().is_file() && meta.len() <= 100_000)
+        {
+            result.push(version);
+        }
+    }
+    result.sort();
+    result.reverse();
+    result.truncate(20);
+    let _ = name;
+    Ok(result)
+}
+
+pub(crate) fn restore(
+    root: &Path,
+    relative: &str,
+    version: &str,
+    approved: bool,
+) -> Result<String, String> {
+    if !approved {
+        return Err("Restaurar una copia requiere aprobación explícita.".into());
+    }
+    if !version.starts_with("edicion-")
+        || !version
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-')
+    {
+        return Err("La versión de copia no es válida.".into());
+    }
+    let relative = Path::new(relative);
+    if relative.file_name().is_none()
+        || !relative
+            .components()
+            .all(|part| matches!(part, Component::Normal(s) if s.to_str().is_some_and(valid_name)))
+    {
+        return Err("La ruta del archivo no es válida.".into());
+    }
+    let root_path = root
+        .canonicalize()
+        .map_err(|_| "No se encontró el proyecto.")?;
+    let backup_root = root_path.join(BACKUPS);
+    let _root_pin = pin_directory(&root_path).map_err(|_| "No se pudo comprobar el proyecto.")?;
+    let _backup_pin =
+        pin_directory(&backup_root).map_err(|_| "No se pudo comprobar el almacén de copias.")?;
+    let version_path = backup_root.join(version);
+    let _version_pin = pin_directory(&version_path).map_err(|_| "No se encontró esa copia.")?;
+    let backup = version_path.join(relative);
+    let parent = backup.parent().ok_or("La ruta de la copia no es válida.")?;
+    let canonical_parent = parent
+        .canonicalize()
+        .map_err(|_| "No se encontró esa copia.")?;
+    if !canonical_parent.starts_with(&version_path) {
+        return Err("La ruta de la copia sale de su versión.".into());
+    }
+    let metadata = fs::symlink_metadata(&backup).map_err(|_| "No se encontró esa copia.")?;
+    if !metadata.file_type().is_file() || metadata.len() > 100_000 {
+        return Err("La copia no es un archivo válido.".into());
+    }
+    let content = fs::read(&backup).map_err(|_| "No se pudo leer la copia.")?;
+    save(
+        &root_path,
+        relative.to_str().unwrap_or_default(),
+        &content,
+        true,
+    )
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -262,6 +370,38 @@ mod tests {
         drop(held);
         assert_eq!(fs::read(target).unwrap(), b"original");
         assert_eq!(root.path().join(BACKUPS).read_dir().unwrap().count(), 0);
+    }
+
+    #[test]
+    fn restaura_una_copia_y_conserva_el_archivo_reemplazado() {
+        let root = tempfile::tempdir().unwrap();
+        save(root.path(), "src/config.json", b"antes", true).unwrap();
+        save(root.path(), "src/config.json", b"actual", true).unwrap();
+        let versions = list_backups(root.path(), "src/config.json").unwrap();
+        assert_eq!(versions.len(), 1);
+        assert!(restore(root.path(), "src/config.json", &versions[0], false).is_err());
+        restore(root.path(), "src/config.json", &versions[0], true).unwrap();
+        assert_eq!(
+            fs::read(root.path().join("src/config.json")).unwrap(),
+            b"antes"
+        );
+        assert_eq!(
+            list_backups(root.path(), "src/config.json").unwrap().len(),
+            2
+        );
+        assert!(restore(root.path(), "src/config.json", "../../fuera", true).is_err());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn ignora_enlaces_simbolicos_en_las_copias() {
+        use std::os::windows::fs::symlink_file;
+        let root = tempfile::tempdir().unwrap();
+        let outside = tempfile::NamedTempFile::new().unwrap();
+        let version = root.path().join(BACKUPS).join("edicion-prueba");
+        fs::create_dir_all(&version).unwrap();
+        symlink_file(outside.path(), version.join("secreto.txt")).unwrap();
+        assert!(list_backups(root.path(), "secreto.txt").unwrap().is_empty());
     }
 
     #[test]

@@ -2,6 +2,8 @@
 
 ## Sin publicar
 
+- Se pueden listar y restaurar copias anteriores de los archivos modificados por el agente, con confirmación y respaldo del contenido actual.
+
 - El agente prepara los cambios de archivo antes de aplicarlos, preserva versiones anteriores y rechaza rutas de dispositivos y enlaces simbólicos.
 
 ## 0.1.0-alpha.7
@@ -48,3 +50,6 @@ Los cambios relevantes se anotan por versión. La versión `0.1.0` es un prototi
 - Paquetes Windows x64 MSI y NSIS generados; falta validación de instalación limpia.
 - Escritura temporal y reemplazo de archivos aprobados con copia de seguridad por versión.
 - Rechazo de nombres de dispositivos y destinos con puntos de reanálisis.
+## Sin publicar
+
+- Se pueden listar y restaurar copias anteriores de los archivos modificados por el agente, con confirmación y respaldo del contenido actual.

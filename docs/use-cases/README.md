@@ -147,3 +147,4 @@ Si la conexión se corta antes del final o el proveedor envía un evento inváli
 Desde la barra lateral, abre Configuración. Selecciona Apariencia para cambiar la paleta o Proveedores y modelos para conectar un servidor. En Permisos del agente elige el modo y, si corresponde, guarda una regla por línea. Al reabrir Laural deben recuperarse los ajustes guardados. Si falla el guardado, revisa el mensaje del formulario antes de ejecutar el agente.
 
 Al cambiar de servidor en UC-13, se crea un perfil independiente. Al habilitar reglas, el comando completo debe coincidir con una entrada guardada. Los argumentos adicionales requieren revisión.
+Después de aplicar un archivo, el usuario puede listar copias y restaurar una versión anterior. La restauración conserva primero el contenido actual.

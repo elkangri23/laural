@@ -57,3 +57,5 @@ M2 y M3 incorporan vinculación del perfil a su URL y un conjunto acotado de con
 M1 incluye una prueba de PTY real ejecutada en los cuatro shells para inicio, redimensionamiento, lectura, escritura y cierre con código 37. Falta verificar los bloques en la interfaz instalada.
 La interfaz y el backend disponen de informes automáticos de cobertura en cada push y pull request.
 M3 incorpora escritura temporal, reemplazo con backup por versión, creación exclusiva y pruebas de archivo bloqueado y aprobaciones concurrentes. Pendiente restauración y limpieza de backups.
+La interfaz permite listar y restaurar las veinte copias recientes de un archivo del agente. Cada restauración respalda primero la versión actual. La limpieza sigue pendiente.
+M3 ya permite restaurar desde la tarjeta del cambio, con confirmación y backup del estado actual. Pendiente limpieza de versiones antiguas.

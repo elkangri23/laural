@@ -351,6 +351,20 @@ fn apply_agent_file(
     )
 }
 
+#[tauri::command]
+fn list_agent_backups(project_path: String, relative_path: String) -> Result<Vec<String>, String> {
+    agent_files::list_backups(Path::new(&project_path), &relative_path)
+}
+
+#[tauri::command]
+fn restore_agent_backup(
+    project_path: String,
+    relative_path: String,
+    version: String,
+    approved: bool,
+) -> Result<String, String> {
+    agent_files::restore(Path::new(&project_path), &relative_path, &version, approved)
+}
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -365,6 +379,8 @@ pub fn run() {
             close_terminal,
             run_agent_command,
             apply_agent_file,
+            list_agent_backups,
+            restore_agent_backup,
             providers::get_provider,
             providers::get_providers,
             providers::select_provider,
