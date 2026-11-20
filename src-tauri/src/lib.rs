@@ -22,6 +22,7 @@ struct TerminalIo {
 struct TerminalSession {
     io: Arc<Mutex<TerminalIo>>,
     child: Box<dyn Child + Send + Sync>,
+    shell: String,
 }
 
 #[derive(Default)]
@@ -208,6 +209,7 @@ fn create_terminal(
             writer,
         })),
         child,
+        shell: shell.clone(),
     };
     let reader_id = terminal_id.clone();
     thread::Builder::new()
@@ -315,15 +317,17 @@ fn run_agent_command(
     command: String,
     approved: bool,
 ) -> Result<(), String> {
-    providers::authorize_agent_command(&app, &command, approved)?;
-    let session = state
+    let sessions = state
         .state
         .lock()
-        .map_err(|_| "No se pudo acceder al registro de terminales.".to_string())?
+        .map_err(|_| "No se pudo acceder al registro de terminales.".to_string())?;
+    let terminal = sessions
         .sessions
         .get(&terminal_id)
-        .map(|session| Arc::clone(&session.io))
         .ok_or_else(|| "La terminal seleccionada ya no está disponible.".to_string())?;
+    providers::authorize_agent_command(&app, &terminal.shell, &command, approved)?;
+    let session = Arc::clone(&terminal.io);
+    drop(sessions);
     let mut session = session
         .lock()
         .map_err(|_| "No se pudo escribir en la terminal.".to_string())?;
@@ -439,6 +443,7 @@ mod terminal_tests {
             TerminalSession {
                 io: Arc::clone(&io),
                 child,
+                shell: "cmd".into(),
             },
         );
         let (done, result) = mpsc::channel();

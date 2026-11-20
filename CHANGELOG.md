@@ -54,3 +54,4 @@ Los cambios relevantes se anotan por versión. La versión `0.1.0` es un prototi
 
 - Se pueden listar y restaurar copias anteriores de los archivos modificados por el agente, con confirmación y respaldo del contenido actual.
 - Añade limpieza confirmada de copias de seguridad por archivo.
+- Los modos automático y reglas bloquean operadores y expansiones de variables según el shell de la terminal.

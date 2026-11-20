@@ -705,6 +705,7 @@ pub async fn plan_agent(
 
 pub fn authorize_agent_command(
     app: &AppHandle,
+    shell: &str,
     command: &str,
     approved: bool,
 ) -> Result<(), String> {
@@ -719,12 +720,8 @@ pub fn authorize_agent_command(
             "El comando está vacío, es demasiado largo o contiene varias líneas.".to_string(),
         );
     }
-    if command.contains('&')
-        || command.contains('`')
-        || command.contains("$(")
-        || command.contains("%{")
-    {
-        return Err("Se bloquean operadores y sustituciones de shell en comandos del agente. Ejecuta esa composición manualmente.".to_string());
+    if !approved {
+        validate_agent_shell_syntax(shell, command)?;
     }
     if approved {
         return Ok(());
@@ -747,6 +744,25 @@ pub fn authorize_agent_command(
         }
         _ => Err("Tu política actual requiere confirmar cada comando.".to_string()),
     }
+}
+
+fn validate_agent_shell_syntax(shell: &str, command: &str) -> Result<(), String> {
+    let operators = match shell {
+        "powershell" => ";|&><`",
+        "cmd" => "&|<>^%!()",
+        "wsl" | "git-bash" => ";|&><`!#",
+        _ => return Err("El shell no está admitido para comandos del agente.".into()),
+    };
+    if command.contains("$(")
+        || command.contains("${")
+        || command.chars().any(|c| operators.contains(c))
+    {
+        return Err(
+            "El comando contiene operadores o expansión de shell y requiere ejecución manual."
+                .into(),
+        );
+    }
+    Ok(())
 }
 
 fn command_is_high_risk(command: &str) -> bool {
@@ -1108,6 +1124,35 @@ pub fn preview_context(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bloquea_operadores_segun_el_shell() {
+        for (shell, command) in [
+            ("powershell", "Get-ChildItem; Remove-Item x"),
+            ("cmd", "echo x^&whoami"),
+            ("cmd", "echo %PATH%"),
+            ("wsl", "echo x$(whoami)"),
+            ("git-bash", "echo x# comentario"),
+            ("git-bash", "echo x | cat"),
+        ] {
+            assert!(
+                validate_agent_shell_syntax(shell, command).is_err(),
+                "{shell}: {command}"
+            );
+        }
+        for (shell, command) in [
+            ("powershell", "git status"),
+            ("cmd", "git status --short"),
+            ("wsl", "git rev-parse --show-toplevel"),
+            ("git-bash", "git status"),
+        ] {
+            assert!(
+                validate_agent_shell_syntax(shell, command).is_ok(),
+                "{shell}: {command}"
+            );
+        }
+        assert!(validate_agent_shell_syntax("unknown", "git status").is_err());
+    }
 
     #[tokio::test]
     async fn recupera_los_modelos_tras_un_error_temporal() {

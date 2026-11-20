@@ -16,3 +16,4 @@ Para conectar un servidor local, usa la URL base que muestra el servidor, inclui
 La elección del shell, las divisiones y los archivos adjuntos se hacen en la sesión de trabajo. Usa **Revisar contexto** antes de enviar contenido a un proveedor. Consulta la [política de datos](security/privacy.md).
 
 Cada perfil guardado conserva su URL base. Para cambiar de servidor, crea otro perfil e introduce la clave correspondiente.
+Las reglas no permiten operadores ni expansión de variables del shell. Escribe cada orden simple como una entrada independiente; las composiciones requieren aprobación manual.

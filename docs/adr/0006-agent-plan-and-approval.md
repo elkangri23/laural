@@ -27,3 +27,4 @@ El modelo devuelve un plan acotado de acciones. El backend valida formato, longi
 - El usuario debe revisar las acciones y considerar el modo manual para proyectos sensibles.
 
 Revisión posterior a alpha.5: las reglas guardadas pasan a compararse con la línea completa, respetando mayúsculas. El modo automático admite las tres consultas de Git enumeradas en la guía de configuración. Ampliar argumentos requiere registrar otra regla o confirmar el comando.
+Actualización: antes de aplicar reglas o ejecución automática, Rust rechaza metacaracteres según el shell guardado en la sesión. La aprobación humana mantiene la ejecución de órdenes compuestas tras validar controles y tamaño.
