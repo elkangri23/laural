@@ -3,6 +3,7 @@
 ## Sin publicar
 
 - Verificada la compatibilidad del descubrimiento de modelos con respuestas OpenAI-compatible y Ollama; se ordenan y deduplican los nombres, y se rechazan listas inválidas o vacías.
+- Unificadas la preparación del historial y el contexto de chat normal/streaming; una regresión comprueba límites, roles admitidos y etiquetado del contexto como dato no confiable.
 - Añadidas regresiones de la aplicación principal para persistencia de tema/modo, disponibilidad de los doce temas, pestañas de shell y orientación de paneles divididos.
 - Agrupadas las actualizaciones visuales de salida de terminal en lotes de 33 ms; el contexto queda actualizado inmediatamente y el último lote se muestra al terminar el comando.
 - Evitados los renders de los paneles xterm cuando solo se actualizan los bloques de salida; el reinicio conserva una función estable por pestaña.
