@@ -69,7 +69,7 @@ Estado al 21 de noviembre de 2026. «Implementado» describe código presente; �
 
 ## Después del MVP
 
-- Sincronización opcional de configuración y proveedores, diferida según decisión del producto. No sincronizar secretos sin cifrado de extremo a extremo, consentimiento, revocación y recuperación documentados.
+- Propuesta documentada en [ADR-0020](adr/0020-perfiles-y-sincronizacion-opcional.md) y [plan de diseño](plans/sincronizacion-preferencias.md): transferencia manual con opción explícita de incluir claves, y sincronización con cuenta que las excluye. No implementado; requiere aceptar alojamiento, privacidad, recuperación y tratamiento de endpoints.
 - Evaluar otras plataformas tras acordar estrategia de PTY, credenciales y empaquetado.
 
 ## No planificado para el MVP

@@ -7,6 +7,7 @@ Este índice reúne las decisiones y requisitos de la etapa inicial. El código 
 - [Visión, objetivos y límites](product/vision-and-scope.md)
 - [Brief de producto](PRODUCT_BRIEF.md)
 - [Hoja de ruta](ROADMAP.md)
+- [Plan de perfiles, exportación/importación y sincronización opcional](plans/sincronizacion-preferencias.md)
 - [Sistema visual: 12 temas y modos](ui/design-system.md)
 - [Configuración de desarrollo](development/setup.md)
 
