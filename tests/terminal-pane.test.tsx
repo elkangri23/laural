@@ -5,8 +5,8 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import TerminalPane from "../src/components/TerminalPane";
 import { themes } from "../src/themes";
 
-const { invoke, listen, write, onData, registerOscHandler } = vi.hoisted(() => ({
-  invoke: vi.fn(), listen: vi.fn(), write: vi.fn(), onData: vi.fn(), registerOscHandler: vi.fn(),
+const { invoke, listen, write, onData, registerOscHandler, terminalOptions } = vi.hoisted(() => ({
+  invoke: vi.fn(), listen: vi.fn(), write: vi.fn(), onData: vi.fn(), registerOscHandler: vi.fn(), terminalOptions: vi.fn(),
 }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 vi.mock("@tauri-apps/api/event", () => ({ listen }));
@@ -14,6 +14,7 @@ vi.mock("@xterm/addon-fit", () => ({ FitAddon: class { fit() {} } }));
 vi.mock("@xterm/xterm", () => ({
   Terminal: class {
     options = {}; parser = { registerOscHandler };
+    constructor(options: unknown) { terminalOptions(options); }
     write = write; writeln = write;
     loadAddon() {} open() {} focus() {} dispose() {}
     onData = onData;
@@ -68,6 +69,11 @@ test("ocultar la pestaña conserva el proceso y su salida; salir permite reinici
   expect(removeOutput).toHaveBeenCalledOnce();
   expect(removeExit).toHaveBeenCalledOnce();
   expect(invoke).toHaveBeenCalledWith("close_terminal", { terminalId: "uno" });
+});
+
+test("limita el historial en memoria del terminal a 2.500 líneas", async () => {
+  await act(async () => root!.render(pane()));
+  expect(terminalOptions).toHaveBeenCalledWith(expect.objectContaining({ scrollback: 2_500 }));
 });
 
 test("cerrar mientras se registra la salida evita arrancar el proceso", async () => {

@@ -7,6 +7,7 @@ import { terminalTheme, type AppearanceMode, type ThemeDefinition } from "../the
 import "@xterm/xterm/css/xterm.css";
 
 type Shell = "powershell" | "cmd" | "wsl" | "git-bash";
+const TERMINAL_SCROLLBACK_LINES = 2_500;
 type OutputEvent = { terminalId: string; data: number[] };
 type TerminalPaneProps = { terminalId: string; shell: Shell; cwd: string | null; visible: boolean; active: boolean; onRestart: (terminalId: string) => void; theme: ThemeDefinition; appearance: AppearanceMode; onTextOutput: (terminalId: string, text: string) => void; onCommandSubmit: (terminalId: string, command: string) => void; onCommandFinish: (terminalId: string, exitCode: number | null) => void };
 
@@ -28,7 +29,7 @@ function TerminalPane({ terminalId, shell, cwd, visible, active, onRestart, them
       fontFamily: "'Cascadia Code', 'JetBrains Mono', Consolas, monospace",
       fontSize: 13,
       lineHeight: 1.45,
-      scrollback: 5000,
+      scrollback: TERMINAL_SCROLLBACK_LINES,
       theme: terminalTheme(theme, appearance),
     });
     const fitAddon = new FitAddon();

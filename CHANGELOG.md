@@ -5,6 +5,7 @@
 - Añadidas regresiones de la aplicación principal para persistencia de tema/modo, disponibilidad de los doce temas, pestañas de shell y orientación de paneles divididos.
 - Agrupadas las actualizaciones visuales de salida de terminal en lotes de 33 ms; el contexto queda actualizado inmediatamente y el último lote se muestra al terminar el comando.
 - Evitados los renders de los paneles xterm cuando solo se actualizan los bloques de salida; el reinicio conserva una función estable por pestaña.
+- Reducido el historial xterm por pestaña de 5.000 a 2.500 líneas; los bloques mantienen los últimos 8.000 caracteres y se conservan hasta 80 bloques. El contexto del asistente mantiene su límite de 24.000 caracteres.
 - Configuración incluye un historial local y borrable de actividad del agente con solo tipo de acción, resultado y hora.
 - El agente rechaza al recibir el plan los nombres reservados, rutas inválidas de Windows y la carpeta interna de copias; la comprobación se comparte con las operaciones de archivo.
 - En Windows, los archivos existentes se mueven a backup y se sustituyen mediante handles con renombrado sin sobrescritura; se fijan los directorios ante cambios concurrentes y se restaura el original si el segundo paso falla y el destino sigue libre.

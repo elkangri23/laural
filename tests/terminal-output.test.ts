@@ -18,3 +18,12 @@ test("el recorte respeta los caracteres que ocupan dos unidades UTF-16", () => {
   expect(appendTerminalOutput("", "📁" + suffix)).toBe(suffix);
   expect(appendTerminalOutput("📁", "")).toBe("📁");
 });
+
+test("mantiene una cola menor para los bloques visuales de comandos", () => {
+  const limit = 8_000;
+  const first = "a".repeat(limit);
+  const output = appendTerminalOutput(first, "fin", limit);
+
+  expect(output).toHaveLength(limit);
+  expect(output).toBe(`${"a".repeat(limit - 3)}fin`);
+});

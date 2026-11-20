@@ -1,4 +1,4 @@
-import { appendTerminalOutput } from "./terminalOutput";
+import { appendTerminalOutput, COMMAND_BLOCK_OUTPUT_LIMIT } from "./terminalOutput";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { BackupRetentionControl } from "./components/BackupRetentionControl";
 import { AgentActivity } from "./components/AgentActivity";
@@ -23,6 +23,7 @@ type PlanAction =
   | { type: "write_file"; path: string; content: string; reason: string; status?: string; result?: string };
 type AgentPlan = { summary: string; actions: PlanAction[] };
 const COMMAND_OUTPUT_BATCH_MS = 33;
+const MAX_COMMAND_BLOCKS = 80;
 
 const shellNames: Record<Shell, string> = {
   powershell: "PowerShell",
@@ -149,7 +150,7 @@ function App() {
     if (outputByBlock.size === 0) return;
     setCommandBlocks((blocks) => blocks.map((block) => {
       const text = outputByBlock.get(block.id);
-      return text ? { ...block, output: appendTerminalOutput(block.output, text) } : block;
+      return text ? { ...block, output: appendTerminalOutput(block.output, text, COMMAND_BLOCK_OUTPUT_LIMIT) } : block;
     }));
   }, []);
 
@@ -159,7 +160,7 @@ function App() {
     const blockId = activeCommandBlockRef.current[terminalId];
     if (!blockId) return;
     const pending = pendingCommandOutputRef.current;
-    pending[terminalId] = appendTerminalOutput(pending[terminalId] ?? "", text);
+    pending[terminalId] = appendTerminalOutput(pending[terminalId] ?? "", text, COMMAND_BLOCK_OUTPUT_LIMIT);
     if (outputFlushTimerRef.current === null) {
       outputFlushTimerRef.current = window.setTimeout(flushCommandOutput, COMMAND_OUTPUT_BATCH_MS);
     }
@@ -179,7 +180,7 @@ function App() {
     setCommandBlocks((blocks) => [
       ...blocks.map((block) => block.id === previous ? { ...block, status: "finished" as const } : block),
       { id, terminalId, command, output: "", status: "running" as const, exitCode: null },
-    ].slice(-160));
+    ].slice(-MAX_COMMAND_BLOCKS));
   }, [flushCommandOutput]);
 
   const finishCommandBlock = useCallback((terminalId: string, exitCode: number | null) => {
