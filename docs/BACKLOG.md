@@ -12,6 +12,7 @@ La [hoja de ruta](ROADMAP.md) agrupa los hitos. Esta lista ordena el trabajo abi
 | Media · M4 | Firma | Publicar paquetes firmados cuando haya certificado y comprobar el editor en Windows. |
 | Diferida | Sincronización opcional | Acordar alcance, cifrado y recuperación antes de implementar. |
 | Alta · M4 | Seguridad de distribución | CSP y permisos mínimos aplicados; límites de memoria/recorrido añadidos. Antes de estable: instalar limpio, firmar/verificar actualizaciones y revisar el modelo de confianza del agente por shell. |
+| Alta · M4 | Actualizador | Integración firmada y flujo de release implementados. Validar en Windows una actualización real de alpha.14 a una release posterior, fallos de red/firma, preferencia automática y reinicio con terminales abiertas. |
 
 Auditoría inicial: [informe de seguridad](security/audit-report.md). Los filtros de comandos siguen siendo heurísticos y Laural no aísla los procesos del shell.
 

@@ -142,6 +142,14 @@ Si la conexión se corta antes del final o el proveedor envía un evento inváli
 
 **Criterios:** hay exactamente doce opciones etiquetadas, cada una ofrece modo claro y oscuro, la selección activa se anuncia con `aria-pressed`, el tema persiste al reiniciar y el terminal mantiene su sesión al cambiar colores.
 
+## UC-14 — Consultar e instalar actualizaciones
+
+**Objetivo:** mantener Laural actualizado desde sus publicaciones oficiales sin una cuenta propia.
+
+**Flujo principal:** en el primer inicio, elegir instalación manual o automática. La app consulta al abrir y cada seis horas. En modo manual, el usuario abre el aviso, descarga, ve el estado «lista para instalar» y pulsa **Instalar y reiniciar**. En modo automático, Laural descarga e instala al encontrar una versión nueva. En Configuración se muestra la versión actual y se puede buscar de inmediato.
+
+**Criterios:** las actualizaciones usan HTTPS y deben superar la verificación de firma antes de instalarse. Una consulta fallida ofrece reintentar y no bloquea el resto de la app. Instalar cierra las sesiones de terminal abiertas. Las versiones previas a alpha.14 requieren una instalación manual inicial.
+
 ## UC-13 — Gestionar preferencias del equipo
 
 Desde la barra lateral, abre Configuración. Selecciona Apariencia para cambiar la paleta o Proveedores y modelos para conectar un servidor. En Permisos del agente elige el modo y, si corresponde, guarda una regla por línea. Al reabrir Laural deben recuperarse los ajustes guardados. Si falla el guardado, revisa el mensaje del formulario antes de ejecutar el agente.

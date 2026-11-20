@@ -1,7 +1,7 @@
 {
   "name": "laural",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.0-alpha.14",
   "description": "Terminal de escritorio con IA local y agentes configurables",
   "license": "MIT",
   "type": "module",
@@ -17,6 +17,7 @@
   "dependencies": {
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-dialog": "^2.8.4",
+    "@tauri-apps/plugin-updater": "^2.14.1",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
     "react": "^19.1.0",

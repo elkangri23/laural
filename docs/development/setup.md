@@ -55,6 +55,14 @@ En Windows, instala el instrumental Rust una vez con `rustup component add llvm-
 
 Abre `coverage/index.html` para la interfaz y `src-tauri/target/llvm-cov/html/index.html` para Rust. GitHub Actions publica ambos informes en el artefacto informes-cobertura. Interpreta los porcentajes por capa. Las pruebas de instalación, PTY y conexión con proveedores requieren validación adicional.
 
+## Publicar una release con actualizador
+
+Incrementa la misma versión semántica en `package.json`, `src-tauri/Cargo.toml` y `src-tauri/tauri.conf.json`, actualiza `CHANGELOG.md` y crea una etiqueta `v<versión>`. El workflow `.github/workflows/windows-release.yml` compila NSIS x64, firma los artefactos, crea la release alpha y actualiza `updates/latest.json` en `main`.
+
+El repositorio necesita los secretos `TAURI_SIGNING_PRIVATE_KEY` y `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. Para crear una pareja inicial, ejecuta `npm run tauri signer generate -- --write-keys <ruta-fuera-del-repositorio>` y responde al diálogo protegido para definir la contraseña. Fija la clave pública resultante en `tauri.conf.json` y transmite la clave privada/contraseña a `gh secret set` por entrada estándar, sin imprimirlas. No añadas las claves al repositorio, a los logs ni a una incidencia. Conserva una copia de recuperación cifrada: sin la clave privada original no se pueden firmar actualizaciones compatibles con los clientes instalados.
+
+El instalador alpha.14 es el primero con capacidad de autoactualización; los anteriores deben descargar e instalar manualmente esa versión. La firma del updater no sustituye Authenticode ni la comprobación manual de un paquete cuando la fuente de publicación está comprometida.
+
 ### Comprobar terminales reales en Windows
 
 Con PowerShell, CMD, Git Bash y una distribución predeterminada de WSL disponibles, ejecuta desde la raíz:

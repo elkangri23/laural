@@ -1,6 +1,6 @@
 [package]
 name = "laural"
-version = "0.1.0"
+version = "0.1.0-alpha.14"
 description = "Terminal de escritorio con IA local y agentes configurables"
 authors = ["Laural contributors"]
 license = "MIT"
@@ -29,6 +29,7 @@ tokio = { version = "1", features = ["time", "macros"] }
 keyring = { version = "3.6", features = ["windows-native"] }
 tauri-plugin-dialog = "2"
 tempfile = "3"
+tauri-plugin-updater = "2.14.1"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem"] }

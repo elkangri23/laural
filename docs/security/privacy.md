@@ -9,6 +9,7 @@
 | Modo y comandos exactos del agente | `agent.json` | Son preferencias locales. |
 | Historial de chat | No se persiste en la versión actual | La memoria en UI dura solo lo que mantenga la sesión. |
 | Preferencia de apariencia | `localStorage` del WebView | Solo almacena modo y tema seleccionados. |
+| Preferencia de actualización | `localStorage` del WebView | Solo registra instalación manual o automática. La consulta contacta GitHub al iniciar y cada seis horas. |
 | Respaldo de archivo sobrescrito por agente | `.laural-backups` en el proyecto | Se conservan todas por defecto; el usuario puede habilitar retención y eliminación automática de versiones antiguas por archivo. |
 
 ## Qué puede salir del equipo
@@ -20,6 +21,8 @@ La lista y límites de contexto son protección contra exceso accidental, no una
 ## Telemetría y sincronización
 
 No existe telemetría ni cuenta de Laural en el MVP. La sincronización queda diferida; perfiles y credenciales no se envían a servicio alguno de Laural.
+
+El updater consulta `raw.githubusercontent.com` y descarga el instalador desde GitHub Releases. Esas solicitudes pueden revelar a GitHub la dirección IP y metadatos HTTP habituales. La firma se verifica localmente antes de instalar; no se envían configuración, claves de proveedores ni contenido del terminal al servicio de actualizaciones.
 
 El WebView aplica una política CSP local: bloquea scripts externos, `eval`, objetos y frames; conserva estilos inline requeridos por la interfaz, e IPC de Tauri. Las conexiones del frontend a endpoints de modelos se realizan desde Rust, no desde el navegador.
 

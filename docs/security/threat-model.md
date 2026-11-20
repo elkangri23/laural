@@ -23,7 +23,8 @@ Versión inicial de Laural para escritorio Windows: frontend Tauri, procesos PTY
 | Contenido web o XSS en WebView | Ejecutar JavaScript con acceso a comandos Tauri | CSP local con `script-src 'self'`, sin scripts remotos ni `unsafe-eval`; se eliminó el plugin de apertura no usado | Código local comprometido o una vulnerabilidad del WebView aún puede alcanzar permisos de la ventana. |
 | Endpoint o proyecto hostil | Agotar memoria con respuestas HTTP o árboles de archivos grandes | Límites de tamaño de respuesta y presupuesto de entradas al recorrer proyectos | El usuario aún puede consumir recursos al abrir voluntariamente un proyecto grande o iniciar muchas terminales. |
 | Fuga de API key | Incluir clave en logs, archivos o repo | Windows Credential Manager nativo; clave verificada tras guardar; no se guarda en JSON | Plugins, malware del usuario o diagnóstico del SO quedan fuera del control de Laural. |
-| Binario comprometido | Ejecutar código no revisado | Código fuente y release reproducible son objetivos de roadmap | Los instaladores actuales no están firmados ni verificados en clean install. |
+| Binario comprometido | Ejecutar código no revisado | El updater verifica la firma criptográfica del paquete; el código y las releases son públicos | Los instaladores no tienen Authenticode; la publicación, la clave y la instalación limpia requieren validación continua. |
+| Manifiesto o instalador de actualización sustituido | Ejecutar un instalador malicioso | HTTPS, manifiesto publicado desde el repositorio y validación de firma criptográfica del paquete con clave pública embebida | El compromiso de la cuenta/repo o la pérdida de la clave privada permite publicar actualizaciones; GitHub Actions y la cadena de compilación siguen dentro de la confianza. |
 
 ## Límites de seguridad
 
@@ -32,6 +33,7 @@ Versión inicial de Laural para escritorio Windows: frontend Tauri, procesos PTY
 - El modo automático puede aceptar comandos que el clasificador no detecte como peligrosos.
 - El proveedor recibe prompts y contexto que el usuario envía, según su configuración.
 - Permisos Tauri y CSP deben mantenerse revisados; no habilitar plugins/capacidades genéricas sin justificación.
+- La firma del updater autentica paquetes frente a una clave de publicación; no aísla el workflow, no evita compromiso de la clave y no equivale a firma Authenticode.
 
 ## Tratamiento de alto impacto
 

@@ -25,6 +25,7 @@ Los requisitos distinguen el alcance acordado del estado actual del prototipo. �
 | FR-17 | Elegir entre 12 paletas visuales y cambiar entre modo claro y oscuro. | Implementación inicial |
 | FR-18 | Mantener la preferencia de apariencia tras reiniciar Laural. | Implementación inicial; localStorage |
 | FR-19 | Revisar el contexto terminal/proyecto/archivos antes de enviarlo al proveedor. | Implementación inicial; muestra el contenido con los mismos límites de envío |
+| FR-20 | Consultar, descargar e instalar actualizaciones de GitHub; permitir decisión manual o instalación automática y mostrar versión. | Integrado para instaladores NSIS de Windows; validación real de release pendiente |
 
 ## No funcionales
 
@@ -41,6 +42,7 @@ Los requisitos distinguen el alcance acordado del estado actual del prototipo. �
 | NFR-09 | Sin telemetría por defecto. | Ningún evento de uso sale a un servicio de Laural. |
 | NFR-10 | Portabilidad de datos futura. | Configuración no secreta legible y documentada; sincronización requiere decisión y diseño separados. |
 | NFR-11 | Legibilidad visual. | Contraste de texto y controles legibles en las 12 paletas y en ambos modos; cambio de tema no debe reiniciar shells. |
+| NFR-12 | Integridad de actualizaciones. | HTTPS y firma del paquete verificada con clave pública antes de instalación; secreto privado solo en GitHub Actions. |
 
 ## Supuestos y dependencias
 

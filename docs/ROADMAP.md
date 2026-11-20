@@ -40,8 +40,10 @@ Estado al 20 de noviembre de 2026. «Implementado» describe código presente; �
 
 - Build de MSI/NSIS disponible localmente; alpha.13 configura MSI `es-ES` y NSIS en español. Pendiente validar ambos instaladores en una instalación limpia.
 - Workflow de GitHub Actions ejecutado correctamente en GitHub y artefactos generados.
+- Updater Tauri integrado para NSIS x64: preferencia manual/automática, chequeo al inicio y cada seis horas, descarga separada, reinicio y versión en Configuración. Falta validar una actualización real de alpha.14 a la siguiente release.
+- Firma del updater configurada con clave privada como secreto de GitHub Actions y clave pública fijada en la app; firma Authenticode sigue fuera del alcance.
 - Validar instalación limpia, actualización y desinstalación.
-- Firma y procedencia verificable dependen de credenciales de publicación que no están configuradas.
+- El flujo automático de release y manifiesto depende de que el workflow se ejecute correctamente en GitHub; validar la publicación de alpha.14.
 - Resolver incidencias críticas de validación manual antes de declarar estable.
 
 ## Auditoría de seguridad (primera revisión completada; validación manual pendiente)

@@ -9,6 +9,9 @@ Abre **Configuración** en la barra lateral. Los ajustes pertenecen al equipo ac
 | Permisos del agente | Confirmar cada comando pide revisión. Ejecutar reglas permitidas usa comandos completos con coincidencia exacta, uno por línea. Automático admite únicamente `git status`, `git status --short` y `git rev-parse --show-toplevel`. Los cambios de archivos requieren aprobación. |
 | Retención de copias | Sin límite conserva todas las versiones (valor predeterminado). Puedes conservar entre 5 y 100 copias recientes por archivo. Al guardar o restaurar ese archivo, las versiones más antiguas se eliminan automáticamente. |
 | Historial | Borrar historial del chat elimina la conversación local. La opción se deshabilita durante una operación activa. |
+| Actualizaciones | Consulta la versión instalada, busca ahora, elige instalación manual o automática y descarga una versión para instalarla y reiniciar Laural. La app busca al iniciar y cada seis horas. |
+
+En el primer inicio puedes escoger el modo de actualización. El modo automático puede cerrar terminales y sus procesos al instalar; guarda antes el trabajo activo. El paquete se valida con la firma criptográfica configurada en la aplicación.
 
 Al probar la conexión, Laural reintenta una vez la consulta de modelos si falla la conexión o el servidor devuelve HTTP 502–504 sin indicar un plazo de espera. El chat requiere un nuevo envío manual si se interrumpe.
 

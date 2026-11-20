@@ -15,6 +15,7 @@
 - Perfiles para Ollama, LM Studio, FreeLLMAPI y endpoints compatibles con OpenAI.
 - Agente que propone comandos y cambios de archivos para revisión. Las políticas permiten confirmar comandos, aplicar reglas o activar el modo automático; se puede cancelar la planificación, detener comandos en ejecución y las ediciones de archivos requieren aprobación explícita.
 - Icono y favicon propios; la compilación para Windows se puede generar desde GitHub Actions al publicar una etiqueta `v*`.
+- Actualizaciones Windows firmadas desde GitHub, con instalación manual o automática y versión visible en Configuración.
 - Aplicación local sin cuenta ni servicio propio. La sincronización está fuera del alcance de la primera versión.
 
 Laural es una implementación independiente con marca e interfaz propias. No incluye código, recursos ni componentes de Warp.
@@ -26,7 +27,7 @@ La compilación x64 actual se encuentra en [Releases](https://github.com/elkangr
 - `nsis/Laural_0.1.0_x64-setup.exe`
 - `msi/Laural_0.1.0_x64_en-US.msi`
 
-Los instaladores requieren validación manual en una instalación limpia. No se consideran una versión estable.
+Los instaladores requieren validación manual en una instalación limpia. Desde alpha.14, los paquetes NSIS incorporan actualizaciones firmadas; las versiones anteriores requieren instalar alpha.14 manualmente. No se consideran una versión estable.
 
 ## Requisitos para desarrollar
 

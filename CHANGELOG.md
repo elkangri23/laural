@@ -1,7 +1,11 @@
 # Registro de cambios
 
-## Sin publicar
+## 0.1.0-alpha.14
 
+- Consulta de actualizaciones firmadas de GitHub al iniciar y cada seis horas; preferencia de instalación manual o automática, indicador visible, descarga separada de instalación y versión instalada en Configuración.
+- Los paquetes NSIS de Windows se verifican con una clave pública integrada antes de instalar. El primer paquete con updater debe instalarse manualmente sobre versiones anteriores a alpha.14.
+- Publicación automatizada de releases alpha y manifiesto de actualización firmado para Windows x64.
+- Añadidas pruebas de actualización manual, preferencia inicial y progreso de descarga.
 - Configuración opcional para conservar 5, 10, 20, 50 o 100 copias recientes por archivo y limpiar las antiguas después de guardar/restaurar; por defecto no se elimina historial.
 - La lista de copias se ordena por fecha de creación en vez de por el nombre aleatorio de la carpeta.
 - Aplicada CSP local estricta en WebView y retirado el permiso de apertura externa no utilizado.

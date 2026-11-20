@@ -1,6 +1,7 @@
 import { appendTerminalOutput } from "./terminalOutput";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { BackupRetentionControl } from "./components/BackupRetentionControl";
+import { UpdateManager } from "./components/UpdateManager";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -49,6 +50,7 @@ function App() {
   const [prompt, setPrompt] = useState("");
   const [providerDialogOpen, setProviderDialogOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [updateSettingsOpen, setUpdateSettingsOpen] = useState(false);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [themeId, setThemeId] = useState(() => localStorage.getItem("laural.theme") ?? "laurel");
   const [appearance, setAppearance] = useState<AppearanceMode>(() => localStorage.getItem("laural.appearance") === "light" ? "light" : "dark");
@@ -623,6 +625,7 @@ function App() {
             <button className="plan-arrow" onClick={() => setProviderDialogOpen(true)} aria-label="Configurar proveedor"><ChevronIcon /></button>
           </div>
           <button className="appearance-entry" onClick={() => setSettingsOpen(true)}><PaletteIcon /><span>Configuración</span><span className="appearance-entry-meta">{appearance === "dark" ? "Oscuro" : "Claro"}</span></button>
+          <UpdateManager settingsOpen={updateSettingsOpen} onSettingsOpen={() => setUpdateSettingsOpen(true)} onSettingsClose={() => setUpdateSettingsOpen(false)} />
           <button className="profile-row"><span className="profile-avatar">AM</span><span className="profile-name">Perfil local</span><DotsIcon /></button>
         </div>
       </aside>
@@ -787,6 +790,7 @@ function App() {
       {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)}>
         <button className="settings-link" onClick={() => { setSettingsOpen(false); setAppearanceOpen(true); }}>Apariencia <span>{activeTheme.name} · {appearance === "dark" ? "Oscuro" : "Claro"}</span></button>
         <button className="settings-link" onClick={() => { setSettingsOpen(false); setProviderDialogOpen(true); }}>Proveedores y modelos <span>{provider?.name ?? "Configurar"}</span></button>
+        <button className="settings-link" onClick={() => { setSettingsOpen(false); setUpdateSettingsOpen(true); }}>Actualizaciones <span>Versión y preferencias</span></button>
         <div className="agent-policy-panel">
               <label>Permisos del agente
                 <select value={executionMode} onChange={(event) => void changeExecutionMode(event.currentTarget.value as ExecutionMode)}>
