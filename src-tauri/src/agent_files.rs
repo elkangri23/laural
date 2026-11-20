@@ -1,6 +1,6 @@
 use std::{
     fs::{self, File},
-    io::{self, Write},
+    io::{self, Read, Write},
     path::{Component, Path, PathBuf},
     sync::Mutex,
     time::{SystemTime, UNIX_EPOCH},
@@ -55,6 +55,37 @@ fn pin_directory(path: &Path) -> io::Result<File> {
         return Err(invalid("La carpeta no es un directorio ordinario."));
     }
     Ok(handle)
+}
+
+#[cfg(windows)]
+fn open_backup_file(path: &Path) -> io::Result<File> {
+    use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
+    use windows_sys::Win32::Storage::FileSystem::{
+        FILE_ATTRIBUTE_REPARSE_POINT, FILE_FLAG_OPEN_REPARSE_POINT, FILE_SHARE_READ,
+    };
+
+    let file = File::options()
+        .read(true)
+        .share_mode(FILE_SHARE_READ)
+        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+        .open(path)?;
+    let metadata = file.metadata()?;
+    if !metadata.is_file()
+        || metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
+        || metadata.len() > 100_000
+    {
+        return Err(invalid("La copia no es un archivo ordinario válido."));
+    }
+    Ok(file)
+}
+
+#[cfg(not(windows))]
+fn open_backup_file(path: &Path) -> io::Result<File> {
+    let metadata = fs::symlink_metadata(path)?;
+    if !metadata.file_type().is_file() || metadata.len() > 100_000 {
+        return Err(invalid("La copia no es un archivo ordinario válido."));
+    }
+    File::open(path)
 }
 
 #[cfg(not(windows))]
@@ -401,17 +432,31 @@ pub(crate) fn restore_with_retention(
     let _version_pin = pin_directory(&version_path).map_err(|_| "No se encontró esa copia.")?;
     let backup = version_path.join(relative);
     let parent = backup.parent().ok_or("La ruta de la copia no es válida.")?;
+    let mut parent_pins = Vec::new();
+    let mut pinned_parent = version_path.clone();
+    for part in relative.parent().unwrap_or(Path::new("")).iter() {
+        pinned_parent.push(part);
+        parent_pins.push(
+            pin_directory(&pinned_parent)
+                .map_err(|_| "No se pudo comprobar la ruta de la copia.")?,
+        );
+    }
     let canonical_parent = parent
         .canonicalize()
         .map_err(|_| "No se encontró esa copia.")?;
     if !canonical_parent.starts_with(&version_path) {
         return Err("La ruta de la copia sale de su versión.".into());
     }
-    let metadata = fs::symlink_metadata(&backup).map_err(|_| "No se encontró esa copia.")?;
-    if !metadata.file_type().is_file() || metadata.len() > 100_000 {
-        return Err("La copia no es un archivo válido.".into());
+    let backup_file = open_backup_file(&backup).map_err(|_| "No se encontró una copia válida.")?;
+    let mut content = Vec::new();
+    backup_file
+        .take(100_001)
+        .read_to_end(&mut content)
+        .map_err(|_| "No se pudo leer la copia.")?;
+    if content.len() > 100_000 {
+        return Err("La copia supera el límite de 100 KB.".into());
     }
-    let content = fs::read(&backup).map_err(|_| "No se pudo leer la copia.")?;
+    drop(parent_pins);
     save_with_retention(
         &root_path,
         relative.to_str().unwrap_or_default(),
@@ -632,6 +677,23 @@ mod tests {
         fs::create_dir_all(&version).unwrap();
         symlink_file(outside.path(), version.join("secreto.txt")).unwrap();
         assert!(list_backups(root.path(), "secreto.txt").unwrap().is_empty());
+        assert!(open_backup_file(&version.join("secreto.txt")).is_err());
+        assert!(restore(root.path(), "secreto.txt", "edicion-prueba", true).is_err());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn mantiene_la_copia_abierta_sin_permitir_su_sustitucion() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("copia.txt");
+        fs::write(&path, b"copia segura").unwrap();
+        let mut file = open_backup_file(&path).unwrap();
+        assert!(fs::remove_file(&path).is_err());
+        let mut content = Vec::new();
+        file.read_to_end(&mut content).unwrap();
+        assert_eq!(content, b"copia segura");
+        drop(file);
+        fs::remove_file(path).unwrap();
     }
 
     #[test]
