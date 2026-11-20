@@ -392,18 +392,24 @@ async fn get_models(base_url: &str, api_key: Option<&str>) -> Result<Vec<String>
             short_body(&body)
         ));
     }
-    let value: Value = serde_json::from_str(&body).map_err(|_| {
+    parse_models(&body)
+}
+
+fn parse_models(body: &str) -> Result<Vec<String>, String> {
+    let value: Value = serde_json::from_str(body).map_err(|_| {
         "El proveedor no devolvió una lista JSON de modelos compatible.".to_string()
     })?;
     let rows = value
         .get("data")
-        .or_else(|| value.get("models"))
         .and_then(Value::as_array)
+        .or_else(|| value.get("models").and_then(Value::as_array))
         .ok_or_else(|| "La respuesta no incluye una lista de modelos.".to_string())?;
     let mut models: Vec<String> = rows
         .iter()
         .filter_map(|row| row.get("id").or_else(|| row.get("name")))
         .filter_map(Value::as_str)
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
         .map(str::to_string)
         .collect();
     models.sort();
@@ -1487,6 +1493,29 @@ mod tests {
 
         let content = r#"{"summary":"Crear archivo","actions":[{"type":"write_file","path":"src/nuevo.rs","content":"fn main() {}","reason":"Agregar ejemplo"}]}"#;
         assert!(parse_agent_plan(content).is_ok());
+    }
+
+    #[test]
+    fn interpreta_respuestas_openai_compatibles_y_ollama() {
+        let openai = parse_models(
+            r#"{"data":[{"id":"modelo-z"},{"id":" modelo-a "},{"id":"modelo-z"},{"id":"  "}]}"#,
+        )
+        .unwrap();
+        let ollama =
+            parse_models(r#"{"models":[{"name":"qwen:latest"},{"name":"llama3.2"}]}"#).unwrap();
+
+        assert_eq!(openai, ["modelo-a", "modelo-z"]);
+        assert_eq!(ollama, ["llama3.2", "qwen:latest"]);
+    }
+
+    #[test]
+    fn rechaza_respuestas_de_modelos_invalidas_o_vacias() {
+        let fallback = parse_models(r#"{"data":{},"models":[{"name":"válido"}]}"#).unwrap();
+        assert_eq!(fallback, ["válido"]);
+
+        for body in ["no-json", r#"{"data":[{"id":" "},{"name":null}]}"#] {
+            assert!(parse_models(body).is_err(), "{body}");
+        }
     }
 
     #[tokio::test]

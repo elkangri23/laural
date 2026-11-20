@@ -31,6 +31,7 @@ Estado al 20 de noviembre de 2026. «Implementado» describe código presente; �
 - Probar manualmente `/models` y streaming de chat con Ollama, LM Studio, FreeLLMAPI y un endpoint OpenAI-compatible. La sonda local sin credenciales solo confirmó que Ollama/LM Studio no estaban activos y que FreeLLMAPI exige autenticación; no cuenta como prueba funcional del proveedor.
 - Añadida regresión local que confirma que el cliente rechaza redirecciones HTTP del proveedor, para no enviar credenciales/contexto a otro destino. Las pruebas con proveedores instalados siguen pendientes.
 - La vista previa del contexto y sus límites de envío están implementados; verificar que coincide con cada proveedor.
+- Regresiones locales cubren los formatos de modelos OpenAI-compatible (`data[].id`) y Ollama (`models[].name`), incluidos duplicados, campos vacíos y fallback entre formatos. La conexión real de cada servicio sigue pendiente.
 - El chat detecta respuestas truncadas o vacías, errores de formato y eventos demasiado grandes. La consulta de modelos reintenta una vez los fallos de conexión y HTTP 502–504 sin Retry-After. Pendiente la validación con proveedores reales.
 
 ## M3 — Agente (parcial)
