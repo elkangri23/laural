@@ -35,7 +35,7 @@ Estado al 20 de noviembre de 2026. «Implementado» describe código presente; �
 - Cancelación de generación, interrupción de comando activo y corte del ciclo automático implementados; probar cancelación y resultado en cada shell.
 - Implementada una primera validación de operadores por shell y detección de alias y operaciones comunes de borrado, copia, movimiento, truncado y escritura. Las reglas siguen siendo heurísticas, no aíslan comandos y no interpretan perfiles personalizados.
 - La restauración y limpieza fijan los directorios intermedios de las copias en Windows; la restauración además abre el archivo sin seguir reparse points. El reemplazo vuelve a validar el destino justo antes de la operación atómica; queda revisar la carrera residual de la operación Win32 basada en ruta.
-- Registrar acciones localmente sin guardar secretos ni enviar telemetría.
+- Historial de actividad del agente en Configuración: guarda solo tipo, resultado y hora, está limitado a 200 eventos/64 KiB y se puede borrar; no incluye contenido sensible ni se sincroniza.
 - Retención optativa de 5/10/20/50/100 copias por archivo implementada; sin límite predeterminado para conservar el comportamiento. La limpieza es por archivo, no recursiva y está cubierta por regresión.
 
 ## M4 — Distribución pública (parcial)

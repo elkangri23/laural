@@ -8,6 +8,7 @@ Abre **Configuración** en la barra lateral. Los ajustes pertenecen al equipo ac
 | Proveedores y modelos | Selecciona un perfil o crea uno. Elige proveedor, nombre, URL base, modelo y clave si el servidor la exige. Consulta los modelos disponibles y guarda el perfil. El chat usa el proveedor activo. |
 | Permisos del agente | Confirmar cada comando pide revisión. Ejecutar reglas permitidas usa comandos completos con coincidencia exacta, uno por línea. Automático admite únicamente `git status`, `git status --short` y `git rev-parse --show-toplevel`. Los cambios de archivos requieren aprobación. |
 | Retención de copias | Sin límite conserva todas las versiones (valor predeterminado). Puedes conservar entre 5 y 100 copias recientes por archivo. Al guardar o restaurar ese archivo, las versiones más antiguas se eliminan automáticamente. |
+| Actividad del agente | Consulta hasta 30 resultados recientes y borra el historial tras confirmarlo. Se conservan como máximo 200 eventos o 64 KiB, solo con tipo, resultado y hora; no incluye comandos, rutas, prompts, salida ni claves. |
 | Historial | Borrar historial del chat elimina la conversación local. La opción se deshabilita durante una operación activa. |
 | Actualizaciones | Consulta la versión instalada, busca ahora, elige instalación manual o automática y descarga una versión para instalarla y reiniciar Laural. La app busca al iniciar y cada seis horas. |
 

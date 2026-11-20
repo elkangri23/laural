@@ -11,6 +11,7 @@
 | Preferencia de apariencia | `localStorage` del WebView | Solo almacena modo y tema seleccionados. |
 | Preferencia de actualización | `localStorage` del WebView | Solo registra instalación manual o automática. La consulta contacta GitHub al iniciar y cada seis horas. |
 | Respaldo de archivo sobrescrito por agente | `.laural-backups` en el proyecto | Se conservan todas por defecto; el usuario puede habilitar retención y eliminación automática de versiones antiguas por archivo. |
+| Actividad del agente | `agent-activity.json` en el directorio de configuración de Laural | Hasta 200 eventos o 64 KiB; solo registra tipo de acción, resultado y hora. Se puede borrar desde Configuración. |
 
 ## Qué puede salir del equipo
 
@@ -21,6 +22,8 @@ La lista y límites de contexto son protección contra exceso accidental, no una
 ## Telemetría y sincronización
 
 No existe telemetría ni cuenta de Laural en el MVP. La sincronización queda diferida; perfiles y credenciales no se envían a servicio alguno de Laural.
+
+El historial de actividad del agente permanece en el equipo y no contiene comandos, rutas, prompts, salida de terminal, contenido de archivos, URLs, claves ni detalles de error. No es un registro inviolable: cualquier proceso con acceso a la cuenta puede alterarlo o borrarlo.
 
 El updater consulta `raw.githubusercontent.com` y descarga el instalador desde GitHub Releases. Esas solicitudes pueden revelar a GitHub la dirección IP y metadatos HTTP habituales. La firma se verifica localmente antes de instalar; no se envían configuración, claves de proveedores ni contenido del terminal al servicio de actualizaciones.
 

@@ -10,6 +10,7 @@ use portable_pty::{Child, CommandBuilder, MasterPty, PtySize, native_pty_system}
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 
+mod activity_log;
 mod agent_files;
 mod chat_stream;
 mod providers;
@@ -343,7 +344,16 @@ fn run_agent_command(
         .sessions
         .get(&terminal_id)
         .ok_or_else(|| "La terminal seleccionada ya no está disponible.".to_string())?;
-    providers::authorize_agent_command(&app, &terminal.shell, &command, approved)?;
+    if let Err(error) =
+        providers::authorize_agent_command(&app, &terminal.shell, &command, approved)
+    {
+        activity_log::record(
+            &app,
+            activity_log::ActivityAction::Command,
+            activity_log::ActivityOutcome::Rejected,
+        );
+        return Err(error);
+    }
     let session = Arc::clone(&terminal.io);
     drop(sessions);
     let mut session = session
@@ -351,11 +361,21 @@ fn run_agent_command(
         .map_err(|_| "No se pudo escribir en la terminal.".to_string())?;
     let mut input = command.trim().to_string();
     input.push('\r');
-    session
+    let result = session
         .writer
         .write_all(input.as_bytes())
         .and_then(|_| session.writer.flush())
-        .map_err(|error| format!("No se pudo enviar el comando: {error}"))
+        .map_err(|error| format!("No se pudo enviar el comando: {error}"));
+    activity_log::record(
+        &app,
+        activity_log::ActivityAction::Command,
+        if result.is_ok() {
+            activity_log::ActivityOutcome::Submitted
+        } else {
+            activity_log::ActivityOutcome::Failed
+        },
+    );
+    result
 }
 
 #[tauri::command]
@@ -366,14 +386,26 @@ fn apply_agent_file(
     content: String,
     approved: bool,
 ) -> Result<String, String> {
-    let keep_backups = providers::get_agent_settings(app)?.backup_retention;
-    agent_files::save_with_retention(
+    let keep_backups = providers::get_agent_settings(app.clone())?.backup_retention;
+    let result = agent_files::save_with_retention(
         Path::new(&project_path),
         &relative_path,
         content.as_bytes(),
         approved,
         keep_backups,
-    )
+    );
+    activity_log::record(
+        &app,
+        activity_log::ActivityAction::FileWrite,
+        if result.is_ok() {
+            activity_log::ActivityOutcome::Completed
+        } else if !approved {
+            activity_log::ActivityOutcome::Rejected
+        } else {
+            activity_log::ActivityOutcome::Failed
+        },
+    );
+    result
 }
 
 #[tauri::command]
@@ -389,22 +421,47 @@ fn restore_agent_backup(
     version: String,
     approved: bool,
 ) -> Result<String, String> {
-    let keep_backups = providers::get_agent_settings(app)?.backup_retention;
-    agent_files::restore_with_retention(
+    let keep_backups = providers::get_agent_settings(app.clone())?.backup_retention;
+    let result = agent_files::restore_with_retention(
         Path::new(&project_path),
         &relative_path,
         &version,
         approved,
         keep_backups,
-    )
+    );
+    activity_log::record(
+        &app,
+        activity_log::ActivityAction::FileRestore,
+        if result.is_ok() {
+            activity_log::ActivityOutcome::Completed
+        } else if !approved {
+            activity_log::ActivityOutcome::Rejected
+        } else {
+            activity_log::ActivityOutcome::Failed
+        },
+    );
+    result
 }
 #[tauri::command]
 fn clear_agent_backups(
+    app: AppHandle,
     project_path: String,
     relative_path: String,
     approved: bool,
 ) -> Result<usize, String> {
-    agent_files::clear_backups(Path::new(&project_path), &relative_path, approved)
+    let result = agent_files::clear_backups(Path::new(&project_path), &relative_path, approved);
+    activity_log::record(
+        &app,
+        activity_log::ActivityAction::BackupCleanup,
+        if result.is_ok() {
+            activity_log::ActivityOutcome::Completed
+        } else if !approved {
+            activity_log::ActivityOutcome::Rejected
+        } else {
+            activity_log::ActivityOutcome::Failed
+        },
+    );
+    result
 }
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -418,6 +475,8 @@ pub fn run() {
             write_terminal,
             resize_terminal,
             close_terminal,
+            activity_log::get_agent_activity,
+            activity_log::clear_agent_activity,
             run_agent_command,
             apply_agent_file,
             list_agent_backups,

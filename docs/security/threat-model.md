@@ -11,6 +11,7 @@ Versión inicial de Laural para escritorio Windows: frontend Tauri, procesos PTY
 - Integridad de los archivos del proyecto.
 - Sesiones y procesos shell del usuario.
 - Contexto enviado a un proveedor local o remoto.
+- Metadatos locales de las acciones recientes del agente.
 
 ## Actores y amenazas
 

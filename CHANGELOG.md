@@ -2,6 +2,7 @@
 
 ## Sin publicar
 
+- Configuración incluye un historial local y borrable de actividad del agente con solo tipo de acción, resultado y hora.
 - El agente rechaza al recibir el plan los nombres reservados, rutas inválidas de Windows y la carpeta interna de copias; la comprobación se comparte con las operaciones de archivo.
 - El reemplazo del archivo del proyecto vuelve a comprobar que el destino sigue siendo un archivo ordinario justo antes del cambio atómico.
 - Endurecidas la restauración y limpieza de copias en Windows: se fijan los directorios del recorrido; la restauración abre el archivo sin seguir reparse points ni permitir su sustitución mientras se lee.

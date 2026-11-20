@@ -21,6 +21,7 @@ Los ADR registran por qué se eligió una opción y qué costes trae. Un ADR ace
 | [0015](0015-csp-y-minimo-de-permisos.md) | CSP estricta y permisos mínimos en WebView | Aceptada |
 | [0016](0016-retencion-configurable-copias.md) | Retención opcional de copias del agente | Aceptada |
 | [0017](0017-actualizaciones-firmadas.md) | Actualizaciones firmadas desde GitHub | Aceptada |
+| [0018](0018-registro-local-de-actividad-del-agente.md) | Historial local acotado con metadatos mínimos del agente | Aceptada |
 
 ## Crear un ADR
 

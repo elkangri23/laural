@@ -26,6 +26,7 @@ Los requisitos distinguen el alcance acordado del estado actual del prototipo. �
 | FR-18 | Mantener la preferencia de apariencia tras reiniciar Laural. | Implementación inicial; localStorage |
 | FR-19 | Revisar el contexto terminal/proyecto/archivos antes de enviarlo al proveedor. | Implementación inicial; muestra el contenido con los mismos límites de envío |
 | FR-20 | Consultar, descargar e instalar actualizaciones de GitHub; permitir decisión manual o instalación automática y mostrar versión. | Integrado para instaladores NSIS de Windows; validación real de release pendiente |
+| FR-21 | Consultar y borrar el historial local de acciones del agente. | Implementado con metadatos mínimos, límite de 200 eventos/64 KiB y sin contenido de usuario |
 
 ## No funcionales
 

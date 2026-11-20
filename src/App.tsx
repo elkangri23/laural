@@ -1,6 +1,7 @@
 import { appendTerminalOutput } from "./terminalOutput";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { BackupRetentionControl } from "./components/BackupRetentionControl";
+import { AgentActivity } from "./components/AgentActivity";
 import { UpdateManager } from "./components/UpdateManager";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
@@ -807,6 +808,7 @@ function App() {
               {policyNotice && <span className="policy-notice">{policyNotice}</span>}
               <p>Los cambios de archivos siempre requieren aprobación.</p>
             </div>
+        <AgentActivity />
         <button className="action-quiet" onClick={clearChat} disabled={!chatMessages.length || chatBusy || agentPlanBusy || agentCommandBusy}>Borrar historial del chat</button>
       </SettingsDialog>}
       {appearanceOpen && <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setAppearanceOpen(false); }}>

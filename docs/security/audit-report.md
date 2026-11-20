@@ -20,6 +20,7 @@
 | Media | La restauración y limpieza de copias podían sufrir sustitución de directorios entre validación y acceso | En Windows se fijan los directorios intermedios; la restauración abre el archivo como objeto ordinario sin permitir escritura o borrado concurrente. Regresiones rechazan enlaces y verifican el bloqueo durante lectura y que limpiar no afecta archivos externos. |
 | Media | El destino de una edición podía convertirse en un reparse point después de la validación inicial | Se vuelve a verificar que el destino sea un archivo ordinario inmediatamente antes de `ReplaceFileW`. La operación Win32 aún es por ruta y conserva una ventana de carrera pequeña; resolverla requiere una operación relativa al handle del directorio. |
 | Media | El plan del agente podía aceptar rutas que la operación posterior rechazaría, incluidos nombres reservados de Windows o rutas con espacios externos | La vista previa del plan, la escritura, la restauración y las copias usan el mismo validador. Los espacios al inicio o final se rechazan sin normalizarlos. |
+| Baja | No había un modo local de revisar el resultado reciente de acciones del agente | Configuración muestra un historial limitado a 200 eventos/64 KiB que contiene únicamente tipo, resultado y hora, y permite borrarlo. Los fallos de registro no detienen las acciones. |
 | Alta | Las releases anteriores no tenían un instalador desde la app ni autenticación criptográfica de los paquetes de actualización | Integrado updater Tauri, HTTPS, clave pública fija, artefactos NSIS firmados y secreto privado en GitHub Actions. Falta validar el salto real entre versiones publicadas. |
 
 ## Dependencias
@@ -32,13 +33,14 @@
 - La terminal ejecuta procesos con los permisos completos de la cuenta Windows. El modo automático del agente usa filtros heurísticos y no es un sandbox; alias, funciones y perfiles de shell personalizados pueden alterar su significado.
 - Los comandos Tauri de la ventana son una frontera de confianza. CSP reduce la exposición a inyección web, pero una vulnerabilidad local del WebView o del frontend puede alcanzar capacidades concedidas.
 - La conexión HTTPS a un endpoint configurado por el usuario puede enviarle prompts, contexto de terminal y archivos elegidos. Revisar el destino y el contexto antes de enviar.
+- El historial local del agente sirve para consulta, no es inviolable: una aplicación ejecutada con la misma cuenta puede alterarlo o borrarlo.
 - No se probó malware local, una cadena de suministro comprometida, instalación limpia, escape del sandbox del WebView ni seguridad del sistema operativo. La firma del updater no equivale a Authenticode ni protege frente a una cuenta/repositorio o clave privada comprometidos.
 
 ## Verificación
 
 Se ejecutaron `git diff --check`, `npm audit`, `cargo audit`, pruebas frontend con cobertura, cobertura Rust y build NSIS de Windows con generación de `.sig`. La prueba estática no sustituye la validación manual del instalador y actualización real.
 
-- Interfaz: 26 pruebas pasadas; cobertura global 28,93 % de líneas. La suite no monta `App.tsx`; `TerminalPane.tsx` tiene 88,88 % de líneas y el gestor de actualizaciones 95,29 %.
-- Backend Rust (20-11-2026): 31 pruebas pasadas, 0 fallidas, 1 ignorada; cobertura 52,96 % de líneas (55,22 % de regiones). `lib.rs` y `providers.rs` requieren más cobertura.
-- `npm audit`: 0 vulnerabilidades; `cargo check`, build frontend, build NSIS y `git diff --check` pasan. `cargo audit` conserva tres avisos heredados de mantenimiento/soundness de dependencias no usadas en el artefacto Windows.
+- Interfaz (20-11-2026): 28 pruebas pasadas; cobertura global 31,50 % de líneas. La suite no monta `App.tsx`; `TerminalPane.tsx` tiene 88,88 %, el gestor de actualizaciones 95,29 % y el panel de actividad 100 % de líneas.
+- Backend Rust (20-11-2026): 34 pruebas pasadas, 0 fallidas, 1 ignorada; cobertura 52,25 % de líneas (54,74 % de regiones). `lib.rs` y `providers.rs` requieren más cobertura.
+- `npm audit`: 0 vulnerabilidades; `cargo check`, build frontend, formato Rust y `git diff --check` pasan en la entrega actual. `cargo audit` conserva tres avisos heredados de mantenimiento/soundness de dependencias no usadas en el artefacto Windows. El build frontend advierte que el chunk JavaScript principal supera 500 kB.
 - Build NSIS: completado con firma de updater; generó `Laural_0.1.0-alpha.14_x64-setup.exe` (2,97 MiB) y su archivo `.sig`. Instalación limpia, aviso de Windows y actualización real aún requieren ejecución manual.

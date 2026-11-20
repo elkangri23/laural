@@ -16,6 +16,7 @@ Los casos describen el comportamiento esperado del producto. Los estados disting
 | UC-10 | Elegir tema y modo claro/oscuro | Usuario | Implementación inicial |
 | UC-11 | Revisar contexto antes de enviarlo al proveedor | Desarrollador | Implementación inicial |
 | UC-12 | Detener una planificación o comando del agente | Desarrollador | Implementación inicial; validar en cada shell |
+| UC-15 | Consultar y borrar actividad del agente | Desarrollador | Implementado; registro local de metadatos acotado |
 
 ## UC-01 — Abrir terminal
 
@@ -156,3 +157,13 @@ Desde la barra lateral, abre Configuración. Selecciona Apariencia para cambiar 
 
 Al cambiar de servidor en UC-13, se crea un perfil independiente. Al habilitar reglas, el comando completo debe coincidir con una entrada guardada. Los argumentos adicionales requieren revisión.
 Después de aplicar un archivo, el usuario puede listar copias y restaurar una versión anterior. La restauración conserva primero el contenido actual.
+
+## UC-15 — Consultar actividad del agente
+
+**Objetivo:** revisar el resultado reciente de las acciones del agente sin persistir su contenido.
+
+**Flujo principal:** abrir **Configuración → Actividad del agente**, consultar los últimos eventos y, si se desea, confirmar el borrado del historial.
+
+**Datos guardados:** tipo de acción, resultado categorizado y hora; hasta 200 eventos o 64 KiB. La vista muestra como máximo los 30 más recientes.
+
+**Límite de privacidad:** comandos, rutas, prompts, salida, contenido de archivos, URLs, claves y detalles de error no se registran ni se envían. Si falla el registro, no se bloquea la acción del agente.

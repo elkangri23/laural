@@ -100,4 +100,5 @@ sequenceDiagram
 | `src/components/TerminalPane.tsx` | xterm.js, eventos de salida y entrada de terminal |
 | `src-tauri/src/lib.rs` | PTY, ejecución controlada de comandos y escrituras de archivo |
 | `src-tauri/src/providers.rs` | Proveedores, contexto, chat, planes y política del agente |
+| `src-tauri/src/activity_log.rs` | Historial local acotado de metadatos de acciones del agente |
 | `src-tauri/capabilities/default.json` | Permisos Tauri explícitos |
