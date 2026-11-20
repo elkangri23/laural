@@ -64,6 +64,12 @@ fn pin_directory(path: &Path) -> io::Result<File> {
     Ok(handle)
 }
 
+fn pin_directory_chain(path: &Path) -> io::Result<Vec<File>> {
+    let mut directories = path.ancestors().collect::<Vec<_>>();
+    directories.reverse();
+    directories.into_iter().map(pin_directory).collect()
+}
+
 #[cfg(windows)]
 fn open_backup_file(path: &Path) -> io::Result<File> {
     use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
@@ -133,27 +139,109 @@ fn is_regular_file(path: &Path) -> io::Result<bool> {
 
 #[cfg(windows)]
 fn replace(target: &Path, staged: &Path, backup: &Path) -> io::Result<()> {
-    use std::{os::windows::ffi::OsStrExt, ptr};
-    use windows_sys::Win32::Storage::FileSystem::ReplaceFileW;
-    let wide = |p: &Path| {
-        p.as_os_str()
-            .encode_wide()
-            .chain(Some(0))
-            .collect::<Vec<_>>()
+    let target_file = open_target_for_rename(target)?;
+    let staged_file = open_staged_for_rename(staged)?;
+
+    // Parent directories remain pinned without delete sharing. Absolute, no-replace
+    // renames by handle fail closed if another process creates either destination.
+    rename_handle(&target_file, backup)?;
+    if let Err(error) = rename_handle(&staged_file, target) {
+        // Restore the original when the destination is still free; if a concurrent
+        // process created it, keep the backup instead of replacing that file.
+        let _ = rename_handle(&target_file, target);
+        return Err(error);
+    }
+    Ok(())
+}
+
+#[cfg(windows)]
+fn open_target_for_rename(path: &Path) -> io::Result<File> {
+    use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
+    use windows_sys::Win32::Storage::FileSystem::{
+        DELETE, FILE_ATTRIBUTE_REPARSE_POINT, FILE_FLAG_OPEN_REPARSE_POINT, FILE_READ_ATTRIBUTES,
+        FILE_SHARE_READ, FILE_SHARE_WRITE,
     };
-    let (target, staged, backup) = (wide(target), wide(staged), wide(backup));
-    // The three terminated UTF-16 buffers live until the synchronous operation returns.
-    if unsafe {
-        ReplaceFileW(
-            target.as_ptr(),
-            staged.as_ptr(),
-            backup.as_ptr(),
-            0,
-            ptr::null(),
-            ptr::null(),
+
+    let file = File::options()
+        .access_mode(DELETE | FILE_READ_ATTRIBUTES)
+        .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
+        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+        .open(path)?;
+    let metadata = file.metadata()?;
+    if !metadata.is_file() || metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+        return Err(invalid("El destino debe ser un archivo ordinario."));
+    }
+    Ok(file)
+}
+
+#[cfg(windows)]
+fn open_staged_for_rename(path: &Path) -> io::Result<File> {
+    use std::os::windows::fs::OpenOptionsExt;
+    use windows_sys::Win32::Storage::FileSystem::{
+        DELETE, FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
+    };
+
+    File::options()
+        .access_mode(DELETE | FILE_READ_ATTRIBUTES)
+        .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
+        .open(path)
+}
+
+#[cfg(windows)]
+fn rename_handle(file: &File, target: &Path) -> io::Result<()> {
+    use std::{
+        mem::size_of,
+        os::windows::{ffi::OsStrExt, io::AsRawHandle},
+        ptr,
+    };
+    use windows_sys::Win32::{
+        Foundation::HANDLE,
+        Storage::FileSystem::{
+            FILE_RENAME_INFO, FILE_RENAME_INFO_0, FileRenameInfo, SetFileInformationByHandle,
+        },
+    };
+
+    let wide = target.as_os_str().encode_wide().collect::<Vec<_>>();
+    let name_length = wide
+        .len()
+        .checked_mul(size_of::<u16>())
+        .and_then(|length| u32::try_from(length).ok())
+        .ok_or_else(|| invalid("El nombre del archivo es demasiado largo."))?;
+    let buffer_length = size_of::<FILE_RENAME_INFO>()
+        .checked_add(name_length as usize)
+        .ok_or_else(|| invalid("El nombre del archivo es demasiado largo."))?;
+    let buffer_length = u32::try_from(buffer_length)
+        .map_err(|_| invalid("El nombre del archivo es demasiado largo."))?;
+    let word_count = (buffer_length as usize).div_ceil(size_of::<usize>());
+    let mut buffer = vec![0usize; word_count];
+    let information = buffer.as_mut_ptr().cast::<FILE_RENAME_INFO>();
+    unsafe {
+        ptr::write(
+            information,
+            FILE_RENAME_INFO {
+                Anonymous: FILE_RENAME_INFO_0 {
+                    ReplaceIfExists: false,
+                },
+                RootDirectory: ptr::null_mut(),
+                FileNameLength: name_length,
+                FileName: [0],
+            },
+        );
+        ptr::copy_nonoverlapping(
+            wide.as_ptr(),
+            ptr::addr_of_mut!((*information).FileName).cast::<u16>(),
+            wide.len(),
+        );
+    }
+    let succeeded = unsafe {
+        SetFileInformationByHandle(
+            file.as_raw_handle() as HANDLE,
+            FileRenameInfo,
+            information.cast(),
+            buffer_length,
         )
-    } == 0
-    {
+    };
+    if succeeded == 0 {
         return Err(io::Error::last_os_error());
     }
     Ok(())
@@ -214,7 +302,7 @@ pub(crate) fn save_with_retention(
 
 fn write_file(root: &Path, relative: &Path, content: &[u8]) -> io::Result<String> {
     let root = root.canonicalize()?;
-    let mut pins = vec![pin_directory(&root)?];
+    let mut pins = pin_directory_chain(&root)?;
     let reserved = root.join(BACKUPS).canonicalize().ok();
     let mut parent = root.clone();
     for name in relative.parent().unwrap_or(Path::new("")).iter() {
@@ -273,7 +361,7 @@ pub(crate) fn list_backups(root: &Path, relative: &str) -> Result<Vec<String>, S
     let root = root
         .canonicalize()
         .map_err(|_| "No se encontró el proyecto.")?;
-    let _root_pin = pin_directory(&root).map_err(|_| "No se pudo comprobar el proyecto.")?;
+    let _root_pins = pin_directory_chain(&root).map_err(|_| "No se pudo comprobar el proyecto.")?;
     let mut entries =
         backup_entries(&root, relative).map_err(|_| "No se pudieron listar las copias.")?;
     entries.sort_by(|left, right| right.0.cmp(&left.0).then_with(|| right.1.cmp(&left.1)));
@@ -330,6 +418,7 @@ fn backup_entries(root: &Path, relative: &Path) -> io::Result<Vec<(SystemTime, S
 
 fn prune_backups(root: &Path, relative: &Path, keep: usize) -> io::Result<usize> {
     let root = root.canonicalize()?;
+    let _root_pins = pin_directory_chain(&root)?;
     let entries = backup_entries(&root, relative)?;
     let mut entries = entries;
     entries.sort_by(|left, right| right.0.cmp(&left.0).then_with(|| right.1.cmp(&left.1)));
@@ -433,7 +522,8 @@ pub(crate) fn restore_with_retention(
         .canonicalize()
         .map_err(|_| "No se encontró el proyecto.")?;
     let backup_root = root_path.join(BACKUPS);
-    let _root_pin = pin_directory(&root_path).map_err(|_| "No se pudo comprobar el proyecto.")?;
+    let _root_pins =
+        pin_directory_chain(&root_path).map_err(|_| "No se pudo comprobar el proyecto.")?;
     let _backup_pin =
         pin_directory(&backup_root).map_err(|_| "No se pudo comprobar el almacén de copias.")?;
     let version_path = backup_root.join(version);
@@ -489,7 +579,7 @@ pub(crate) fn clear_backups(root: &Path, relative: &str, approved: bool) -> Resu
     if !backups.exists() {
         return Ok(0);
     }
-    let _root_pin = pin_directory(&root).map_err(|_| "No se pudo comprobar el proyecto.")?;
+    let _root_pins = pin_directory_chain(&root).map_err(|_| "No se pudo comprobar el proyecto.")?;
     let _backup_pin =
         pin_directory(&backups).map_err(|_| "No se pudo comprobar el almacén de copias.")?;
     let mut removed = 0;
@@ -623,6 +713,45 @@ mod tests {
         drop(held);
         assert_eq!(fs::read(target).unwrap(), b"original");
         assert_eq!(root.path().join(BACKUPS).read_dir().unwrap().count(), 0);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn el_renombrado_por_handle_no_sobrescribe_un_destino_concurrente() {
+        let root = tempfile::tempdir().unwrap();
+        let backup_directory_path = root.path().join("copias");
+        fs::create_dir(&backup_directory_path).unwrap();
+        let target_path = root.path().join("doc.txt");
+        fs::write(&target_path, b"original").unwrap();
+
+        let original = open_target_for_rename(&target_path).unwrap();
+        rename_handle(&original, &backup_directory_path.join("doc.txt")).unwrap();
+
+        fs::write(&target_path, b"creado en paralelo").unwrap();
+        let mut staged = NamedTempFile::new_in(root.path()).unwrap();
+        staged.write_all(b"nuevo").unwrap();
+        let staged = staged.into_temp_path();
+        let staged_file = open_staged_for_rename(&staged).unwrap();
+
+        assert!(rename_handle(&staged_file, &target_path).is_err());
+        assert_eq!(
+            fs::read(backup_directory_path.join("doc.txt")).unwrap(),
+            b"original"
+        );
+        assert_eq!(fs::read(&target_path).unwrap(), b"creado en paralelo");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn fija_los_ancestros_del_proyecto_durante_las_operaciones() {
+        let workspace = tempfile::tempdir().unwrap();
+        let project = workspace.path().join("proyecto");
+        fs::create_dir(&project).unwrap();
+        let canonical = project.canonicalize().unwrap();
+        let _pins = pin_directory_chain(&canonical).unwrap();
+        let moved = workspace.path().with_extension("movido");
+
+        assert!(fs::rename(workspace.path(), moved).is_err());
     }
 
     #[test]

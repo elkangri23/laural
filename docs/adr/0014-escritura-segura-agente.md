@@ -21,3 +21,5 @@ Actualización: la persona puede listar y restaurar las veinte copias más recie
 La lista solo incluye versiones recientes con archivos regulares dentro de su carpeta. Restaurar requiere confirmación y pasa por el mismo guardado atómico, de modo que también conserva el contenido desplazado.
 La interfaz permite eliminar las copias de un archivo concreto después de confirmar. La operación no afecta el archivo actual ni las copias de otras rutas.
 La retención automática optativa se decide en [ADR-0016](0016-retencion-configurable-copias.md); el valor inicial conserva todas las versiones.
+
+Nota: la implementación Windows basada en `ReplaceFileW` descrita en la decisión original se sustituyó por el flujo de handles sin sobrescritura de [ADR-0019](0019-reemplazo-seguro-por-handle.md). Las decisiones de temporal, aprobación y copia siguen vigentes.

@@ -22,6 +22,7 @@ Los ADR registran por qué se eligió una opción y qué costes trae. Un ADR ace
 | [0016](0016-retencion-configurable-copias.md) | Retención opcional de copias del agente | Aceptada |
 | [0017](0017-actualizaciones-firmadas.md) | Actualizaciones firmadas desde GitHub | Aceptada |
 | [0018](0018-registro-local-de-actividad-del-agente.md) | Historial local acotado con metadatos mínimos del agente | Aceptada |
+| [0019](0019-reemplazo-seguro-por-handle.md) | Reemplazo de archivos existentes con handles y colisión sin sobrescritura en Windows | Aceptada |
 
 ## Crear un ADR
 
