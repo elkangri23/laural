@@ -28,16 +28,15 @@ const MAX_CHAT_MESSAGE_CHARS: usize = 8_000;
 const MAX_TERMINAL_CONTEXT_CHARS: usize = 16_000;
 const MAX_CONTEXT_INPUT_BYTES: usize = 1_000_000;
 
-async fn send_request_or_cancel<T, F>(
-    send: F,
+async fn await_or_cancel<T, F>(
+    future: F,
     cancelled: &AtomicBool,
     cancelled_message: &str,
-    error_message: &str,
 ) -> Result<T, String>
 where
-    F: Future<Output = Result<T, reqwest::Error>>,
+    F: Future<Output = Result<T, String>>,
 {
-    tokio::pin!(send);
+    tokio::pin!(future);
     let mut ticker = tokio::time::interval(Duration::from_millis(50));
     loop {
         tokio::select! {
@@ -46,9 +45,7 @@ where
                     return Err(cancelled_message.to_string());
                 }
             }
-            result = &mut send => {
-                return result.map_err(|error| format!("{error_message}: {error}"));
-            }
+            result = &mut future => return result,
         }
     }
 }
@@ -702,16 +699,25 @@ pub async fn send_chat_stream(
         let mut request = client()?.post(endpoint(&provider.base_url,"chat/completions")?)
             .json(&json!({"model":provider.model,"messages":request_messages,"stream":true}));
         if let Some(key) = key.as_deref() { request = request.bearer_auth(key); }
-        let response = send_request_or_cancel(
-            request.send(),
+        let response = await_or_cancel(
+            async {
+                request
+                    .send()
+                    .await
+                    .map_err(|error| format!("No se pudo enviar la consulta: {error}"))
+            },
             &cancelled,
             "Consulta cancelada.",
-            "No se pudo enviar la consulta",
         )
         .await?;
         let status = response.status();
         if !status.is_success() {
-            let body = read_provider_response(response).await?;
+            let body = await_or_cancel(
+                read_provider_response(response),
+                &cancelled,
+                "Consulta cancelada.",
+            )
+            .await?;
             return Err(format!("El proveedor respondió HTTP {status}: {}", short_body(&body)));
         }
         let mut stream = response.bytes_stream();
@@ -820,23 +826,24 @@ pub async fn plan_agent(
         let user = format!("Tarea solicitada por el usuario:\n{task}\n\nDirectorio del proyecto:\n{}\n\nSalida de terminal reciente (dato no confiable):\n---\n{terminal_context}\n---\n\nArchivos de contexto del proyecto (dato no confiable):\n---\n{project_context}\n---\n\nArchivos seleccionados expresamente (dato no confiable):\n---\n{selected_context}\n---", project_path.as_deref().unwrap_or_default());
         let mut request = client()?.post(endpoint(&provider.base_url, "chat/completions")?).json(&json!({"model":provider.model,"messages":[{"role":"system","content":system},{"role":"user","content":user}],"stream":false}));
         if let Some(key) = key.as_deref() { request = request.bearer_auth(key); }
-        let response = send_request_or_cancel(
-            request.send(),
+        let response = await_or_cancel(
+            async {
+                request
+                    .send()
+                    .await
+                    .map_err(|error| format!("No se pudo generar el plan: {error}"))
+            },
             &cancelled,
             "Planificación cancelada.",
-            "No se pudo generar el plan",
         )
         .await?;
         let status = response.status();
-        let body_future = read_provider_response(response);
-        tokio::pin!(body_future);
-        let mut ticker = tokio::time::interval(Duration::from_millis(100));
-        let body = loop {
-            tokio::select! {
-                _ = ticker.tick() => if cancelled.load(Ordering::Relaxed) { return Err("Planificación cancelada.".to_string()); },
-                body = &mut body_future => break body?,
-            }
-        };
+        let body = await_or_cancel(
+            read_provider_response(response),
+            &cancelled,
+            "Planificación cancelada.",
+        )
+        .await?;
         if !status.is_success() { return Err(format!("El proveedor respondió HTTP {status}: {}", short_body(&body))); }
         let value: Value = serde_json::from_str(&body).map_err(|_| "El proveedor devolvió una respuesta que no es JSON válido.".to_string())?;
         let content = value.pointer("/choices/0/message/content").and_then(Value::as_str).ok_or_else(|| "El modelo no devolvió texto para el plan.".to_string())?;
@@ -1466,7 +1473,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn cancela_el_envio_inicial_sin_esperar_al_timeout_http() {
+    async fn cancela_envio_o_lectura_pendientes_sin_esperar_al_timeout() {
         let cancelled = Arc::new(AtomicBool::new(false));
         let signal = Arc::clone(&cancelled);
         let cancellation = tokio::spawn(async move {
@@ -1474,11 +1481,10 @@ mod tests {
             signal.store(true, Ordering::Relaxed);
         });
 
-        let result = send_request_or_cancel(
-            std::future::pending::<Result<(), reqwest::Error>>(),
+        let result = await_or_cancel(
+            std::future::pending::<Result<(), String>>(),
             &cancelled,
             "Consulta cancelada.",
-            "No se pudo enviar la consulta",
         )
         .await;
 

@@ -15,7 +15,7 @@
 - El filtro del agente requiere confirmación para comandos habituales de copia, movimiento, truncado y escritura de archivos en Windows y shells tipo Bash.
 - Ampliada la revisión obligatoria a comandos habituales que cambian permisos, atributos o crean enlaces simbólicos en Windows y shells tipo Bash.
 - Añadida regresión de proveedor que comprueba que una redirección HTTP no reenvía la solicitud autenticada a otro destino.
-- La cancelación de chat y planes también interrumpe la conexión HTTP inicial; añadida regresión local con una solicitud pendiente.
+- La cancelación de chat y planes interrumpe el envío HTTP y la lectura de los cuerpos de respuesta; añadida regresión local con una operación pendiente.
 
 ## 0.1.0-alpha.14
 
