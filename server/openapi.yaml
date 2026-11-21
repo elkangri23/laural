@@ -1,0 +1,87 @@
+openapi: 3.1.0
+info:
+  title: Laural Preference Sync API
+  version: 0.1.0
+  description: >-
+    API privada inicial para snapshots allowlisted. El alta de cuenta y la emisión
+    de sesiones aún no están implementadas; esta especificación no implica que
+    el servicio esté publicado o listo para producción.
+servers:
+  - url: https://sync.laurafernandezenfermeria.com
+paths:
+  /health/live:
+    get:
+      summary: Comprueba que el proceso está activo
+      security: []
+      responses:
+        '200':
+          description: Proceso disponible
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { const: ok }
+                required: [status]
+  /health/ready:
+    get:
+      summary: Comprueba disponibilidad de PostgreSQL
+      security: []
+      responses:
+        '200': { description: Base de datos disponible }
+        '503': { description: Dependencia no disponible; sin detalles internos }
+  /v1/preferences/current:
+    get:
+      summary: Lee el snapshot de la cuenta autenticada
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Snapshot actual; null si aún no se ha guardado ninguno
+          headers:
+            ETag:
+              schema: { type: string, pattern: '^"[0-9]+"$' }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  snapshot:
+                    oneOf:
+                      - $ref: ../shared/preference-snapshot-v1.schema.json
+                      - type: 'null'
+                  revision: { type: integer, minimum: 0 }
+                required: [snapshot, revision]
+        '401': { description: Sesión inválida, revocada o expirada }
+    put:
+      summary: Guarda el snapshot con revisión e idempotencia
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: header
+          name: If-Match
+          required: true
+          schema: { type: string, pattern: '^"(0|[1-9][0-9]*)"$' }
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: { type: string, minLength: 16, maxLength: 128, pattern: '^[A-Za-z0-9_-]+$' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../shared/preference-snapshot-v1.schema.json
+      responses:
+        '200': { description: Snapshot guardado; respuesta repetida también es idempotente }
+        '400': { description: Cabecera o snapshot inválido }
+        '401': { description: Sesión inválida, revocada o expirada }
+        '409': { description: Clave de idempotencia reutilizada con otro contenido }
+        '412': { description: Revisión obsoleta; requiere resolución del cliente }
+        '413': { description: Payload superior a 256 KiB }
+        '428': { description: Falta If-Match }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer

@@ -85,12 +85,13 @@ Añadidas regresiones que simulan el fallo al escribir una credencial y comprueb
 - Exportar claves solo con consentimiento, contraseña obligatoria y cifrado autenticado; importarlas directamente en Credential Manager y revertir fallos sin aplicar parcialmente.
 - Completar pruebas de cobertura de formatos, claves, corrupción, contraseñas, migración y rollback.
 
-## M9 — Servicio, cuenta y status público (pendiente)
+## M9 — Servicio, cuenta y status público (parcial)
 
-- Publicar API Fastify/PostgreSQL bajo `https://sync.laurafernandezenfermeria.com`.
+- API Fastify local para health y snapshots privados; schema compartido cerrado, límite 256 KiB, autenticación de sesiones existentes, aislamiento por cuenta, revisiones `ETag`/`If-Match`, idempotencia, validación de endpoints y migración PostgreSQL inicial. Cobertura del servicio: 100 % líneas y 96,62 % ramas en 25 pruebas con dobles de prueba.
+- Publicar API Fastify/PostgreSQL bajo `https://sync.laurafernandezenfermeria.com` solo después de completar autenticación, límites de abuso y pruebas PostgreSQL reales.
 - Implementar email/contraseña, Google, passkeys, TOTP, PIN de correo no-MFA, revocación de sesiones y borrado de cuenta. Enviar correo transaccional con Resend; configurar el dominio y remitente verificados y guardar una API key restringida como secreto del VPS.
 - Servir `/status` estáticamente en el mismo VPS; mostrar disponibilidad, incidentes y mantenimiento sin contenido privado.
-- Probar aislamiento por cuenta, recuperación, publicación de avisos y operación del servicio.
+- Pendiente probar migraciones/aislamiento en PostgreSQL real, retención de idempotencia, recuperación, publicación de avisos y operación del servicio. La API aún no es un servicio desplegable para usuarios: no hay flujo que cree ni emita sesiones.
 
 ## M10 — Cliente y sincronización (pendiente)
 

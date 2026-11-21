@@ -1,6 +1,6 @@
 # Casos de uso: portabilidad y sincronización
 
-- **Estado:** diseño aprobado; ninguna de estas funciones está implementada todavía.
+- **Estado:** UC-17/18 tienen una implementación inicial en la app; la API privada de snapshots está implementada localmente. La cuenta, los flujos UC-19/21, la sync del cliente y el status público siguen pendientes.
 - **Especificación:** [plan de sincronización](../plans/sincronizacion-preferencias.md).
 - **Diseño técnico:** [diseño formal](../designs/sincronizacion-preferencias-y-portabilidad.md).
 

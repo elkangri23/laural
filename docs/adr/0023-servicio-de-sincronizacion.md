@@ -6,7 +6,7 @@
 
 ## Contexto
 
-ADR-0020 decide el alcance funcional: una transferencia local sin cuenta y sincronización opcional que excluye secretos. Hace falta concretar el servicio de cuenta, el protocolo de revisiones, la autenticación nativa y el aviso público del estado. El código actual no contiene backend de cuentas ni cliente de sync.
+ADR-0020 decide el alcance funcional: una transferencia local sin cuenta y sincronización opcional que excluye secretos. Hace falta concretar el servicio de cuenta, el protocolo de revisiones, la autenticación nativa y el aviso público del estado. En el momento de aceptar esta decisión no existían backend de cuentas ni cliente de sync. La API privada de snapshots se añadió después mediante ADR-0026; la autenticación de usuario y el cliente de escritorio siguen pendientes.
 
 ## Decisión
 

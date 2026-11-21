@@ -1,7 +1,7 @@
 # Optional Preference Sync and Profile Portability
 
 * **Author:** Antonio Moles
-* **Status:** Approved; implementation pending
+* **Status:** Approved; local export/import and snapshot API foundation implemented; account flows, desktop sync and deployment pending
 * **Date:** 2026-11-21
 
 --------------------------------------------------------------------------------

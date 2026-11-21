@@ -17,7 +17,7 @@
 - Agente que propone comandos y cambios de archivos para revisión. Las políticas permiten confirmar comandos, aplicar reglas o activar el modo automático; se puede cancelar la planificación, detener comandos en ejecución y las ediciones de archivos requieren aprobación explícita.
 - Icono y favicon propios; la compilación para Windows se puede generar desde GitHub Actions al publicar una etiqueta `v*`.
 - Actualizaciones Windows firmadas desde GitHub, con instalación manual o automática y versión visible en Configuración.
-- La versión actual funciona sin cuenta ni servicio propio. Configuración permite exportar e importar preferencias y perfiles mediante archivos `.laural`, con vista previa y fusión o reemplazo. Las claves se excluyen por defecto; si se incluyen, el archivo exige contraseña y cifrado autenticado. La sincronización de cuenta sigue pendiente; consulta el [diseño aprobado](docs/designs/sincronizacion-preferencias-y-portabilidad.md).
+- La app de escritorio funciona sin cuenta ni servicio. Configuración permite exportar e importar preferencias y perfiles mediante archivos `.laural`, con vista previa y fusión o reemplazo. Las claves se excluyen por defecto; si se incluyen, el archivo exige contraseña y cifrado autenticado. El backend de sync tiene una primera API privada local; aún no hay login ni despliegue y no debe usarse con cuentas reales. Consulta el [diseño aprobado](docs/designs/sincronizacion-preferencias-y-portabilidad.md) y el [estado técnico del servicio](server/README.md).
 - Las claves de proveedor se guardan en Windows Credential Manager, no en el archivo de perfiles. Consulta [privacidad y seguridad](docs/security/privacy.md).
 
 Laural es una implementación independiente con marca e interfaz propias. No incluye código, recursos ni componentes de Warp.
@@ -77,6 +77,7 @@ HTTP solo se acepta para `localhost` o loopback. Los endpoints remotos deben usa
 - [Requisitos funcionales y no funcionales](docs/requirements/README.md)
 - [Casos de uso](docs/use-cases/README.md)
 - [Arquitectura](docs/architecture/overview.md)
+- [Servicio de sincronización (estado y desarrollo)](server/README.md)
 - [Decisiones de arquitectura (ADR)](docs/adr/README.md)
 - [Privacidad y modelo de amenazas](docs/security/README.md)
 - [Hoja de ruta](docs/ROADMAP.md)

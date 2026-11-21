@@ -25,7 +25,7 @@ El servicio opcional de sincronización guardará cuentas y snapshots de prefere
 
 - Una avería o compromiso total del VPS puede destruir permanentemente los datos de sync y las cuentas.
 - El servicio tiene disponibilidad y recuperación de datos limitadas; la página `/status` alojada en el mismo VPS tampoco estará disponible durante una caída completa.
-- Los clientes deben conservar una copia local de su configuración; la sync no puede convertirse en su única copia. Exportar/importar localmente seguirá siendo una función aparte, todavía pendiente.
+- Los clientes deben conservar una copia local de su configuración; la sync no puede convertirse en su única copia. Exportar/importar localmente sigue siendo una función aparte y ya cuenta con implementación inicial en Configuración.
 - No se crea un objetivo de RPO/RTO ni se afirma que haya un procedimiento de restauración tras desastre.
 
 ## Referencias

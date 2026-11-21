@@ -2,6 +2,7 @@
 
 ## Sin publicar
 
+- Añadido el primer servicio privado de snapshots: Fastify, schema v1 cerrado, límite de tamaño, revisión condicional, idempotencia transaccional en PostgreSQL, autenticación mediante hash de sesión y migración inicial. Aún no se puede publicar: faltan registro/inicio de sesión, correo, status público, rate limits y pruebas con PostgreSQL real.
 - Iniciado el contrato v1 compartido para preferencias sincronizables con schema cerrado, fixture común y tipos Rust/TypeScript. Rechaza versiones/campos desconocidos, perfiles duplicados, endpoints no válidos y snapshots mayores de 256 KiB.
 - Guardado el tipo de proveedor y el consentimiento opcional por perfil para compartir el endpoint en una futura sincronización; queda desactivado por defecto y los perfiles anteriores conservan sus destinos.
 - Añadido el constructor nativo del snapshot v1: incluye tema, apariencia, actualización, proveedor activo y metadatos permitidos. Solo incorpora URLs de perfiles con consentimiento; no consulta ni serializa claves.

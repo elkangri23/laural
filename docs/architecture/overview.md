@@ -17,6 +17,7 @@ flowchart LR
   Tauri --> Keyring[Windows Credential Manager]
   Tauri --> Config[JSON local: perfiles y política]
   Tauri --> Project[Archivos dentro del proyecto]
+  SyncAPI[Fastify API local de snapshots] --> SyncDB[(PostgreSQL)]
 ```
 
 ## Responsabilidades
@@ -91,7 +92,7 @@ sequenceDiagram
 - El contexto se envía al endpoint elegido por el usuario. Un endpoint remoto puede almacenar solicitudes según sus propias condiciones.
 - Las marcas de bloques y códigos de salida varían por shell; PowerShell, CMD y Bash están instrumentados inicialmente. Scripts de inicio pueden sobrescribir `PROMPT_COMMAND` y comandos interactivos pueden no terminar solos.
 - La vista previa representa el contenido recogido al abrirla; la terminal puede producir más salida antes de enviar.
-- Sincronización no forma parte de esta arquitectura inicial.
+- La aplicación instalada todavía no se conecta al backend de sincronización. La API local acepta snapshots para sesiones previamente provisionadas, pero no crea cuentas ni está desplegada.
 
 ## Extensión aprobada: portabilidad local y sync
 
@@ -107,7 +108,7 @@ flowchart LR
   STATUS[status estático en Caddy, mismo VPS] --> API
 ```
 
-La portabilidad local ya cuenta con un módulo Rust para el formato `.laural`, validación, cifrado y descifrado, y comandos Tauri para vista previa, exportación e importación. La UI nativa de Configuración permite fusionar o reemplazar perfiles. Las claves se escriben en Windows Credential Manager; las copias previas se guardan localmente. Falta validar fallos reales y recuperación en Windows. La fase de sincronización define un contrato cerrado v1 con schema compartido y tipos Rust/TypeScript y construye snapshots desde preferencias y metadatos permitidos mediante el backend nativo. Los perfiles guardan el tipo y el consentimiento opcional del endpoint, falso por defecto, con migración compatible. Todavía no se contacta un servidor: backend de cuentas, cliente de sync y status público siguen pendientes. Ver el [diseño formal](../designs/sincronizacion-preferencias-y-portabilidad.md) y el [plan de entrega](../plans/sincronizacion-preferencias.md).
+La portabilidad local ya cuenta con un módulo Rust para el formato `.laural`, validación, cifrado y descifrado, y comandos Tauri para vista previa, exportación e importación. La UI nativa de Configuración permite fusionar o reemplazar perfiles. Las claves se escriben en Windows Credential Manager; las copias previas se guardan localmente. Falta validar fallos reales y recuperación en Windows. El contrato cerrado v1 tiene schema compartido y tipos Rust/TypeScript; Rust construye snapshots desde preferencias y metadatos permitidos. Los perfiles guardan el tipo y el consentimiento opcional del endpoint, falso por defecto, con migración compatible. El backend local ya incluye API Fastify de snapshots, migración PostgreSQL, sesión opaca por hash, revisiones e idempotencia. La app de escritorio aún no llama a la API; alta/login, cliente de sync, status público e integración con PostgreSQL real siguen pendientes. Consulta el [servicio](../../server/README.md), el [diseño formal](../designs/sincronizacion-preferencias-y-portabilidad.md) y el [plan de entrega](../plans/sincronizacion-preferencias.md).
 
 ## Estructura de código
 
@@ -117,5 +118,6 @@ La portabilidad local ya cuenta con un módulo Rust para el formato `.laural`, v
 | `src/components/TerminalPane.tsx` | xterm.js, eventos de salida y entrada de terminal |
 | `src-tauri/src/lib.rs` | PTY, ejecución controlada de comandos y escrituras de archivo |
 | `src-tauri/src/providers.rs` | Proveedores, contexto, chat, planes y política del agente |
+| `server/src` | API privada local para snapshots, auth de sesiones ya provisionadas y persistencia PostgreSQL |
 | `src-tauri/src/activity_log.rs` | Historial local acotado de metadatos de acciones del agente |
 | `src-tauri/capabilities/default.json` | Permisos Tauri explícitos |
