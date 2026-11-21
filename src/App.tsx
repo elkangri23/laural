@@ -1,23 +1,25 @@
 import { appendTerminalOutput, COMMAND_BLOCK_OUTPUT_LIMIT } from "./terminalOutput";
-import { SettingsDialog } from "./components/SettingsDialog";
-import { BackupRetentionControl } from "./components/BackupRetentionControl";
 import { HelpDialog, HelpIcon } from "./components/HelpDialog";
 import { BellIcon, NotificationCenter } from "./components/NotificationCenter";
-import { AgentActivity } from "./components/AgentActivity";
-import { AccountSettings } from "./components/AccountSettings";
-import { AssistantMarkdown } from "./components/AssistantMarkdown";
+import { SettingsDialog } from "./components/SettingsDialog";
 import { UpdateManager } from "./components/UpdateManager";
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
-import TerminalPane from "./components/TerminalPane";
-import { CommandPalette } from "./components/CommandPalette";
-import { GitPanel } from "./components/GitPanel";
-import { TaskRecipes } from "./components/TaskRecipes";
-import { ConfigurationTransfer, type ConfigurationImportResult } from "./components/ConfigurationTransfer";
+import type { ConfigurationImportResult } from "./components/ConfigurationTransfer";
 import { themeVariables, themes, type AppearanceMode } from "./themes";
 import "./App.css";
+
+const TerminalPane = lazy(() => import("./components/TerminalPane"));
+const BackupRetentionControl = lazy(() => import("./components/BackupRetentionControl").then(module => ({ default: module.BackupRetentionControl })));
+const AgentActivity = lazy(() => import("./components/AgentActivity").then(module => ({ default: module.AgentActivity })));
+const AccountSettings = lazy(() => import("./components/AccountSettings").then(module => ({ default: module.AccountSettings })));
+const AssistantMarkdown = lazy(() => import("./components/AssistantMarkdown").then(module => ({ default: module.AssistantMarkdown })));
+const CommandPalette = lazy(() => import("./components/CommandPalette").then(module => ({ default: module.CommandPalette })));
+const GitPanel = lazy(() => import("./components/GitPanel").then(module => ({ default: module.GitPanel })));
+const TaskRecipes = lazy(() => import("./components/TaskRecipes").then(module => ({ default: module.TaskRecipes })));
+const ConfigurationTransfer = lazy(() => import("./components/ConfigurationTransfer").then(module => ({ default: module.ConfigurationTransfer })));
 
 type Shell = "powershell" | "cmd" | "wsl" | "git-bash";
 type TerminalTab = { id: string; shell: Shell; title: string; cwd: string | null };
@@ -997,7 +999,9 @@ function App() {
               <div className="terminal-heading-actions"><button className={`small-action ${blocksOpen ? "selected" : ""}`} onClick={() => setBlocksOpen((open) => !open)} aria-pressed={blocksOpen}>Bloques <span className="block-count">{visibleBlocks.length}</span></button><button className="small-action" title="Copiar el texto seleccionado en la terminal" onClick={requestTerminalCopy}><CopyIcon /> Copiar selección</button><button className="small-action" title="Limpiar la pantalla de la terminal activa" onClick={requestTerminalClear}><ClearIcon /> Limpiar</button>{terminalActionNotice && <span className="terminal-action-notice" role="status">{terminalActionNotice}</span>}</div>
             </div>
             <div className={`terminal-frame ${blocksOpen ? "with-blocks" : ""} ${splitTabId ? `is-split split-${splitOrientation}` : ""}`}>
-              {tabs.map((tab) => <TerminalPane key={tab.id} terminalId={tab.id} active={tab.id === activeTabId} copyRequest={terminalCopyRequest} clearRequest={terminalClearRequest} onActionNotice={setTerminalActionNotice} onRestart={restartTab} shell={tab.shell} cwd={tab.cwd} visible={tab.id === activeTabId || tab.id === splitTabId} theme={activeTheme} appearance={appearance} onTextOutput={captureTerminalOutput} onCommandSubmit={startCommandBlock} onCommandFinish={finishCommandBlock} />)}
+              <Suspense fallback={<div className="terminal-loading" role="status">Iniciando terminal…</div>}>
+                {tabs.map((tab) => <TerminalPane key={tab.id} terminalId={tab.id} active={tab.id === activeTabId} copyRequest={terminalCopyRequest} clearRequest={terminalClearRequest} onActionNotice={setTerminalActionNotice} onRestart={restartTab} shell={tab.shell} cwd={tab.cwd} visible={tab.id === activeTabId || tab.id === splitTabId} theme={activeTheme} appearance={appearance} onTextOutput={captureTerminalOutput} onCommandSubmit={startCommandBlock} onCommandFinish={finishCommandBlock} />)}
+              </Suspense>
               <div className="terminal-caption"><span className="shortcut-hint"><kbd>Ctrl</kbd> + <kbd>`</kbd> alternar terminal</span><span><span className="activity-pulse" /> Shell conectado</span></div>
             </div>
             {blocksOpen && <section className="command-blocks-panel" aria-label="Bloques de comandos">
@@ -1032,7 +1036,7 @@ function App() {
             </div> : <div className="message-thread">
               {chatMessages.map((message, index) => <article className={`chat-message ${message.role}`} key={message.id ?? `${index}-${message.role}`}>
                 <span className="message-avatar">{message.role === "user" ? "Tú" : <SparkIcon />}</span>
-                <div className="message-content">{message.role === "assistant" ? <AssistantMarkdown content={message.content} /> : message.content}</div>
+                <div className="message-content">{message.role === "assistant" ? <Suspense fallback={<span role="status">Preparando respuesta…</span>}><AssistantMarkdown content={message.content} /></Suspense> : message.content}</div>
               </article>)}
               {agentPlan && <div className="agent-plan-card">
                 <div className="agent-plan-header"><span className="plan-icon-small"><AgentIcon /></span><strong>Plan del agente</strong><span>{agentPlan.actions.length} acciones</span></div>
@@ -1062,6 +1066,7 @@ function App() {
 
       {contextPreviewError && <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setContextPreviewError(""); }}><section className="provider-dialog context-error-dialog" role="alertdialog" aria-modal="true"><button className="dialog-close" onClick={() => setContextPreviewError("")} aria-label="Cerrar">×</button><p className="eyebrow">VISTA PREVIA</p><h2>No se pudo preparar el contexto</h2><p className="dialog-copy">{contextPreviewError}</p></section></div>}
 
+      <Suspense fallback={<div className="context-preview-loading" role="status">Abriendo panel…</div>}>
       {gitPanelOpen && <GitPanel projectPath={projectPath} onClose={() => setGitPanelOpen(false)} onOpenProject={() => { setGitPanelOpen(false); void openProject(); }} onIncludeDiff={(content, truncated) => { setGitDiffContext(content); setGitDiffTruncated(truncated); setGitPanelOpen(false); }} />}
       {taskRecipesOpen && <TaskRecipes onClose={() => setTaskRecipesOpen(false)} onUse={(recipePrompt) => { setAgentMode(true); setPrompt(recipePrompt); }} />}
       {commandPaletteOpen && <CommandPalette commands={commandHistory.map((item) => ({ ...item, shell: shellNames[item.shell] }))} actions={paletteActions} view={commandPaletteView} onClose={() => setCommandPaletteOpen(false)} />}
@@ -1172,6 +1177,7 @@ function App() {
         onSyncSettled={clearSyncNotice}
         onClose={() => setAccountSettingsOpen(false)}
       />}
+      </Suspense>
       {appearanceOpen && <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setAppearanceOpen(false); }}>
         <section className="appearance-dialog" role="dialog" aria-modal="true" aria-labelledby="appearance-title">
           <button className="dialog-close" onClick={() => setAppearanceOpen(false)} aria-label="Cerrar">×</button>

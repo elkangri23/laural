@@ -14,6 +14,7 @@ Estado al 21 de noviembre de 2026. «Implementado» describe código presente; �
 - Pruebas con un nuevo montaje verifican que tema/modo vuelven desde `localStorage` y que la app recupera el perfil activo al consultar el backend; falta verificar el reinicio del proceso instalado en Windows.
 - Planes de agente, modos revisar/reglas/automático y aprobación explícita para cambios de archivos.
 - Icono y favicon propios; build de Windows automatizable desde GitHub Actions.
+- Código dividido para carga progresiva: entrada JS de 297,30 KB (89,85 KB gzip), terminal en bloque de 335,94 KB (85,03 KB gzip), Markdown de 164,75 KB cargado al necesitarlo y paneles secundarios bajo demanda. No quedan bloques mayores de 500 KB; medir arranque frío y memoria en una instalación Windows sigue pendiente.
 - README, arquitectura, requisitos, ADR, casos de uso y documentación de contribución.
 
 ## M1 — Estabilidad de terminal (parcial)
@@ -111,6 +112,11 @@ Añadidas regresiones que simulan el fallo al escribir una credencial y comprueb
 - Fijar límites de cuenta/dispositivo/solicitud, monitorización y procedimiento de incidentes.
 - Completar revisión de seguridad, cobertura de líneas y ramas (mínimo 85 % para lógica crítica), instalación/actualización Windows y plan de incidentes.
 
+## M12 — Carga progresiva (implementación inicial)
+
+- La entrada JavaScript bajó de 824 KB a 297 KB mediante división de terminal, Markdown y paneles secundarios. La terminal se carga en un bloque propio; Markdown y paneles se solicitan cuando se necesitan. Ningún bloque supera 500 KB.
+- Pendiente medir tiempo de arranque y memoria en una instalación real de Windows; dividir bloques no implica por sí solo una reducción del total de código que la app solicita al iniciar.
+
 ## No planificado para el MVP
 
 Backend obligatorio, cuentas de usuario, monetización, telemetría por defecto, distribución de modelos y sandbox propio.
@@ -119,7 +125,7 @@ El centro de configuración está implementado en el código posterior a alpha.4
 
 M2 y M3 incorporan vinculación del perfil a su URL y un conjunto acotado de consultas automáticas de Git. Consulta el backlog para el estado de validación.
 M1: prueba de PTY real superada en los cuatro shells locales el 20 de noviembre de 2026. La prueba que queda ignorada por defecto en CI se ejecutó explícitamente y pasó; la comprobación visual de bloques en la ventana de Laural sigue pendiente.
-La interfaz y el backend disponen de informes automáticos de cobertura en cada push y pull request. La suite actual de interfaz tiene 104 pruebas y 73,4 % de cobertura global de líneas. Rust tiene 80 pruebas superadas y 1 ignorada. La cobertura de líneas del componente Git es 92 % y la del componente de recetas es 98,86 %. La cobertura Rust local sigue sin datos válidos en el entorno Windows/MSVC.
+La interfaz y el backend disponen de informes automáticos de cobertura en cada push y pull request. La suite actual de interfaz tiene 104 pruebas y 73,58 % de cobertura global de líneas. Rust tiene 80 pruebas superadas y 1 ignorada. La cobertura de líneas del componente Git es 92 % y la del componente de recetas es 98,86 %. La cobertura Rust local sigue sin datos válidos en el entorno Windows/MSVC.
 M3 incorpora escritura temporal, reemplazo con backup por versión, creación exclusiva y pruebas de archivo bloqueado y aprobaciones concurrentes. La interfaz permite restaurar y limpiar copias manualmente con confirmación. La retención automática configurable continúa pendiente.
 La interfaz lista las veinte copias más recientes por fecha. La retención automática por archivo es optativa y está implementada; su valor inicial conserva todas las versiones.
 M3 aplica ahora filtros de sintaxis por shell en Rust antes de los modos automático y reglas. La aprobación explícita permite composiciones tras revisión humana.

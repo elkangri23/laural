@@ -2,6 +2,7 @@
 
 ## Sin publicar
 
+- Separada la carga de la terminal, el renderizado Markdown y paneles secundarios: la entrada JavaScript baja de 824 KB a 297 KB; la terminal se sirve en su propio bloque de 336 KB y el Markdown se carga al necesitarlo. Ningún bloque supera 500 KB.
 - Mejorado el contraste de etiquetas secundarias de navegación y paneles en ambos modos; pruebas de regresión comparan sus tokens reales con los fondos que usan.
 - Mejorado el contraste del texto secundario en modo claro y añadidas regresiones que comprueban ese texto sobre las tres superficies principales de ambos modos.
 - Comprobado contraste WCAG AA (4,5:1) del acento como texto en las doce paletas y ambos modos; se oscureció el verde azulado claro para cumplir el umbral.

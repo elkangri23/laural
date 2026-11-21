@@ -43,6 +43,10 @@ function buttonIncluding(text: string): HTMLButtonElement {
   return button;
 }
 
+async function waitForLazyUi(): Promise<void> {
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 15)); });
+}
+
 beforeEach(() => {
   localStorage.clear();
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -138,10 +142,11 @@ test("el diff Git requiere selección explícita y aparece en la vista previa de
   await act(async () => root!.render(<App />));
 
   await act(async () => host.querySelector<HTMLButtonElement>(".git-toolbar-button")!.click());
+  await waitForLazyUi();
   await act(async () => buttonIncluding("Abrir proyecto").click());
-  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+  await waitForLazyUi();
   await act(async () => host.querySelector<HTMLButtonElement>(".git-toolbar-button")!.click());
-  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+  await waitForLazyUi();
   expect(mocks.invoke).not.toHaveBeenCalledWith("preview_context", expect.anything());
   await act(async () => (host.querySelector<HTMLButtonElement>(".git-include-diff")!).click());
   expect(host.textContent).toContain("Diff Git");
@@ -157,6 +162,7 @@ test("usar una receta activa el modo Agente y prepara el compositor sin enviarlo
   await act(async () => root!.render(<App />));
   await act(async () => buttonIncluding("Agente").click());
   await act(async () => buttonIncluding("Recetas").click());
+  await waitForLazyUi();
   await act(async () => buttonIncluding("Usar receta").click());
 
   const composer = host.querySelector<HTMLTextAreaElement>(".composer textarea");
@@ -273,6 +279,7 @@ test("abre la paleta con Ctrl+K y copia un comando de la sesión sin ejecutarlo"
   await act(async () => root!.render(<App />));
   await act(async () => host.querySelector<HTMLButtonElement>('[data-testid="begin-command"]')!.click());
   await act(async () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true, bubbles: true })));
+  await waitForLazyUi();
 
   expect(host.querySelector('[role="dialog"][aria-labelledby="palette-title"]')).not.toBeNull();
   expect(host.textContent).toContain("Solo en esta sesión");
@@ -390,6 +397,7 @@ test("la campana lleva los avisos de sincronización a Cuenta", async () => {
   await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Notificaciones"]')!.click());
   expect(host.textContent).toContain("Hay cambios locales pendientes");
   await act(async () => buttonIncluding("Revisar configuración de la cuenta").click());
+  await waitForLazyUi();
   expect(host.querySelector(".account-settings")).not.toBeNull();
 });
 
@@ -457,6 +465,7 @@ test("los tres puntos del perfil abren sus opciones de portabilidad y cuenta", a
   expect(profile.getAttribute("aria-expanded")).toBe("true");
   expect(host.querySelector('[role="menu"][aria-label="Opciones del perfil local"]')).not.toBeNull();
   await act(async () => buttonIncluding("Importar y exportar configuración").click());
+  await waitForLazyUi();
   expect(host.querySelector("#transfer-title")?.textContent).toBe("Exportar e importar configuración");
   await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Cerrar configuración"]')!.click());
 
