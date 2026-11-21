@@ -324,9 +324,14 @@ function App() {
   const visibleBlocks = commandBlocks.filter((block) => block.terminalId === activeTabId).slice(-30).reverse();
   const paletteActions = [
     { id: "new-terminal", label: "Nueva terminal", description: "Abrir una sesión PowerShell", run: () => addTerminal("powershell") },
+    { id: "project", label: projectPath ? "Cambiar carpeta de proyecto" : "Abrir carpeta de proyecto", description: "Elegir el directorio de trabajo local", run: () => { void openProject(); } },
+    { id: "git", label: "Abrir panel Git", description: "Consultar la rama y los cambios del proyecto", run: () => setGitPanelOpen(true) },
     { id: "settings", label: "Abrir configuración", description: "Preferencias, seguridad y proveedores", run: () => setSettingsOpen(true) },
     { id: "provider", label: "Conectar proveedor de IA", description: "Ollama, LM Studio o API compatible", run: () => setProviderDialogOpen(true) },
     { id: "appearance", label: "Cambiar apariencia", description: "Temas y modo claro u oscuro", run: () => setAppearanceOpen(true) },
+    { id: "recipes", label: "Abrir recetas de tareas", description: "Preparar una instrucción local para el agente", run: () => setTaskRecipesOpen(true) },
+    { id: "help", label: "Abrir ayuda", description: "Accesos rápidos y atajos de teclado", run: () => setHelpOpen(true) },
+    { id: "notifications", label: "Abrir notificaciones", description: "Avisos de sincronización y actualizaciones", run: () => setNotificationsOpen(true) },
     { id: "blocks", label: "Alternar bloques", description: "Mostrar u ocultar los resultados de comandos", run: () => setBlocksOpen((open) => !open) },
     ...tabs.map((tab) => ({ id: `tab-${tab.id}`, label: `Ir a ${tab.title}`, description: `${shellNames[tab.shell]} · ${tab.cwd ?? "Directorio de inicio"}`, run: () => selectTab(tab.id) })),
   ];

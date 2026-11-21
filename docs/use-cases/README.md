@@ -182,7 +182,7 @@ Después de aplicar un archivo, el usuario puede listar copias y restaurar una v
 
 **Objetivo:** abrir acciones frecuentes, cambiar de sesión y recuperar un comando sin volver a escribirlo.
 
-**Flujo principal:** pulsa `Ctrl+K` o el botón de búsqueda. Escribe parte del nombre de una acción, una sesión o un comando. Elige una acción para abrirla o cambiar de pestaña; al elegir un comando, Laural lo copia al portapapeles para que puedas revisarlo y pegarlo manualmente.
+**Flujo principal:** pulsa `Ctrl+K` o el botón de búsqueda. Escribe parte del nombre de una acción, una sesión o un comando. La paleta ofrece accesos a terminales, proyectos, Git, recetas, ayuda, notificaciones y configuración. Elige una acción para abrirla o cambiar de pestaña; al elegir un comando, Laural lo copia al portapapeles para que puedas revisarlo y pegarlo manualmente.
 
 **Criterios:** la paleta se cierra con `Escape`; el historial no supera 100 comandos y solo vive en memoria. La paleta no ejecuta comandos. Los comandos no se envían a los servicios de Laural ni se incluyen en la sincronización.
 

@@ -222,6 +222,28 @@ test("abre la paleta con Ctrl+K y copia un comando de la sesión sin ejecutarlo"
   expect(mocks.invoke).not.toHaveBeenCalledWith("run_command", expect.anything());
 });
 
+test("la paleta permite abrir paneles Git y recetas", async () => {
+  await act(async () => root!.render(<App />));
+  await act(async () => host.querySelector<HTMLButtonElement>(".search-button")!.click());
+  const search = host.querySelector<HTMLInputElement>(".palette-search input")!;
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+  await act(async () => {
+    setValue.call(search, "Abrir panel Git");
+    search.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => buttonIncluding("Abrir panel Git").click());
+  expect(host.querySelector(".git-panel-dialog")).not.toBeNull();
+
+  await act(async () => host.querySelector<HTMLButtonElement>(".search-button")!.click());
+  const nextSearch = host.querySelector<HTMLInputElement>(".palette-search input")!;
+  await act(async () => {
+    setValue.call(nextSearch, "Abrir recetas de tareas");
+    nextSearch.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => buttonIncluding("Abrir recetas de tareas").click());
+  expect(host.querySelector('[role="dialog"][aria-labelledby="recipes-title"]')).not.toBeNull();
+});
+
 test("la paleta permite ir a una pestaña y cerrar con Escape", async () => {
   await act(async () => root!.render(<App />));
   await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Nueva terminal"]')!.click());

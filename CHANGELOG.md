@@ -2,6 +2,7 @@
 
 ## Sin publicar
 
+- La paleta `Ctrl+K` incorpora accesos a proyectos, Git, recetas, ayuda y notificaciones.
 - El selector del espacio personal ahora muestra su estado local y accesos a proyectos y sincronización.
 - Conectados los botones de Ayuda y Notificaciones con sus paneles y acciones correspondientes.
 - Añadida la página pública `/status` del servicio, con estado e incidencias desde un documento JSON validado y limitado. La actualización administrativa se hace por SSH mediante archivo persistente; la vista nunca expone errores internos y muestra estado desconocido ante fallos. Aún no está desplegada en el VPS.
