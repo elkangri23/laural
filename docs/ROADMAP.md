@@ -72,7 +72,7 @@ Estado al 21 de noviembre de 2026. «Implementado» describe código presente; �
 - Paleta de acciones y búsqueda de comandos recientes implementada inicialmente: atajo `Ctrl+K`, selección de sesiones y copia de comandos para revisión, con historial efímero de 100 entradas. Falta validar teclado/portapapeles en Windows y contraste en las 12 paletas.
 - Panel Git: siguiente entrega. Empezar con estado, rama y diff de solo lectura; documentar límites y evitar incluir diffs en el proveedor sin vista previa explícita.
 - Recetas de tareas: después del panel Git. Definir plantillas reutilizables con vista previa, pasos claramente enumerados, límites de alcance y confirmación antes de cada operación con efectos.
-- **Portabilidad y sincronización opcional:** [diseño formal](designs/sincronizacion-preferencias-y-portabilidad.md) aprobado; todavía no implementado. Se eligieron servicio Fastify/PostgreSQL en el VPS, `sync.laurafernandezenfermeria.com`, status público en el mismo VPS, autenticación completa y sincronización cada tres horas con Laural abierta. No hay backups de desastre configurados. La propuesta inicial (backup diario cifrado fuera del VPS, 30 días y prueba trimestral) y el procedimiento de recuperación con factor independiente están documentados, pendientes de aprobación e implementación antes de producción.
+- **Portabilidad y sincronización opcional:** [diseño formal](designs/sincronizacion-preferencias-y-portabilidad.md) aprobado; todavía no implementado. Se eligieron servicio Fastify/PostgreSQL en el VPS, `sync.laurafernandezenfermeria.com`, status público en el mismo VPS, autenticación completa y sincronización cada tres horas con Laural abierta. Decisión del propietario: no habrá copias de desastre fuera del VPS; la pérdida total del host puede borrar cuentas y preferencias sincronizadas. La existencia de una copia PostgreSQL dentro del mismo VPS sigue sin decidirse. Debe mostrarse el riesgo antes de activar sync.
 - Evaluar otras plataformas tras acordar estrategia de PTY, credenciales y empaquetado.
 
 ## M8 — Portabilidad local (diseño aprobado; pendiente)
@@ -97,7 +97,7 @@ Estado al 21 de noviembre de 2026. «Implementado» describe código presente; �
 
 ## M11 — Preparación para producción (pendiente)
 
-- Aprobar e implementar el backup diario cifrado fuera del VPS, retención de 30 días, alerta de fallo, prueba trimestral de restauración, reaplicación de tombstones de borrado y objetivo RPO inicial de 24 h.
+- Documentar y mostrar la decisión de no tener copias fuera del VPS; acordar si habrá una copia local de PostgreSQL y aclarar que no sobrevive a la pérdida del host.
 - Implementar códigos de recuperación y runbook de revisión manual con una prueba independiente preexistente; sin ella el administrador no retira MFA. Revocar sesiones y notificar al usuario.
 - Fijar límites de cuenta/dispositivo/solicitud, monitorización y procedimiento de incidentes.
 - Completar revisión de seguridad, cobertura de líneas y ramas (mínimo 85 % para lógica crítica), instalación/actualización Windows y plan de incidentes.

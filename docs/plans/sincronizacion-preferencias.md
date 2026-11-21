@@ -57,9 +57,10 @@ El [backlog](../BACKLOG.md) contiene criterios de cierre por tarea; la [hoja de 
 
 ## Pendientes antes de producción
 
-- **Propuesta por aprobar:** backup lógico diario de PostgreSQL, cifrado antes de subirlo a almacenamiento fuera del VPS, retención de 30 días, aviso si falla y prueba de restauración trimestral en entorno aislado. Objetivo inicial de recuperación: hasta 24 h de cambios podrían perderse. No hay backups configurados ahora; el diseño no afirma lo contrario.
+- **Decisión aprobada:** no enviar copias de desastre fuera del VPS. No hay copias de desastre configuradas hoy; la pérdida total del VPS puede borrar definitivamente cuentas y preferencias de nube. No se ofrece garantía de recuperación tras perder el host.
+- Definir por separado si se conservará una copia local de PostgreSQL en el propio VPS. Puede ayudar ante ciertos errores de datos, pero no protege frente a la pérdida del VPS y no debe llamarse copia de desastre.
 - **Propuesta por aprobar:** emitir códigos de recuperación de un solo uso al activar MFA; permitir revisión manual del administrador solo con PIN de correo más un factor/prueba independiente preexistente. Sin ella no se retiran factores. Revocar sesiones y notificar al aprobar; registrar categoría de evidencia y decisión, no el contenido de pruebas.
-- Implementar tombstones de borrado fuera del backup y reaplicarlos antes de reabrir el servicio tras restaurar. Informar que las copias de desastre cifradas pueden persistir hasta 30 días; son distintas de las copias visibles de recuperación.
+- Informar claramente del riesgo de pérdida total del VPS antes de activar la sincronización. Mantener la app local-first y no presentar la nube como única copia de la configuración.
 - Fijar límites de cuenta/dispositivos/peticiones, monitorización y procedimiento de incidentes.
 - Configurar proveedor de correo y credenciales de Google fuera del repositorio; nunca publicar secretos en GitHub.
 

@@ -33,7 +33,7 @@ Laural ya mantiene perfiles y preferencias en el dispositivo y guarda claves de 
 ## Consecuencias
 
 - Los perfiles importados no llevan claves de proveedores; cada dispositivo requiere configurar sus secretos localmente, salvo que la persona eligiera exportarlos cifrados.
-- Los snapshots de recuperación visibles no caducan automáticamente. El usuario puede borrarlos; eliminar cuenta elimina las copias de nube. La retención de backups de desastre del VPS se documenta por separado.
+- Los snapshots de recuperación visibles no caducan automáticamente. El usuario puede borrarlos; eliminar cuenta elimina las copias de nube. Por ADR-0024 no se mantienen copias fuera del VPS; la pérdida total del host puede borrar definitivamente los datos sincronizados.
 - La URL de endpoint puede revelar infraestructura privada y por eso no se sincroniza sin consentimiento expreso para ese perfil.
 - Los perfiles y reglas del agente permanecen locales para evitar transferir permisos de ejecución.
 - El diseño aprobado no implica que exportación, cuentas o sincronización estén implementados. Las fases y criterios están en el [plan de sincronización](../plans/sincronizacion-preferencias.md) y el [diseño formal](../designs/sincronizacion-preferencias-y-portabilidad.md).

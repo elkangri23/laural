@@ -32,7 +32,7 @@ ADR-0020 decide el alcance funcional: una transferencia local sin cuenta y sincr
 - El servicio tiene costos de operación, correo transaccional, respaldos, abuso, incidentes y soporte; la cuenta es optativa.
 - Los endpoints personalizados requieren consentimiento por perfil y pueden revelar nombres de host privados al operador.
 - Los conflictos no se fusionan por campo y requieren elección humana con copia recuperable previa.
-- Los snapshots de recuperación visibles no caducan automáticamente. No hay backups de desastre configurados. La propuesta para producción es backup lógico diario cifrado fuera del VPS, 30 días de retención, alerta de fallo, prueba trimestral de restauración y RPO de hasta 24 horas; reaplicar tombstones antes de reabrir la API. Aún requiere aprobación e implementación.
+- Los snapshots de recuperación visibles no caducan automáticamente. No se configurarán copias de desastre fuera del VPS, según ADR-0024. La pérdida total del host puede destruir datos de cuenta y snapshots; la app debe comunicar esta limitación antes de habilitar sync. La existencia de una copia de PostgreSQL dentro del VPS sigue sin decidirse y no protege ante la pérdida del host.
 - La propuesta de recuperación genera códigos de un solo uso al activar MFA; el administrador solo retira factores con PIN de correo y una prueba independiente preexistente, revoca sesiones y notifica. Si no hay prueba independiente, no se retiran factores. Falta implementar y ensayar el runbook antes de habilitar el flujo.
 - El diseño aprobado no afirma que el backend o la UI estén implementados.
 

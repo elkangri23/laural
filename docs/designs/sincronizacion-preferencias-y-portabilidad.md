@@ -46,18 +46,16 @@ The feature must preserve local-only use and manual transfer as complete options
 
 --------------------------------------------------------------------------------
 
-## Recommended operational baseline (pending owner approval)
+## Backup and account-recovery policy
 
-The service is not deployed and currently has no disaster-recovery backups. The following is a small, maintainable baseline for the first production release; it is a recommendation, not a claim that backups or recovery are already configured.
+### No off-site copies
 
-### Disaster-recovery backups
+* **Accepted decision:** Laural will not send disaster-recovery backups outside the VPS. No off-site storage or external backup provider is part of this service.
+* No disaster backup is currently configured. Whether to keep a local database copy on the same VPS is a separate choice and remains undecided; do not describe such a copy as disaster recovery.
+* A total VPS loss, disk failure, or destructive compromise may permanently erase accounts and cloud preference snapshots. There is no recovery-point or recovery-time guarantee after total host loss. The service must disclose this before account sync is enabled.
+* Laural remains local-first: sync is optional, local settings continue working, and users should retain their devices or use manual export/import when implemented. Cloud sync must not be presented as the only copy of a user's configuration.
 
-* Run one PostgreSQL logical backup each day and encrypt it before uploading to storage outside the VPS. Keep the latest 30 days; use credentials separate from the VPS login and keep the encryption key outside the repository and backup storage.
-* Alert the operator if a backup is missing or fails. Restore a backup to an isolated environment at least quarterly and record the result; do not count an untested archive as a working backup.
-* Set the initial recovery-point objective to 24 hours: a catastrophic failure may lose changes made since the previous successful backup. This first-stage policy does not provide point-in-time recovery; PostgreSQL documents that `pg_dump` is a logical dump and not a continuous-archiving/PITR backup.
-* On account deletion, remove live data immediately and append a minimal account-ID deletion tombstone to separately protected recovery metadata. Replay tombstones before reopening the API after a restore so deleted accounts do not return. Disclose that encrypted disaster copies may persist until the 30-day retention expires; user-visible recovery snapshots remain a separate feature and do not expire automatically.
-
-### Lost-factor account recovery
+### Lost-factor account recovery (recommended runbook)
 
 * When a user enrolls MFA, generate single-use recovery codes, show them once, store only verifiers on the service, and require the user to confirm they saved them.
 * The six-digit email PIN proves control of the mailbox only. It may open a support case but never grants a session or removes MFA by itself.
@@ -65,9 +63,7 @@ The service is not deployed and currently has no disaster-recovery backups. The 
 * If no independent proof remains, do not bypass MFA based on personal details, provider names, or configuration trivia. Explain that the account cannot be safely recovered and let the user create a new account. This avoids making the support process weaker than sign-in; OWASP notes that recovery is an alternate authentication path and that MFA bypass/reset can be exploited.
 * On approval, revoke every session, remove only the lost factors, require the user to set up a new factor at next sign-in, and retain a minimal decision audit. No public endpoint or public admin panel can perform this action.
 
-These defaults need owner approval before they become release policy. The actual backup job, alerting, restore drill, recovery codes, support procedure and disclosure must be implemented and verified before enabling public account sync.
-
-Rationale: [PostgreSQL backup and restore](https://www.postgresql.org/docs/current/backup.html) distinguishes logical dumps from continuous archiving/PITR; [OWASP MFA guidance](https://cheatsheetseries.owasp.org/cheatsheets/Multifactor_Authentication_Cheat_Sheet.html) recommends single-use recovery codes and warns that MFA reset paths can be exploited.
+The no-off-site-copy decision is accepted. The recovery-code feature, administrator procedure and disclosures still need implementation and verification before public account sync. The runbook recommendation follows [OWASP MFA guidance](https://cheatsheetseries.owasp.org/cheatsheets/Multifactor_Authentication_Cheat_Sheet.html), which recommends single-use recovery codes and warns that MFA reset paths can be exploited.
 
 --------------------------------------------------------------------------------
 
@@ -233,7 +229,7 @@ Email PINs are six digits, single-use, expire after five minutes, are rate-limit
 * **Security and privacy**: Use TLS, account-scoped authorization, typed allowlists, strict input and size validation, revocable sessions, safe credential storage and payload-free logs. The service operator can read allowed sync data; the UI and privacy documentation must state this because the first release is not end-to-end encrypted.
 * **Reliability**: Local changes succeed independently of network access. Sync uses conditional revisions, idempotent writes, durable bounded pending state, recoverable backups before replacement, and visible failure/conflict states.
 * **Performance**: A serialized preference snapshot cannot exceed 256 KiB. Network work runs outside the UI thread; repeated local saves are coalesced.
-* **Data lifecycle**: User-visible recovery copies do not expire automatically and can be deleted by the user. Account deletion removes the live account and user-visible cloud copies. Disaster-recovery backup retention is a separate disclosed policy.
+* **Data lifecycle**: User-visible recovery copies do not expire automatically and can be deleted by the user. Account deletion removes the live account and user-visible cloud copies. No disaster-recovery backup leaves the VPS; total host loss may make cloud data unrecoverable. Any future same-host copy needs a separate retention/deletion rule and must not be called off-site recovery.
 * **Status availability**: The unauthenticated page is served from the sync VPS outside the API process. It can report API/database failures while the VPS and reverse proxy remain online, but cannot report a total VPS or network outage from that same host.
 
 
@@ -333,7 +329,7 @@ Unless noted otherwise, paths in this table are relative to the repository root.
 * Use parameterized PostgreSQL queries, per-account authorization in the service layer, strict request schemas, HTTPS-only origin validation, no open redirects, random OAuth state, PKCE, one-use loopback authorization codes and short-lived WebAuthn challenges.
 * Apply generic responses for registration, login, PIN requests and recovery requests. Rate-limit by account/action and network source, cap body size and active sessions, and avoid storing IP addresses in routine application logs.
 * Store refresh credentials only in Windows Credential Manager. Hash passwords with Argon2id; store one-use codes as hashes; store PIN verifiers with a server-side keyed verifier; encrypt TOTP seeds at rest. Provider API keys remain in the existing Windows Credential Manager namespace and never enter server requests.
-* Persist user-visible recovery snapshots until user deletion, with no automatic expiry. Account deletion removes the live account, its cloud snapshots, sessions and factors. Disaster-recovery backup retention is separate and must be disclosed; restore procedures must replay account-deletion records before reopening service.
+* Persist user-visible recovery snapshots until user deletion, with no automatic expiry. Account deletion removes the live account, its cloud snapshots, sessions and factors. Do not send disaster-recovery backups outside the VPS; disclose that total VPS loss can destroy cloud data.
 * Require an admin recovery runbook before enabling recovery. The PIN only proves mailbox access; the administrator records a decision category, revokes all active sessions on approval, removes existing factors only after reviewing independent evidence, and sends a security notice. Evidence documents and PINs are not stored in application logs.
 * Test that the WebView cannot make arbitrary network requests; all service traffic passes through the Rust client. Keep the opener restricted to the configured HTTPS sync origin and Google authorization URLs.
 
@@ -347,7 +343,7 @@ Unless noted otherwise, paths in this table are relative to the repository root.
 
 ### Release blockers to resolve
 
-* Set and disclose the VPS disaster-recovery backup retention period separately from the user-visible cloud recovery snapshots, which do not expire automatically.
+* Document whether a same-VPS database copy will be configured and its retention/deletion behavior. It does not protect against total VPS loss; no off-site copy is allowed by the accepted decision.
 * Approve the administrator recovery runbook's evidence checklist and notification timing before enabling requests.
 
 

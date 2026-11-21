@@ -27,6 +27,7 @@ Los ADR registran por qué se eligió una opción y qué costes trae. Un ADR ace
 | [0021](0021-paleta-e-historial-de-comandos.md) | Paleta de acciones y comandos recientes solo en sesión | Aceptada |
 | [0022](0022-cifrado-de-exportaciones-y-claves-locales.md) | Contraseña obligatoria para exportar claves y límites del Credential Manager | Decisión aceptada; implementación pendiente |
 | [0023](0023-servicio-de-sincronizacion.md) | Fastify/PostgreSQL, API oficial, revisiones, auth nativa y estado público | Aceptada; implementación pendiente |
+| [0024](0024-sin-copias-fuera-del-vps.md) | No mantener copias de sincronización fuera del VPS | Aceptada; comunicar riesgo de pérdida total |
 
 ## Crear un ADR
 
