@@ -18,6 +18,7 @@
 - Icono y favicon propios; la compilación para Windows se puede generar desde GitHub Actions al publicar una etiqueta `v*`.
 - Actualizaciones Windows firmadas desde GitHub, con instalación manual o automática y versión visible en Configuración.
 - Aplicación local sin cuenta ni servicio propio. La sincronización está fuera del alcance de la primera versión.
+- Las claves de proveedor se guardan en Windows Credential Manager, no en el archivo de perfiles. La futura exportación de claves exigirá contraseña y cifrado; no habrá archivos con claves en claro. Consulta [privacidad y seguridad](docs/security/privacy.md).
 
 Laural es una implementación independiente con marca e interfaz propias. No incluye código, recursos ni componentes de Warp.
 

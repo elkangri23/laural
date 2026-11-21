@@ -22,7 +22,7 @@ El nombre **perfil de Laural** designa un conjunto de preferencias y perfiles de
 | Preferencia de actualización | Sí | Sí | Sí |
 | Nombre, tipo, modelo y endpoint de perfiles de proveedor | Sí | Sí | Sí, con confirmación para endpoints personalizados |
 | Proveedor activo | Sí | Sí | Sí |
-| Claves API de proveedores | Credential Manager | Opcional, solo por acción explícita | **Nunca** |
+| Claves API de proveedores | Credential Manager | Solo dentro de un archivo cifrado con contraseña obligatoria | **Nunca** |
 | Contraseña, tokens de sesión, credenciales de Google y passkeys | Almacén seguro apropiado | **Nunca** | **Nunca como datos de configuración** |
 | Modo y reglas del agente | Sí | Sí | Desactivado por defecto; sincronización opcional y separada |
 | Historial de chat/terminal, prompts, proyectos, rutas locales y actividad | Sí, cuando exista | **No** | **No** |
@@ -37,21 +37,21 @@ Las reglas y el modo automático del agente pueden ampliar permisos en otro equi
 
 1. La persona elige **Exportar configuración** y ve el resumen de preferencias, perfiles y campos que contendría el archivo.
 2. Por defecto, se excluyen las claves API. Una casilla independiente permite incluirlas.
-3. Si se incluyen claves, la app recomienda cifrar el archivo con una contraseña de exportación que no se reutiliza automáticamente desde la cuenta.
-4. El producto solicitado contempla exportación con y sin contraseña. La opción sin contraseña se marcará claramente como **archivo sin cifrar**, requerirá una confirmación adicional y no se describirá como segura para correo, almacenamiento compartido o repositorios.
+3. Si se incluyen claves, una contraseña de exportación es obligatoria. No existe modo de exportar claves en texto plano ni se reutiliza la contraseña de cuenta.
+4. Exportar sin contraseña sigue siendo posible solo cuando se excluyen las claves API. La interfaz lo indicará claramente.
 5. El formato lleva versión de esquema, límites de tamaño y tipos de dato permitidos. Será un documento de Laural, no un ZIP que extraiga rutas arbitrarias.
 
-Cuando se use contraseña, se derivará la clave de cifrado con Argon2id y sal aleatoria; el contenido se cifrará con un modo autenticado como AES-256-GCM y nonce único. El archivo incluirá los parámetros necesarios para descifrar y verificar integridad, pero no la contraseña. Se usarán bibliotecas mantenidas, aleatoriedad del sistema y pruebas de vectores conocidos; no se diseñará criptografía propia. OWASP recomienda modos autenticados como GCM. Para contraseñas de cuentas, la guía de OWASP propone como mínimo Argon2id con 19 MiB, dos iteraciones y paralelismo 1; se medirá su coste en Windows antes de fijar los parámetros de producción.
+La clave de cifrado se derivará con Argon2id, sal aleatoria y parámetros versionados; el contenido completo del perfil, incluidas las claves, se cifrará con un modo autenticado como AES-256-GCM y nonce único. El archivo incluirá los parámetros necesarios para descifrar y verificar integridad, pero no la contraseña. Los parámetros deberán tener límites rígidos antes de calcular la KDF para evitar que un archivo manipulado cause consumo excesivo. Se usarán bibliotecas mantenidas, aleatoriedad del sistema y pruebas de vectores conocidos; no se diseñará criptografía propia. Se medirá el coste en Windows y se fijará una política de parámetros versionada antes de implementar el formato.
 
 ### Importar
 
 1. La app detecta la versión, valida el esquema y, si corresponde, pide la contraseña del archivo.
 2. Presenta una vista previa con las preferencias, perfiles, endpoints y si hay claves dentro del archivo.
 3. Permite **fusionar** o **reemplazar**. La fusión conserva ajustes locales que no estén en la copia; el reemplazo pide confirmación y crea una copia local previa.
-4. Si un perfil trae clave, Laural comprueba que el endpoint normalizado coincide con el perfil al que se asociará. La clave se escribe directamente en Windows Credential Manager; nunca en `providers.json`, logs, mensajes de error o telemetría.
+4. Si un perfil trae clave, Laural comprueba que el endpoint normalizado coincide con el perfil al que se asociará. La clave descifrada se mantiene solo en memoria durante la importación y se escribe directamente en Windows Credential Manager; nunca se crea un archivo temporal con claves en claro ni se escriben en `providers.json`, logs, mensajes de error o telemetría. Si falla la validación o el guardado, la importación no aplica parcialmente los perfiles.
 5. Los archivos corruptos, alterados, demasiado grandes, con campos desconocidos críticos o con versiones incompatibles se rechazan sin modificar la configuración.
 
-La importación de un archivo sin contraseña que contenga claves es compatible con lo pedido, pero la app avisará que cualquiera que lea el archivo podrá leerlas. Tras importarlas, se recomienda borrar el archivo o guardarlo en un medio protegido.
+Un archivo con claves siempre exige contraseña y autenticación criptográfica correcta. Si se pierde la contraseña, no hay recuperación. Tras importar, la clave queda protegida por el almacén del sistema; el archivo cifrado debe guardarse como material sensible porque su seguridad depende también de la contraseña.
 
 ## Flujo B: cuenta y sincronización
 
@@ -107,7 +107,7 @@ La autenticación y sincronización exigen servicio alojado, dominio, correo tra
 
 - Crear y renombrar el perfil local **Usuario desconocido**.
 - Exportar/importar sin secretos por defecto.
-- Añadir inclusión opcional de claves y exportación cifrada con contraseña o sin contraseña, con avisos explícitos.
+- Añadir inclusión opcional de claves solo en exportación cifrada con contraseña obligatoria; sin contraseña, excluir claves.
 - Añadir vista previa, fusión/reemplazo, copia de seguridad y escritura atómica.
 - Cerrar pruebas de ida y vuelta, corrupción, archivo alterado, contraseña equivocada, migración de versión y separación entre claves y JSON local.
 
@@ -137,7 +137,7 @@ La autenticación y sincronización exigen servicio alojado, dominio, correo tra
 
 - Una persona nueva usa Laural como **Usuario desconocido**, sin red ni cuenta.
 - Puede mover la configuración básica a otro equipo sin incluir secretos.
-- Puede incluir claves solo después de elegirlo; la exportación cifrada rechaza contraseña incorrecta y cualquier alteración. La exportación sin contraseña se identifica como no cifrada.
+- Puede incluir claves solo después de elegirlo y establecer contraseña; no existe exportación de claves en claro. La exportación cifrada rechaza contraseña incorrecta, parámetros fuera de límites y cualquier alteración. La importación escribe la clave directamente en Credential Manager y falla sin aplicar una importación parcial.
 - La importación no escribe claves en archivos ni las asocia a un endpoint distinto.
 - Al iniciar sesión en otro equipo puede comparar y elegir cómo combinar los ajustes; ninguna opción envía claves API.
 - Una prueba de contrato confirma que el backend rechaza cualquier campo `apiKey`, token de proveedor, password, OAuth credential o passkey en payload de sincronización.

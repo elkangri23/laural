@@ -28,6 +28,7 @@ Los requisitos distinguen el alcance acordado del estado actual del prototipo. �
 | FR-20 | Consultar, descargar e instalar actualizaciones de GitHub; permitir decisión manual o instalación automática y mostrar versión. | Integrado para instaladores NSIS de Windows; validación real de release pendiente |
 | FR-21 | Consultar y borrar el historial local de acciones del agente. | Implementado con metadatos mínimos, límite de 200 eventos/64 KiB y sin contenido de usuario |
 | FR-22 | Buscar acciones, sesiones y comandos recientes desde una paleta; reutilizar un comando sin ejecutarlo automáticamente. | Implementación inicial; historial solo en memoria, limitado a 100 comandos |
+| FR-23 | Exportar/importar preferencias y, opcionalmente, claves de proveedor entre equipos. | Pendiente; las claves solo podrán exportarse en un archivo cifrado con contraseña obligatoria; sincronización nunca las incluye |
 
 ## No funcionales
 
@@ -46,6 +47,7 @@ Los requisitos distinguen el alcance acordado del estado actual del prototipo. �
 | NFR-11 | Legibilidad visual. | Contraste de texto y controles legibles en las 12 paletas y en ambos modos; cambio de tema no debe reiniciar shells. |
 | NFR-12 | Integridad de actualizaciones. | HTTPS y firma del paquete verificada con clave pública antes de instalación; secreto privado solo en GitHub Actions. |
 | NFR-13 | Privacidad del historial de terminal. | Los comandos recientes viven solo en memoria y se pierden al cerrar Laural; nunca se persisten ni sincronizan. |
+| NFR-14 | Protección de credenciales exportadas y locales. | Sin claves en claro en archivos; Credential Manager para almacenamiento local y cifrado autenticado con contraseña para transferencia de claves. No prometer protección contra malware de la sesión activa. |
 
 ## Supuestos y dependencias
 

@@ -25,6 +25,7 @@ Los ADR registran por qué se eligió una opción y qué costes trae. Un ADR ace
 | [0019](0019-reemplazo-seguro-por-handle.md) | Reemplazo de archivos existentes con handles y colisión sin sobrescritura en Windows | Aceptada |
 | [0020](0020-perfiles-y-sincronizacion-opcional.md) | Perfil local, exportación/importación y sincronización opcional sin claves API en nube | Propuesta |
 | [0021](0021-paleta-e-historial-de-comandos.md) | Paleta de acciones y comandos recientes solo en sesión | Aceptada |
+| [0022](0022-cifrado-de-exportaciones-y-claves-locales.md) | Contraseña obligatoria para exportar claves y límites del Credential Manager | Decisión aceptada; implementación pendiente |
 
 ## Crear un ADR
 

@@ -12,7 +12,7 @@ El MVP funciona sin cuenta, mantiene perfiles y preferencias en el equipo y guar
 
 - Mantener el uso local sin registro; el perfil local inicial se etiqueta **Usuario desconocido** y no representa una cuenta.
 - Separar **exportar/importar** de **sincronizar** como flujos y formatos distintos.
-- Permitir exportar preferencias y metadatos de perfiles. Las claves API se excluyen por defecto y solo entran al archivo tras selección explícita; el producto solicitado contempla archivo cifrado con contraseña o archivo sin cifrar con aviso y confirmación.
+- Permitir exportar preferencias y metadatos de perfiles. Las claves API se excluyen por defecto y solo entran al archivo tras selección explícita y contraseña obligatoria. No habrá exportación de claves en texto plano; sin contraseña se exporta solo configuración no secreta.
 - No sincronizar nunca claves API, contraseñas, tokens OAuth/de sesión, passkeys, historial de chat/terminal ni contexto de proyectos.
 - Sincronizar preferencias y perfiles de proveedor tras registro/inicio de sesión opcional. Registrar nombre, correo verificado y credenciales de cuenta en el servicio; ofrecer contraseña, Google OIDC, passkeys y MFA.
 - Para la app nativa, usar navegador externo y Authorization Code con PKCE para Google. Implementar passkeys con WebAuthn y validar credenciales en servidor.
@@ -32,7 +32,7 @@ Los detalles criptográficos del archivo, retención del servicio, sincronizaci�
 ## Consecuencias
 
 - El modo local sigue sin coste operativo para la persona y sin registro.
-- La transferencia puede contener claves solo si la persona lo solicita. Sin contraseña, el archivo será texto no cifrado y debe tratarse como secreto.
+- La transferencia puede contener claves solo si la persona lo solicita y protege el archivo con contraseña y cifrado autenticado. La configuración sin claves puede exportarse sin contraseña.
 - El servicio opcional implica hosting, correo, almacenamiento, protección contra abuso, soporte, borrado de cuenta y política de privacidad.
 - La metadata de endpoints personalizados puede revelar infraestructura privada; la app debe mostrarla antes de sincronizar y permitir excluirla.
 - Los perfiles de proveedor sincronizados no contendrán claves. En un dispositivo nuevo, el usuario tendrá que introducir sus claves localmente.

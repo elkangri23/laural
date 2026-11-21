@@ -73,6 +73,7 @@ Estado al 21 de noviembre de 2026. «Implementado» describe código presente; �
 - Panel Git: siguiente entrega. Empezar con estado, rama y diff de solo lectura; documentar límites y evitar incluir diffs en el proveedor sin vista previa explícita.
 - Recetas de tareas: después del panel Git. Definir plantillas reutilizables con vista previa, pasos claramente enumerados, límites de alcance y confirmación antes de cada operación con efectos.
 - Propuesta documentada en [ADR-0020](adr/0020-perfiles-y-sincronizacion-opcional.md) y [plan de diseño](plans/sincronizacion-preferencias.md): transferencia manual con opción explícita de incluir claves, y sincronización con cuenta que las excluye. No implementado; requiere aceptar alojamiento, privacidad, recuperación y tratamiento de endpoints.
+- Seguridad de exportación definida en [ADR-0022](adr/0022-cifrado-de-exportaciones-y-claves-locales.md): incluir claves exige contraseña y cifrado autenticado; exportar sin contraseña excluye las claves. La implementación/importación transaccional queda pendiente para F1.
 - Evaluar otras plataformas tras acordar estrategia de PTY, credenciales y empaquetado.
 
 ## No planificado para el MVP

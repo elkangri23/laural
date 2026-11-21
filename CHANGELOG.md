@@ -2,6 +2,7 @@
 
 ## Sin publicar
 
+- Endurecido el diseño de exportación/importación: las claves quedan fuera por defecto y solo podrán exportarse con contraseña obligatoria y cifrado autenticado; nunca en texto plano. Documentado el alcance y los límites reales de Credential Manager.
 - Añadida paleta `Ctrl+K` para buscar acciones, sesiones y comandos recientes. El historial es efímero y elegir un comando solo lo copia para revisión; no lo ejecuta.
 - Verificada la compatibilidad del descubrimiento de modelos con respuestas OpenAI-compatible y Ollama; se ordenan y deduplican los nombres, y se rechazan listas inválidas o vacías.
 - Unificadas la preparación del historial y el contexto de chat normal/streaming; una regresión comprueba límites, roles admitidos y etiquetado del contexto como dato no confiable.

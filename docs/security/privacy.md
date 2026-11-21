@@ -5,7 +5,7 @@
 | Dato | Ubicación | Observación |
 | --- | --- | --- |
 | Nombres, URL y modelos de proveedores | `providers.json` en el directorio de configuración de Laural | La URL puede revelar un host privado. |
-| Claves de API | Windows Credential Manager mediante el backend nativo de `keyring` | Se comprueba la lectura tras guardar. No incluir en issues, logs ni exportación. |
+| Claves de API | Windows Credential Manager mediante el backend nativo de `keyring` | Se comprueba la lectura tras guardar. No se guardan en archivos de Laural. En una futura exportación solo se incluirán dentro de un archivo cifrado con contraseña obligatoria. |
 | Modo y comandos exactos del agente | `agent.json` | Son preferencias locales. |
 | Historial de chat | No se persiste en la versión actual | La memoria en UI dura solo lo que mantenga la sesión. |
 | Preferencia de apariencia | `localStorage` del WebView | Solo almacena modo y tema seleccionados. |
@@ -19,11 +19,13 @@ Al enviar chat o solicitar plan, Laural incluye la pregunta y el contexto que el
 
 La lista y límites de contexto son protección contra exceso accidental, no una garantía de que se excluya todo dato sensible. Revisa prompts, salida de terminal y archivos antes de enviarlos. Evita pasar claves, tokens, datos personales o secretos de clientes.
 
+Credential Manager protege las claves guardadas en reposo a través de Windows; Laural las recupera en memoria para autenticar solicitudes. Esto reduce la exposición en archivos y copias, pero no es impenetrable: malware ejecutado como la misma persona, un proceso de Laural comprometido, permisos administrativos o captura de memoria pueden acceder a una clave utilizable.
+
 ## Telemetría y sincronización
 
 No existe telemetría ni cuenta de Laural en el MVP. La sincronización queda diferida; perfiles y credenciales no se envían a servicio alguno de Laural.
 
-La propuesta futura separa transferencia manual de configuración de sincronización autenticada. El archivo exportado podrá incluir claves solo si el usuario lo elige; si se exporta sin contraseña, contendrá secretos en texto no cifrado. La propuesta de sincronización de cuenta excluye claves API, credenciales de login, tokens, passkeys, historial y contexto de proyectos. Consulta el [plan de sincronización](../plans/sincronizacion-preferencias.md); ninguna de estas funciones está implementada en el MVP.
+La propuesta futura separa transferencia manual de configuración de sincronización autenticada. El archivo exportado podrá incluir claves solo si el usuario lo elige y establece una contraseña; un archivo sin contraseña excluirá siempre las claves. La sincronización de cuenta excluye claves API, credenciales de login, tokens, passkeys, historial y contexto de proyectos. Consulta el [plan de sincronización](../plans/sincronizacion-preferencias.md); ninguna de estas funciones está implementada en el MVP.
 
 El historial de actividad del agente permanece en el equipo y no contiene comandos, rutas, prompts, salida de terminal, contenido de archivos, URLs, claves ni detalles de error. No es un registro inviolable: cualquier proceso con acceso a la cuenta puede alterarlo o borrarlo.
 

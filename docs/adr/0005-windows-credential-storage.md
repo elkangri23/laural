@@ -21,6 +21,8 @@ Guardar las claves mediante la API de keyring del sistema operativo, usando Wind
 ## Consecuencias
 
 - Los secretos dependen del almacén de credenciales del sistema y del perfil de usuario de Windows.
+- En Windows, `keyring` usa el almacén nativo Credential Manager, que protege las credenciales almacenadas en reposo mediante mecanismos del sistema vinculados a la sesión de inicio. La clave se recupera en memoria cuando Laural necesita autenticar una petición.
+- Esto evita guardar la clave en texto plano en archivos de Laural, pero no protege frente a malware o código comprometido que se ejecute con acceso a la cuenta, un proceso de Laural comprometido, acceso administrativo o captura de memoria durante el uso. No existe una garantía de almacén «impenetrable».
 - Exportar/importar perfiles no debe exportar credenciales automáticamente.
 - La sincronización futura requiere un diseño explícito de cifrado y consentimiento.
 - La aplicación debe evitar incluir cabeceras, claves o mensajes completos en logs de diagnóstico.
