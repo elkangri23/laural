@@ -282,6 +282,21 @@ test("la campana lleva los avisos de sincronización a Cuenta", async () => {
   expect(host.querySelector(".account-settings")).not.toBeNull();
 });
 
+test("el selector de espacio abre acciones de proyecto y cuenta", async () => {
+  await act(async () => root!.render(<App />));
+  const picker = host.querySelector<HTMLButtonElement>(".workspace-picker")!;
+  await act(async () => picker.click());
+  expect(picker.getAttribute("aria-expanded")).toBe("true");
+  expect(host.textContent).toContain("Los espacios compartidos aún no están disponibles.");
+  await act(async () => buttonIncluding("Abrir carpeta de proyecto").click());
+  expect(mocks.open).toHaveBeenCalledWith({ directory: true, multiple: false });
+  expect(host.querySelector('[role="menu"][aria-label="Espacio de trabajo"]')).toBeNull();
+
+  await act(async () => picker.click());
+  await act(async () => buttonIncluding("Cuenta y sincronización").click());
+  expect(host.textContent).toContain("Cuenta y sincronización");
+});
+
 test("si el portapapeles no está disponible muestra el comando para copiarlo manualmente", async () => {
   Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: vi.fn().mockRejectedValue(new Error("denegado")) } });
   await act(async () => root!.render(<App />));

@@ -69,6 +69,7 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
   const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
   const [updateSettingsOpen, setUpdateSettingsOpen] = useState(false);
@@ -117,6 +118,7 @@ function App() {
   const activeAgentTerminalRef = useRef<string | null>(null);
   const commandCompletionRef = useRef<Record<string, { resolve: (exitCode: number | null) => void; timer: ReturnType<typeof setTimeout> }>>({});
   const syncTimerRef = useRef<number | null>(null);
+  const workspaceMenuRef = useRef<HTMLDivElement>(null);
   const appearanceSyncReadyRef = useRef(false);
 
   const syncSavedPreferences = useCallback(async () => {
@@ -346,6 +348,22 @@ function App() {
   useEffect(() => () => {
     if (outputFlushTimerRef.current !== null) window.clearTimeout(outputFlushTimerRef.current);
   }, []);
+
+  useEffect(() => {
+    if (!workspaceMenuOpen) return;
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (event.target instanceof Node && !workspaceMenuRef.current?.contains(event.target)) setWorkspaceMenuOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setWorkspaceMenuOpen(false);
+    };
+    document.addEventListener("mousedown", closeOnOutsideClick);
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("mousedown", closeOnOutsideClick);
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [workspaceMenuOpen]);
 
   function addTerminal(shell: Shell, cwd: string | null = projectPath) {
     const count = tabs.filter((tab) => tab.shell === shell).length + 1;
@@ -767,11 +785,20 @@ function App() {
           <span className="brand-name">Laural</span>
           <button className="icon-button sidebar-menu" aria-label="Abrir menú"><DotsIcon /></button>
         </div>
-        <button className="workspace-picker">
-          <span className="workspace-avatar">A</span>
-          <span className="workspace-copy"><strong>Mi equipo</strong><small>Espacio personal</small></span>
-          <ChevronIcon />
-        </button>
+        <div className="workspace-picker-wrap" ref={workspaceMenuRef}>
+          <button className="workspace-picker" aria-expanded={workspaceMenuOpen} aria-haspopup="menu" aria-controls="workspace-menu" onClick={() => setWorkspaceMenuOpen((open) => !open)}>
+            <span className="workspace-avatar">A</span>
+            <span className="workspace-copy"><strong>Mi equipo</strong><small>Espacio personal</small></span>
+            <ChevronIcon />
+          </button>
+          {workspaceMenuOpen && <div className="workspace-menu" id="workspace-menu" role="menu" aria-label="Espacio de trabajo">
+            <p className="workspace-menu-label">ESPACIO ACTUAL</p>
+            <div className="workspace-menu-current"><span className="workspace-avatar">A</span><span><strong>Espacio personal</strong><small>Solo disponible en este equipo</small></span><span className="workspace-menu-check" aria-label="Seleccionado">✓</span></div>
+            <p className="workspace-menu-note">Los espacios compartidos aún no están disponibles. Tus proyectos se abren dentro de este espacio local.</p>
+            <button role="menuitem" onClick={() => { setWorkspaceMenuOpen(false); void openProject(); }}><FolderIcon /><span>{projectPath ? "Cambiar carpeta de proyecto" : "Abrir carpeta de proyecto"}</span></button>
+            <button role="menuitem" onClick={() => { setWorkspaceMenuOpen(false); setAccountSettingsOpen(true); }}><SyncIcon /><span>Cuenta y sincronización</span></button>
+          </div>}
+        </div>
         <nav className="primary-nav" aria-label="Navegación principal">
           <button className="nav-item active"><TerminalIcon /><span>Terminal</span><kbd>⌘ 1</kbd></button>
           <button className="nav-item" onClick={() => setProviderDialogOpen(true)}><SparkIcon /><span>Asistente IA</span><span className="nav-dot" /></button>
@@ -1040,6 +1067,8 @@ function ChevronIcon() { return <svg viewBox="0 0 16 16" aria-hidden="true"><pat
 function ChevronRightIcon() { return <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3.5 4.5 4.5L6 12.5"/></svg>; }
 function DotsIcon() { return <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="4" cy="10" r="1"/><circle cx="10" cy="10" r="1"/><circle cx="16" cy="10" r="1"/></svg>; }
 function PlusIcon() { return <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12"/></svg>; }
+function FolderIcon() { return <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2.5 5.5A1.5 1.5 0 0 1 4 4h4l2 2h6A1.5 1.5 0 0 1 17.5 7.5v7A1.5 1.5 0 0 1 16 16H4a1.5 1.5 0 0 1-1.5-1.5v-9Z"/><path d="M2.8 8h14.4"/></svg>; }
+function SyncIcon() { return <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M16.5 8A6.5 6.5 0 0 0 5.3 4.3L3.5 6M3.5 6V2.8M3.5 6h3.2M3.5 12a6.5 6.5 0 0 0 11.2 3.7l1.8-1.7m0 0v3.2m0-3.2h-3.2"/></svg>; }
 function SplitIcon() { return <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="3" width="14" height="14" rx="2"/><path d="M10 3v14"/></svg>; }
 function CopyIcon() { return <svg viewBox="0 0 18 18" aria-hidden="true"><rect x="6" y="5" width="9" height="10" rx="2"/><path d="M12 5V4a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h2"/></svg>; }
 function ClearIcon() { return <svg viewBox="0 0 18 18" aria-hidden="true"><path d="M3 5h12M7 5V3h4v2m3 0-.6 9.2a1 1 0 0 1-1 .8H5.6a1 1 0 0 1-1-.8L4 5m3 3v4m4-4v4"/></svg>; }
