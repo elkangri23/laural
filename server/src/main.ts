@@ -7,6 +7,7 @@ import { PostgresEmailAuthStore } from "./postgres-email-auth-store.js";
 import { NativeAuthService } from "./native-auth.js";
 import { PostgresNativeAuthStore } from "./postgres-native-auth-store.js";
 import { PostgresPreferenceStore } from "./postgres-store.js";
+import { PostgresRequestRateLimiter } from "./request-rate-limit.js";
 import { ResendMailer } from "./resend-mailer.js";
 
 const config = readConfig(process.env);
@@ -25,6 +26,7 @@ const app = createApp({
   store: preferenceStore,
   authenticate: createSessionAuthenticator(pool),
   checkReadiness: async () => { await pool.query("SELECT 1"); },
+  requestRateLimiter: new PostgresRequestRateLimiter(pool, config.rateLimitPepper),
   ...(emailAuth ? { emailAuth } : {}),
   ...(nativeAuth ? { nativeAuth } : {}),
 });

@@ -6,6 +6,7 @@ Backend TypeScript con Fastify y PostgreSQL para snapshots permitidos de prefere
 
 - Node.js 22.13 o posterior.
 - PostgreSQL 13 o posterior.
+- Un secreto aleatorio `RATE_LIMIT_PEPPER` de al menos 32 bytes para derivar huellas HMAC de las IP; el servicio no guarda las direcciones en claro.
 - Para habilitar temporalmente registro/verificación: cuenta Resend con remitente verificado y un secreto aleatorio `AUTH_PIN_PEPPER` de al menos 32 bytes.
 - Una sesión existente en `account_sessions`, asociada a una cuenta verificada.
 - TLS y límites de conexión en el proxy inverso antes de exponerlo.
@@ -24,7 +25,7 @@ npm run test:coverage
 npm start
 ```
 
-Para generar un pepper de prueba desde PowerShell: `[Convert]::ToBase64String([System.Security.Cryptography.RandomNumberGenerator]::GetBytes(32))`. Guarda el resultado solo en el entorno de secretos del servicio. No habilites `EMAIL_AUTH_ENABLED` hasta tener límites por origen de red y el remitente Resend verificado.
+Para generar cada pepper desde PowerShell: `[Convert]::ToBase64String([System.Security.Cryptography.RandomNumberGenerator]::GetBytes(32))`. Guarda los resultados solo en el entorno de secretos del servicio; usa valores distintos para `RATE_LIMIT_PEPPER` y `AUTH_PIN_PEPPER`. No habilites `EMAIL_AUTH_ENABLED` hasta verificar los límites desde Caddy y el remitente Resend.
 
 En desarrollo se puede usar `npm run dev`; las tablas deben existir antes de arrancar. `GET /health/live` comprueba que el proceso responde y `GET /health/ready` realiza una consulta de disponibilidad a PostgreSQL. Las respuestas de salud no filtran errores internos.
 
@@ -47,7 +48,9 @@ En desarrollo se puede usar `npm run dev`; las tablas deben existir antes de arr
 
 El registro y login de navegador están desactivados por defecto. Para probarlos, define `EMAIL_AUTH_ENABLED=true`, `RESEND_API_KEY`, `RESEND_FROM` y `AUTH_PIN_PEPPER` en el entorno privado del proceso. Nunca subas esas variables. Los passwords se derivan con Argon2id. Los PIN de verificación son aleatorios, se guardan como HMAC con una clave del servidor, caducan a los cinco minutos, tienen cinco intentos y se limitan por cuenta a un envío por minuto y tres en quince minutos. Reenviar y confirmar devuelven respuestas genéricas; confirmar el correo no crea sesión. El correo dice expresamente que el PIN no permite iniciar sesión ni retirar MFA. Resend solo recibe el correo y el mensaje de verificación necesario.
 
-Las rutas de cuenta no deben exponerse públicamente todavía: faltan límites persistentes por IP/origen, controles de abuso distribuidos, Google, passkeys, MFA, recuperación, revocación remota y pruebas con PostgreSQL real. El cliente Tauri ya abre el navegador, valida state, usa listener loopback, canjea por HTTPS y guarda el token en Credential Manager. Los flujos PKCE caducan en 10 minutos, los códigos en 2 minutos y las sesiones en 30 días. El código y la sesión son secretos aleatorios opacos; solo sus SHA-256 se almacenan en PostgreSQL. No se registran cabeceras ni se habilitan logs de petición.
+Fastify aplica límites por IP y ruta a autenticación y snapshots. El contador vive en PostgreSQL y se actualiza de forma atómica para que varias instancias compartan el límite; la clave se calcula con HMAC y `RATE_LIMIT_PEPPER`, no se persiste la IP. El servicio solo confía en `X-Forwarded-For` desde loopback, que es donde Caddy conecta con Fastify. Al exceder el límite responde `429` con `Retry-After`; si PostgreSQL no permite comprobar el límite, la solicitud se rechaza. Los límites actuales son: 10 inicios de flujo o login por minuto, 3 registros/reenvíos cada 15 minutos, 10 verificaciones/canjes por minuto, 120 lecturas y 30 escrituras de snapshots por minuto. La migración `004_request_rate_limits.sql` debe aplicarse antes de arrancar esta versión.
+
+Las rutas de cuenta no deben exponerse públicamente todavía: faltan revisar límites ante tráfico real, Google, passkeys, MFA, recuperación, revocación remota y pruebas con PostgreSQL real. El cliente Tauri ya abre el navegador, valida state, usa listener loopback, canjea por HTTPS y guarda el token en Credential Manager. Los flujos PKCE caducan en 10 minutos, los códigos en 2 minutos y las sesiones en 30 días. El código y la sesión son secretos aleatorios opacos; solo sus SHA-256 se almacenan en PostgreSQL. No se registran cabeceras ni se habilitan logs de petición.
 
 ### Status público servido por Caddy
 
@@ -61,4 +64,4 @@ Consulta el contrato en [OpenAPI](openapi.yaml), el [diseño aprobado](../docs/d
 
 ## Límites pendientes antes de producción
 
-Faltan límites persistentes por cuenta/IP, limpieza de claves idempotentes antiguas, integración de migración/pruebas con PostgreSQL real, despliegue TLS, monitoreo, proceso de incidentes, proveedor Resend, revocación/recuperación de cuenta y revisión de seguridad de lanzamiento. La página pública de status está en el código pero aún no se ha desplegado. Los snapshots no están cifrados de extremo a extremo: el operador del VPS puede leer las preferencias permitidas.
+Faltan validación de límites con PostgreSQL/Caddy reales, limpieza periódica de claves idempotentes, integración de migraciones/pruebas con PostgreSQL real, despliegue TLS, monitoreo, proceso de incidentes, proveedor Resend, revocación/recuperación de cuenta y revisión de seguridad de lanzamiento. La página pública de status está en el código pero aún no se ha desplegado. Los snapshots no están cifrados de extremo a extremo: el operador del VPS puede leer las preferencias permitidas.

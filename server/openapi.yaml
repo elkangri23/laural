@@ -6,6 +6,8 @@ info:
     API privada inicial para snapshots allowlisted y rutas públicas de estado.
     La autenticación y sincronización aún no están desplegadas ni listas para
     producción; esta especificación no implica que el servicio esté publicado.
+    Autenticación y snapshots aplican límites persistentes por IP; el exceso
+    responde 429 con Retry-After.
 servers:
   - url: https://sync.laurafernandezenfermeria.com
 paths:
@@ -75,6 +77,7 @@ paths:
           content:
             text/html: { schema: { type: string } }
         '400': { description: Parámetros inválidos o redirect fuera de loopback }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /auth/native/login:
     post:
       summary: Autentica email/contraseña desde el navegador externo
@@ -94,6 +97,7 @@ paths:
       responses:
         '303': { description: Login válido; redirige solo al callback loopback con code y state }
         '400': { description: Error genérico de credenciales o solicitud expirada }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /auth/native/register:
     post:
       summary: Formulario web para registrar una cuenta
@@ -113,6 +117,7 @@ paths:
                 password: { type: string, minLength: 12, maxLength: 128, writeOnly: true }
       responses:
         '200': { description: Página web con respuesta genérica de registro }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /auth/native/verification/resend:
     post:
       summary: Formulario web para solicitar otro PIN de verificación
@@ -130,6 +135,7 @@ paths:
                 email: { type: string, maxLength: 320 }
       responses:
         '200': { description: Respuesta web genérica sujeta a límites por cuenta }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /auth/native/verification/confirm:
     post:
       summary: Formulario web para confirmar PIN de correo
@@ -149,6 +155,7 @@ paths:
                 pin: { type: string, pattern: '^[0-9]{6}$', writeOnly: true }
       responses:
         '200': { description: Respuesta genérica; el PIN válido marca el correo verificado sin crear sesión }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /v1/auth/native/exchange:
     post:
       summary: Canjea el código loopback con PKCE y crea una sesión
@@ -177,6 +184,7 @@ paths:
                   expiresAt: { type: string, format: date-time }
                 required: [sessionToken, expiresAt]
         '400': { description: Código inválido, caducado o ya consumido }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /v1/auth/register:
     post:
       summary: Crea una cuenta pendiente y solicita la verificación de correo
@@ -196,6 +204,7 @@ paths:
       responses:
         '202': { description: Solicitud aceptada; respuesta genérica para evitar enumeración de cuentas }
         '400': { description: Solicitud inválida }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /v1/auth/verification/resend:
     post:
       summary: Solicita el reenvío del PIN de verificación
@@ -213,6 +222,7 @@ paths:
       responses:
         '202': { description: Solicitud aceptada de forma genérica; sujeto a límites por cuenta }
         '400': { description: Solicitud inválida }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /v1/auth/verification/confirm:
     post:
       summary: Verifica el correo con un PIN de seis dígitos
@@ -232,6 +242,7 @@ paths:
       responses:
         '202': { description: Solicitud aceptada de forma genérica; no se emite sesión ni se revela si el PIN fue válido }
         '400': { description: Solicitud mal formada }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /health/live:
     get:
       summary: Comprueba que el proceso está activo
@@ -276,6 +287,7 @@ paths:
                   revision: { type: integer, minimum: 0 }
                 required: [snapshot, revision]
         '401': { description: Sesión inválida, revocada o expirada }
+        '429': { $ref: '#/components/responses/RateLimited' }
     put:
       summary: Guarda el snapshot con revisión e idempotencia
       security:
@@ -303,7 +315,22 @@ paths:
         '412': { description: Revisión obsoleta; requiere resolución del cliente }
         '413': { description: Payload superior a 256 KiB }
         '428': { description: Falta If-Match }
+        '429': { $ref: '#/components/responses/RateLimited' }
 components:
+  responses:
+    RateLimited:
+      description: Límite de solicitudes excedido para la IP y ruta
+      headers:
+        Retry-After:
+          schema: { type: integer, minimum: 1 }
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            properties:
+              error: { const: rate_limited }
+            required: [error]
   securitySchemes:
     bearerAuth:
       type: http

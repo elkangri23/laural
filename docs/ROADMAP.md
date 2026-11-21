@@ -109,6 +109,7 @@ Añadidas regresiones que simulan el fallo al escribir una credencial y comprueb
 ## M11 — Preparación para producción (pendiente)
 
 - El riesgo de no tener copias fuera del VPS ya se documenta y se muestra antes de habilitar sync. Acordar si habrá una copia local de PostgreSQL y aclarar que no sobrevive a la pérdida del host.
+- Implementado un límite persistente de solicitudes por IP y ruta, con contador atómico en PostgreSQL, huella HMAC sin IP en claro y confianza de proxy restringida a loopback. Pendiente verificar migración/contención bajo carga con PostgreSQL y Caddy reales, calibrar umbrales y añadir alertas operativas.
 - Implementar códigos de recuperación y runbook de revisión manual con una prueba independiente preexistente; sin ella el administrador no retira MFA. Revocar sesiones y notificar al usuario.
 - Fijar límites de cuenta/dispositivo/solicitud, monitorización y procedimiento de incidentes.
 - Completar revisión de seguridad, cobertura de líneas y ramas (mínimo 85 % para lógica crítica), instalación/actualización Windows y plan de incidentes.
@@ -126,7 +127,7 @@ El centro de configuración está implementado en el código posterior a alpha.4
 
 M2 y M3 incorporan vinculación del perfil a su URL y un conjunto acotado de consultas automáticas de Git. Consulta el backlog para el estado de validación.
 M1: prueba de PTY real superada en los cuatro shells locales el 20 de noviembre de 2026. La prueba que queda ignorada por defecto en CI se ejecutó explícitamente y pasó; la comprobación visual de bloques en la ventana de Laural sigue pendiente.
-La interfaz y el backend disponen de informes automáticos de cobertura en cada push y pull request. La suite actual de interfaz tiene 107 pruebas y 74,12 % de cobertura global de líneas. Rust tiene 82 pruebas superadas y 1 ignorada. La cobertura de líneas del componente Git es 92 % y la del componente de recetas es 98,86 %. La cobertura Rust local sigue sin datos válidos en el entorno Windows/MSVC.
+La interfaz y el backend disponen de informes automáticos de cobertura en cada push y pull request. La suite de interfaz tiene 107 pruebas y 74,12 % de cobertura global de líneas. El servicio tiene 76 pruebas, 96,82 % de líneas y 92,08 % de ramas. Rust tiene 82 pruebas superadas y 1 ignorada. La cobertura de líneas del componente Git es 92 % y la del componente de recetas es 98,86 %. La cobertura Rust local sigue sin datos válidos en el entorno Windows/MSVC.
 M3 incorpora escritura temporal, reemplazo con backup por versión, creación exclusiva y pruebas de archivo bloqueado y aprobaciones concurrentes. La interfaz permite restaurar y limpiar copias manualmente con confirmación. La retención automática configurable continúa pendiente.
 La interfaz lista las veinte copias más recientes por fecha. La retención automática por archivo es optativa y está implementada; su valor inicial conserva todas las versiones.
 M3 aplica ahora filtros de sintaxis por shell en Rust antes de los modos automático y reglas. La aprobación explícita permite composiciones tras revisión humana.

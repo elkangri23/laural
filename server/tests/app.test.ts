@@ -5,6 +5,7 @@ import type { PreferenceSnapshot, PreferenceStore, StoredSnapshot, WriteSnapshot
 import { createApp } from "../src/app.js";
 import { EmailAuthService } from "../src/email-auth.js";
 import { NativeAuthService, type NativeAuthStore } from "../src/native-auth.js";
+import type { RequestRateLimiter } from "../src/request-rate-limit.js";
 
 const snapshot: PreferenceSnapshot = {
   schemaVersion: 1,
@@ -37,8 +38,9 @@ class MemoryStore implements PreferenceStore {
 }
 
 const instances: Array<ReturnType<typeof createApp>> = [];
-function createTestApp(options: { store?: PreferenceStore; checkReadiness?: () => Promise<void>; emailAuth?: EmailAuthService; nativeAuth?: NativeAuthService } = {}): ReturnType<typeof createApp> {
+function createTestApp(options: { store?: PreferenceStore; checkReadiness?: () => Promise<void>; emailAuth?: EmailAuthService; nativeAuth?: NativeAuthService; requestRateLimiter?: RequestRateLimiter } = {}): ReturnType<typeof createApp> {
   const store = options.store ?? new MemoryStore();
+  const requestRateLimiter = options.requestRateLimiter ?? new TestRateLimiter();
   const app = createApp({
     store,
     authenticate: async (authorization) => {
@@ -46,6 +48,7 @@ function createTestApp(options: { store?: PreferenceStore; checkReadiness?: () =
       return match?.[1] ?? null;
     },
     checkReadiness: options.checkReadiness ?? (async () => undefined),
+    requestRateLimiter,
     ...(options.emailAuth ? { emailAuth: options.emailAuth } : {}),
     ...(options.nativeAuth ? { nativeAuth: options.nativeAuth } : {}),
   });
@@ -53,11 +56,34 @@ function createTestApp(options: { store?: PreferenceStore; checkReadiness?: () =
   return app;
 }
 
+class TestRateLimiter implements RequestRateLimiter {
+  private readonly hits = new Map<string, number>();
+
+  async consume(scope: string, clientAddress: string, maximum: number): Promise<boolean> {
+    const key = `${scope}:${clientAddress}`;
+    const count = (this.hits.get(key) ?? 0) + 1;
+    this.hits.set(key, count);
+    return count <= maximum;
+  }
+}
+
 afterEach(async () => {
   await Promise.all(instances.splice(0).map((app) => app.close()));
 });
 
 describe("API de snapshots de preferencias", () => {
+  it("limita las lecturas de preferencias por IP y devuelve Retry-After", async () => {
+    const app = createTestApp();
+    const request = { method: "GET" as const, url: "/v1/preferences/current", headers: { authorization: "Bearer account-a" } };
+    for (let count = 0; count < 120; count += 1) {
+      expect((await app.inject(request)).statusCode).toBe(200);
+    }
+    const limited = await app.inject(request);
+    expect(limited.statusCode).toBe(429);
+    expect(limited.headers["retry-after"]).toBe("60");
+    expect(limited.json()).toEqual({ error: "rate_limited" });
+  });
+
   it("expone registro y verificación solo cuando email auth está configurado; el PIN no inicia sesión", async () => {
     const disabled = createTestApp();
     expect((await disabled.inject({ method: "POST", url: "/v1/auth/register", payload: {} })).statusCode).toBe(404);

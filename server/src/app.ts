@@ -6,6 +6,7 @@ import { Ajv2020 } from "ajv/dist/2020.js";
 import type { PreferenceSnapshot, PreferenceStore, ReadinessCheck, Authenticate } from "./contracts.js";
 import type { EmailAuthService } from "./email-auth.js";
 import { NativeAuthService, validateNativeFlowParameters } from "./native-auth.js";
+import type { RequestRateLimiter } from "./request-rate-limit.js";
 import snapshotSchema from "../../shared/preference-snapshot-v1.schema.json" with { type: "json" };
 
 const BODY_LIMIT = 256 * 1024;
@@ -18,6 +19,7 @@ export type AppDependencies = {
   checkReadiness: ReadinessCheck;
   emailAuth?: EmailAuthService;
   nativeAuth?: NativeAuthService;
+  requestRateLimiter: RequestRateLimiter;
 };
 
 type RegistrationBody = { displayName: string; email: string; password: string };
@@ -33,7 +35,8 @@ type NativeExchangeBody = { code: string; codeVerifier: string };
 const FLOW_COOKIE = "__Host-laural-flow";
 
 export function createApp(dependencies: AppDependencies): FastifyInstance {
-  const app = Fastify({ logger: false, bodyLimit: BODY_LIMIT });
+  const app = Fastify({ logger: false, bodyLimit: BODY_LIMIT, trustProxy: ["127.0.0.1", "::1"] });
+  const rateLimit = dependencies.requestRateLimiter;
 
   app.addHook("onSend", async (_request, reply, payload) => {
     reply.header("X-Content-Type-Options", "nosniff");
@@ -60,6 +63,7 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
     void app.register(formbody, { bodyLimit: 8 * 1024 });
 
     app.get<{ Querystring: NativeStartQuery }>("/auth/native", {
+      preHandler: limited(rateLimit, "native-flow", 10, 60),
       schema: {
         querystring: {
           type: "object", additionalProperties: false,
@@ -88,6 +92,7 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
     });
 
     app.post<{ Body: NativeLoginBody }>("/auth/native/login", {
+      preHandler: limited(rateLimit, "native-login", 10, 60),
       schema: { body: nativeLoginSchema },
     }, async (request, reply) => {
       const cookieToken = readCookie(request.headers.cookie, FLOW_COOKIE);
@@ -106,6 +111,7 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
     });
 
     app.post<{ Body: NativeRegisterBody }>("/auth/native/register", {
+      preHandler: limited(rateLimit, "native-register", 3, 900),
       schema: { body: nativeRegisterSchema },
     }, async (request, reply) => {
       if (!await nativeAuth.isBrowserFlowValid(readCookie(request.headers.cookie, FLOW_COOKIE), request.body.csrf)) {
@@ -116,6 +122,7 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
     });
 
     app.post<{ Body: NativeEmailBody }>("/auth/native/verification/resend", {
+      preHandler: limited(rateLimit, "native-resend", 3, 900),
       schema: { body: nativeEmailSchema },
     }, async (request, reply) => {
       if (!await nativeAuth.isBrowserFlowValid(readCookie(request.headers.cookie, FLOW_COOKIE), request.body.csrf)) {
@@ -126,6 +133,7 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
     });
 
     app.post<{ Body: NativePinBody }>("/auth/native/verification/confirm", {
+      preHandler: limited(rateLimit, "native-verify", 10, 60),
       schema: { body: nativePinSchema },
     }, async (request, reply) => {
       if (!await nativeAuth.isBrowserFlowValid(readCookie(request.headers.cookie, FLOW_COOKIE), request.body.csrf)) {
@@ -136,6 +144,7 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
     });
 
     app.post<{ Body: NativeExchangeBody }>("/v1/auth/native/exchange", {
+      preHandler: limited(rateLimit, "native-exchange", 10, 60),
       schema: {
         body: {
           type: "object", additionalProperties: false,
@@ -155,6 +164,7 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
 
   if (emailAuth) {
     app.post<{ Body: RegistrationBody }>("/v1/auth/register", {
+      preHandler: limited(rateLimit, "api-register", 3, 900),
       schema: {
         body: {
           type: "object", additionalProperties: false,
@@ -173,6 +183,7 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
     });
 
     app.post<{ Body: EmailBody }>("/v1/auth/verification/resend", {
+      preHandler: limited(rateLimit, "api-resend", 3, 900),
       schema: {
         body: {
           type: "object", additionalProperties: false,
@@ -186,6 +197,7 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
     });
 
     app.post<{ Body: EmailPinBody }>("/v1/auth/verification/confirm", {
+      preHandler: limited(rateLimit, "api-verify", 10, 60),
       schema: {
         body: {
           type: "object", additionalProperties: false,
@@ -203,7 +215,7 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
     });
   }
 
-  app.get("/v1/preferences/current", async (request, reply) => {
+  app.get("/v1/preferences/current", { preHandler: limited(rateLimit, "preferences-read", 120, 60) }, async (request, reply) => {
     const accountId = await dependencies.authenticate(request.headers.authorization);
     if (!accountId) return reply.code(401).send({ error: "unauthorized" });
     const record = await dependencies.store.get(accountId);
@@ -211,7 +223,7 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
     return record;
   });
 
-  app.put("/v1/preferences/current", async (request, reply) => {
+  app.put("/v1/preferences/current", { preHandler: limited(rateLimit, "preferences-write", 30, 60) }, async (request, reply) => {
     const accountId = await dependencies.authenticate(request.headers.authorization);
     if (!accountId) return reply.code(401).send({ error: "unauthorized" });
 
@@ -247,6 +259,15 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
   });
 
   return app;
+}
+
+function limited(limiter: RequestRateLimiter, scope: string, maximum: number, windowSeconds: number) {
+  return async (request: import("fastify").FastifyRequest, reply: import("fastify").FastifyReply) => {
+    const allowed = await limiter.consume(scope, request.ip, maximum, windowSeconds);
+    if (allowed) return;
+    reply.header("Retry-After", String(windowSeconds));
+    return reply.code(429).send({ error: "rate_limited" });
+  };
 }
 
 function parseRevision(header: string | undefined): number | null {

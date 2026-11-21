@@ -3,20 +3,23 @@ import { readConfig, readEmailAuthConfig } from "../src/config.js";
 
 describe("configuración del servicio", () => {
   it("usa localhost y el puerto predeterminado", () => {
-    expect(readConfig({ DATABASE_URL: "postgresql://user:pass@localhost/db" } as NodeJS.ProcessEnv))
-      .toEqual({ databaseUrl: "postgresql://user:pass@localhost/db", host: "127.0.0.1", port: 8080 });
+    expect(readConfig({ DATABASE_URL: "postgresql://user:pass@localhost/db", RATE_LIMIT_PEPPER: "r".repeat(32) } as NodeJS.ProcessEnv))
+      .toEqual({ databaseUrl: "postgresql://user:pass@localhost/db", host: "127.0.0.1", port: 8080, rateLimitPepper: "r".repeat(32) });
   });
 
   it("acepta una configuración explícita válida", () => {
-    expect(readConfig({ DATABASE_URL: "postgres://db/laural", HOST: "0.0.0.0", PORT: "9090" } as NodeJS.ProcessEnv).port).toBe(9090);
+    expect(readConfig({ DATABASE_URL: "postgres://db/laural", HOST: "0.0.0.0", PORT: "9090", RATE_LIMIT_PEPPER: "r".repeat(32) } as NodeJS.ProcessEnv).port).toBe(9090);
   });
 
   it.each([
     [{}, "DATABASE_URL"],
     [{ DATABASE_URL: "https://example.test" }, "DATABASE_URL"],
-    [{ DATABASE_URL: "postgres://db/laural", PORT: "0" }, "PORT"],
-    [{ DATABASE_URL: "postgres://db/laural", PORT: "no" }, "PORT"],
-    [{ DATABASE_URL: "postgres://db/laural", HOST: "bad/host" }, "HOST"],
+    [{ DATABASE_URL: "postgres://db/laural", RATE_LIMIT_PEPPER: "r".repeat(32), PORT: "0" }, "PORT"],
+    [{ DATABASE_URL: "postgres://db/laural", RATE_LIMIT_PEPPER: "r".repeat(32), PORT: "no" }, "PORT"],
+    [{ DATABASE_URL: "postgres://db/laural", RATE_LIMIT_PEPPER: "r".repeat(32), HOST: "bad/host" }, "HOST"],
+    [{ DATABASE_URL: "postgres://db/laural" }, "RATE_LIMIT_PEPPER"],
+    [{ DATABASE_URL: "postgres://db/laural", RATE_LIMIT_PEPPER: "short" }, "RATE_LIMIT_PEPPER"],
+    [{ DATABASE_URL: "postgres://db/laural", RATE_LIMIT_PEPPER: "x".repeat(257) }, "RATE_LIMIT_PEPPER"],
   ])("rechaza configuración inválida %#", (environment) => {
     expect(() => readConfig(environment as NodeJS.ProcessEnv)).toThrow();
   });

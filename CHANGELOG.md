@@ -2,6 +2,7 @@
 
 ## Sin publicar
 
+- El servicio aplica límites persistentes por IP y ruta en PostgreSQL, comparte los contadores entre instancias y guarda solo huellas HMAC de IP. Se limitan auth y snapshots; el exceso recibe `429` con `Retry-After` y el proxy confiable queda restringido a loopback.
 - La comprobación al reconectar/volver a primer plano agrupa eventos y se prueba junto a la reanudación. El lector del estado de sync local valida campos obligatorios, contenido, integridad y tamaño antes de usarlo.
 - Al recuperar la conexión o volver a la app, se programa una comprobación sincronizada de preferencias; las comprobaciones cercanas se agrupan y la aceptación local de riesgos sigue siendo obligatoria.
 - La sincronización queda bloqueada hasta aceptar en este equipo el riesgo de pérdida total del VPS y la lectura de preferencias por su operador. La aceptación protege tanto el flujo automático como las acciones manuales; las claves API siguen excluidas.

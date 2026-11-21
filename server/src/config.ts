@@ -2,6 +2,7 @@ export type ServiceConfig = {
   databaseUrl: string;
   host: string;
   port: number;
+  rateLimitPepper: string;
 };
 
 export type EmailAuthConfig = {
@@ -15,6 +16,8 @@ export function readConfig(environment: NodeJS.ProcessEnv): ServiceConfig {
   const host = environment.HOST?.trim() || "127.0.0.1";
   const portText = environment.PORT?.trim() || "8080";
   const port = Number(portText);
+  const rateLimitPepper = environment.RATE_LIMIT_PEPPER?.trim();
+  const rateLimitPepperBytes = rateLimitPepper ? Buffer.byteLength(rateLimitPepper, "utf8") : 0;
 
   if (!databaseUrl || !/^postgres(?:ql)?:\/\//i.test(databaseUrl)) {
     throw new Error("DATABASE_URL debe indicar una conexión PostgreSQL.");
@@ -25,8 +28,11 @@ export function readConfig(environment: NodeJS.ProcessEnv): ServiceConfig {
   if (!host || host.length > 255 || /[\s/\\]/.test(host)) {
     throw new Error("HOST no es válido.");
   }
+  if (!rateLimitPepper || rateLimitPepperBytes < 32 || rateLimitPepperBytes > 256) {
+    throw new Error("RATE_LIMIT_PEPPER debe tener entre 32 y 256 bytes.");
+  }
 
-  return { databaseUrl, host, port };
+  return { databaseUrl, host, port, rateLimitPepper };
 }
 
 export function readEmailAuthConfig(environment: NodeJS.ProcessEnv): EmailAuthConfig | null {

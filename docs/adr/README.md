@@ -36,6 +36,7 @@ Los ADR registran por qué se eligió una opción y qué costes trae. Un ADR ace
 | [0030](0030-panel-git-de-solo-lectura.md) | Panel Git local de solo lectura, con límites y sin shell | Aceptada; implementación inicial disponible |
 | [0031](0031-recetas-locales-del-agente.md) | Recetas locales como instrucciones revisables para el agente | Aceptada; versión inicial disponible |
 | [0032](0032-pagina-publica-de-estado.md) | Estado público servido en el mismo VPS y actualizado por SSH | Aceptada; implementación inicial, despliegue pendiente |
+| [0033](0033-limites-persistentes-por-ip.md) | Límites atómicos por IP/ruta en PostgreSQL con huella HMAC | Aceptada; código y migración listos, validación VPS pendiente |
 
 ## Crear un ADR
 
