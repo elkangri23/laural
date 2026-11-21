@@ -41,7 +41,7 @@ describePostgres("integración real de PostgreSQL para rate limits", () => {
     }
   });
 
-  it("aplica las cuatro migraciones y comparte límites atómicos entre instancias", async () => {
+  it("aplica las cinco migraciones y comparte límites atómicos entre instancias", async () => {
     const applied = await isolatedPool.query<{ version: string }>("SELECT version FROM schema_migrations ORDER BY version");
     expect(applied.rows.map(({ version }) => version)).toEqual([...MIGRATION_FILES]);
     const firstInstance = new PostgresRequestRateLimiter(isolatedPool, "integracion-rate-limit-pepper-32-bytes-minimo");

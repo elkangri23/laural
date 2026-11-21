@@ -152,7 +152,7 @@ describe("almacén PostgreSQL de autenticación por correo", () => {
       ? { rows: [{ id: "account-1" }] }
       : { rows: [{ id: "reset-1", verifier_digest: resetDigest, attempts: 4, is_expired: false }] });
     await expect(new PostgresEmailAuthStore(test.pool).checkPasswordReset("user@example.test", "f".repeat(64))).resolves.toBe(false);
-    expect(test.queries.some((sql) => sql.includes("attempts = $2, consumed_at = CASE WHEN $2 >= 5"))).toBe(true);
+    expect(test.queries.some((sql) => sql.includes("attempts = $2, consumed_at = CASE WHEN $2::smallint >= 5"))).toBe(true);
     expect(test.queries).toContain("COMMIT");
   });
 

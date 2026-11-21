@@ -275,7 +275,7 @@ export class PostgresEmailAuthStore implements EmailAuthStore {
   private async recordResetAttempt(client: import("pg").PoolClient, codeId: string, attempts: number): Promise<void> {
     await client.query(
       `UPDATE account_password_reset_codes
-          SET attempts = $2, consumed_at = CASE WHEN $2 >= 5 THEN now() ELSE consumed_at END
+          SET attempts = $2, consumed_at = CASE WHEN $2::smallint >= 5 THEN now() ELSE consumed_at END
         WHERE id = $1`,
       [codeId, attempts],
     );
