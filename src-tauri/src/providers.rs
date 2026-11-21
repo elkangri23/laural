@@ -1,4 +1,5 @@
 use std::{
+    collections::{HashMap, HashSet},
     fs,
     future::Future,
     io::Read,
@@ -11,6 +12,9 @@ use std::{
 };
 
 use crate::agent_files;
+use crate::configuration_transfer::{
+    self, ApiKeyEntry, TransferData, TransferPreferences, TransferProvider,
+};
 use futures_util::StreamExt;
 use keyring::Entry;
 use serde::{Deserialize, Serialize};
@@ -119,7 +123,7 @@ struct ProviderSettings {
     model: String,
 }
 
-#[derive(Default, Deserialize, Serialize)]
+#[derive(Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ProviderStore {
     active_provider_id: Option<String>,
@@ -275,7 +279,18 @@ fn write_provider_store(app: &AppHandle, store: &ProviderStore) -> Result<(), St
     let path = config_path(app)?;
     let bytes = serde_json::to_vec_pretty(store)
         .map_err(|error| format!("No se pudo codificar la configuración: {error}"))?;
-    fs::write(&path, bytes).map_err(|error| format!("No se pudo guardar la configuración: {error}"))
+    let parent = path
+        .parent()
+        .ok_or_else(|| "No se pudo localizar la carpeta de configuración.".to_string())?;
+    let mut temporary = tempfile::NamedTempFile::new_in(parent)
+        .map_err(|_| "No se pudo preparar la configuración para guardarla.".to_string())?;
+    std::io::Write::write_all(&mut temporary, &bytes)
+        .and_then(|_| temporary.as_file().sync_all())
+        .map_err(|_| "No se pudo escribir la configuración temporal.".to_string())?;
+    temporary
+        .persist(&path)
+        .map_err(|_| "No se pudo sustituir la configuración guardada.".to_string())?;
+    Ok(())
 }
 
 fn read_api_key(provider_id: &str) -> Result<Option<String>, String> {
@@ -285,6 +300,27 @@ fn read_api_key(provider_id: &str) -> Result<Option<String>, String> {
         Ok(password) => Ok(Some(password)),
         Err(keyring::Error::NoEntry) => Ok(None),
         Err(_) => Err("No se pudo leer la clave del almacén seguro de credenciales.".to_string()),
+    }
+}
+
+fn write_api_key(provider_id: &str, api_key: &str) -> Result<(), String> {
+    let entry = Entry::new(KEYRING_SERVICE, provider_id)
+        .map_err(|_| "Windows no pudo acceder al almacén protegido.".to_string())?;
+    entry
+        .set_password(api_key)
+        .map_err(|_| "Windows no pudo guardar la clave en el almacén protegido.".to_string())?;
+    if !matches!(entry.get_password(), Ok(saved) if saved == api_key) {
+        return Err("Windows no pudo verificar la clave guardada en el almacén protegido.".into());
+    }
+    Ok(())
+}
+
+fn delete_api_key(provider_id: &str) -> Result<(), String> {
+    let entry = Entry::new(KEYRING_SERVICE, provider_id)
+        .map_err(|_| "Windows no pudo acceder al almacén protegido.".to_string())?;
+    match entry.delete_credential() {
+        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+        Err(_) => Err("Windows no pudo quitar una clave del almacén protegido.".into()),
     }
 }
 
@@ -504,6 +540,473 @@ pub fn get_providers(app: AppHandle) -> Result<Vec<PublicProvider>, String> {
         .collect())
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TransferPreviewProvider {
+    id: String,
+    name: String,
+    base_url: String,
+    model: String,
+    has_api_key: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TransferPreview {
+    preferences: TransferPreferences,
+    active_provider_id: Option<String>,
+    providers: Vec<TransferPreviewProvider>,
+    contains_api_keys: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TransferImportResult {
+    preferences: TransferPreferences,
+    active_provider: Option<PublicProvider>,
+    providers: Vec<PublicProvider>,
+    backup_path: String,
+    backup_encrypted: bool,
+    backup_contains_api_keys: bool,
+}
+
+fn transfer_data(store: ProviderStore, preferences: TransferPreferences) -> TransferData {
+    TransferData {
+        preferences,
+        active_provider_id: store.active_provider_id,
+        providers: store
+            .providers
+            .into_iter()
+            .map(|provider| TransferProvider {
+                id: provider.id,
+                name: provider.name,
+                base_url: provider.base_url,
+                model: provider.model,
+            })
+            .collect(),
+    }
+}
+
+fn validate_transfer_path(path: &str) -> Result<PathBuf, String> {
+    let path = PathBuf::from(path.trim());
+    if path.as_os_str().is_empty()
+        || path.as_os_str().len() > 4_096
+        || !path
+            .extension()
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("laural"))
+    {
+        return Err("Selecciona un archivo .laural válido.".into());
+    }
+    Ok(path)
+}
+
+fn read_transfer_file(path: &str) -> Result<Vec<u8>, String> {
+    let path = validate_transfer_path(path)?;
+    let metadata =
+        fs::metadata(&path).map_err(|_| "No se pudo leer el archivo seleccionado.".to_string())?;
+    if !metadata.is_file() || metadata.len() > 4 * 1024 * 1024 {
+        return Err("El archivo debe ser regular y no superar 4 MiB.".into());
+    }
+    fs::read(path).map_err(|_| "No se pudo leer el archivo seleccionado.".to_string())
+}
+
+fn write_transfer_file(path: &str, bytes: &[u8]) -> Result<(), String> {
+    let path = validate_transfer_path(path)?;
+    let parent = path
+        .parent()
+        .filter(|directory| directory.is_dir())
+        .ok_or_else(|| "La carpeta de destino no existe.".to_string())?;
+    let mut temporary = tempfile::NamedTempFile::new_in(parent)
+        .map_err(|_| "No se pudo preparar el archivo de exportación.".to_string())?;
+    std::io::Write::write_all(&mut temporary, bytes)
+        .and_then(|_| temporary.as_file().sync_all())
+        .map_err(|_| "No se pudo escribir el archivo de exportación.".to_string())?;
+    temporary
+        .persist(&path)
+        .map_err(|_| "No se pudo guardar el archivo elegido.".to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn export_configuration(
+    app: AppHandle,
+    destination: String,
+    preferences: TransferPreferences,
+    include_api_keys: bool,
+    password: Option<String>,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        export_configuration_inner(app, destination, preferences, include_api_keys, password)
+    })
+    .await
+    .map_err(|_| "No se pudo completar la exportación.".to_string())?
+}
+
+fn export_configuration_inner(
+    app: AppHandle,
+    destination: String,
+    preferences: TransferPreferences,
+    include_api_keys: bool,
+    password: Option<String>,
+) -> Result<(), String> {
+    let store = read_provider_store(&app)?;
+    let mut api_keys = Vec::new();
+    if include_api_keys {
+        for provider in &store.providers {
+            if let Some(api_key) = read_api_key(&provider.id)? {
+                api_keys.push(ApiKeyEntry {
+                    provider_id: provider.id.clone(),
+                    api_key,
+                });
+            }
+        }
+    }
+    let password = zeroize::Zeroizing::new(password.unwrap_or_default());
+    let password = if include_api_keys {
+        Some(password.as_str())
+    } else {
+        None
+    };
+    let bytes =
+        configuration_transfer::encode(transfer_data(store, preferences), api_keys, password)?;
+    write_transfer_file(&destination, &bytes)
+}
+
+#[tauri::command]
+pub async fn preview_configuration(
+    source: String,
+    password: Option<String>,
+) -> Result<TransferPreview, String> {
+    tauri::async_runtime::spawn_blocking(move || preview_configuration_inner(source, password))
+        .await
+        .map_err(|_| "No se pudo validar el archivo de importación.".to_string())?
+}
+
+fn preview_configuration_inner(
+    source: String,
+    password: Option<String>,
+) -> Result<TransferPreview, String> {
+    let bytes = read_transfer_file(&source)?;
+    let password = zeroize::Zeroizing::new(password.unwrap_or_default());
+    let decoded = configuration_transfer::decode(&bytes, Some(password.as_str()))?;
+    for provider in &decoded.data.providers {
+        validate_base_url(&provider.base_url)?;
+    }
+    let providers = decoded
+        .data
+        .providers
+        .iter()
+        .map(|provider| TransferPreviewProvider {
+            id: provider.id.clone(),
+            name: provider.name.clone(),
+            base_url: provider.base_url.clone(),
+            model: provider.model.clone(),
+            has_api_key: decoded
+                .api_keys
+                .iter()
+                .any(|key| key.provider_id == provider.id),
+        })
+        .collect();
+    Ok(TransferPreview {
+        preferences: decoded.data.preferences.clone(),
+        active_provider_id: decoded.data.active_provider_id.clone(),
+        providers,
+        contains_api_keys: decoded.contains_api_keys,
+    })
+}
+
+fn remap_provider_ids(
+    incoming: &TransferData,
+    local: &ProviderStore,
+) -> Result<HashMap<String, String>, String> {
+    let local_by_id: HashMap<&str, &ProviderSettings> = local
+        .providers
+        .iter()
+        .map(|provider| (provider.id.as_str(), provider))
+        .collect();
+    let mut used: HashSet<String> = local
+        .providers
+        .iter()
+        .map(|provider| provider.id.clone())
+        .collect();
+    let mut remapped = HashMap::with_capacity(incoming.providers.len());
+    for provider in &incoming.providers {
+        let id = match local_by_id.get(provider.id.as_str()) {
+            Some(existing)
+                if validate_base_url(&existing.base_url)?
+                    != validate_base_url(&provider.base_url)? =>
+            {
+                let mut bytes = [0_u8; 16];
+                let mut candidate;
+                loop {
+                    getrandom::fill(&mut bytes).map_err(|_| {
+                        "No se pudo generar un identificador de perfil.".to_string()
+                    })?;
+                    candidate = format!("imported-{}", hex_bytes(&bytes));
+                    if used.insert(candidate.clone()) {
+                        break candidate;
+                    }
+                }
+            }
+            _ => provider.id.clone(),
+        };
+        remapped.insert(provider.id.clone(), id);
+    }
+    Ok(remapped)
+}
+
+fn hex_bytes(bytes: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut output = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        output.push(HEX[(byte >> 4) as usize] as char);
+        output.push(HEX[(byte & 0x0f) as usize] as char);
+    }
+    output
+}
+
+fn build_import_store(
+    local: &ProviderStore,
+    incoming: &TransferData,
+    strategy: &str,
+    id_map: &HashMap<String, String>,
+) -> Result<ProviderStore, String> {
+    let imported: Vec<ProviderSettings> = incoming
+        .providers
+        .iter()
+        .map(|provider| {
+            Ok(ProviderSettings {
+                id: id_map
+                    .get(&provider.id)
+                    .cloned()
+                    .ok_or_else(|| "No se pudo asignar el ID del perfil importado.".to_string())?,
+                name: provider.name.clone(),
+                base_url: validate_base_url(&provider.base_url)?,
+                model: provider.model.clone(),
+            })
+        })
+        .collect::<Result<_, String>>()?;
+    let active_provider_id = incoming
+        .active_provider_id
+        .as_ref()
+        .and_then(|id| id_map.get(id))
+        .cloned();
+    match strategy {
+        "replace" => Ok(ProviderStore {
+            active_provider_id,
+            providers: imported,
+        }),
+        "merge" => {
+            let mut merged = local.clone();
+            for provider in imported {
+                if let Some(existing) = merged
+                    .providers
+                    .iter_mut()
+                    .find(|existing| existing.id == provider.id)
+                {
+                    *existing = provider;
+                } else {
+                    merged.providers.push(provider);
+                }
+            }
+            if active_provider_id.is_some() {
+                merged.active_provider_id = active_provider_id;
+            }
+            Ok(merged)
+        }
+        _ => Err("Elige fusionar los perfiles o reemplazarlos.".into()),
+    }
+}
+
+fn backup_path(app: &AppHandle) -> Result<PathBuf, String> {
+    let directory = app
+        .path()
+        .app_config_dir()
+        .map_err(|_| "No se pudo localizar la carpeta de configuración.".to_string())?
+        .join("transfer-backups");
+    fs::create_dir_all(&directory)
+        .map_err(|_| "No se pudo crear la carpeta de copias de importación.".to_string())?;
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|_| "No se pudo obtener la fecha de importación.".to_string())?
+        .as_millis();
+    Ok(directory.join(format!("configuracion-{timestamp}.laural")))
+}
+
+fn restore_credentials(previous: &[(String, Option<zeroize::Zeroizing<String>>)]) -> bool {
+    let mut restored = true;
+    for (provider_id, old_key) in previous.iter().rev() {
+        let result = match old_key {
+            Some(key) => write_api_key(provider_id, key),
+            None => delete_api_key(provider_id),
+        };
+        restored &= result.is_ok();
+    }
+    restored
+}
+
+#[tauri::command]
+pub async fn import_configuration(
+    app: AppHandle,
+    source: String,
+    password: Option<String>,
+    strategy: String,
+    current_preferences: TransferPreferences,
+) -> Result<TransferImportResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        import_configuration_inner(app, source, password, strategy, current_preferences)
+    })
+    .await
+    .map_err(|_| "No se pudo completar la importación.".to_string())?
+}
+
+fn import_configuration_inner(
+    app: AppHandle,
+    source: String,
+    password: Option<String>,
+    strategy: String,
+    current_preferences: TransferPreferences,
+) -> Result<TransferImportResult, String> {
+    let bytes = read_transfer_file(&source)?;
+    let password = zeroize::Zeroizing::new(password.unwrap_or_default());
+    let decoded = configuration_transfer::decode(&bytes, Some(password.as_str()))?;
+    for provider in &decoded.data.providers {
+        validate_base_url(&provider.base_url)?;
+    }
+
+    let old_store = read_provider_store(&app)?;
+    let id_map = remap_provider_ids(&decoded.data, &old_store)?;
+    let new_store = build_import_store(&old_store, &decoded.data, &strategy, &id_map)?;
+    let new_provider_ids: HashSet<&str> = new_store
+        .providers
+        .iter()
+        .map(|provider| provider.id.as_str())
+        .collect();
+
+    let mut key_updates: HashMap<String, Option<zeroize::Zeroizing<String>>> = HashMap::new();
+    for key in &decoded.api_keys {
+        let provider_id = id_map
+            .get(&key.provider_id)
+            .ok_or_else(|| "Una clave del archivo no está asociada a un perfil.".to_string())?;
+        key_updates.insert(
+            provider_id.clone(),
+            Some(zeroize::Zeroizing::new(key.api_key.clone())),
+        );
+    }
+
+    let mut local_keys = HashMap::with_capacity(old_store.providers.len());
+    let mut backup_keys = Vec::new();
+    for provider in &old_store.providers {
+        let key = read_api_key(&provider.id)?.map(zeroize::Zeroizing::new);
+        if let Some(value) = &key {
+            backup_keys.push(ApiKeyEntry {
+                provider_id: provider.id.clone(),
+                api_key: value.to_string(),
+            });
+        }
+        local_keys.insert(provider.id.clone(), key);
+    }
+
+    if strategy == "replace" {
+        for provider in &old_store.providers {
+            if !new_provider_ids.contains(provider.id.as_str()) {
+                if local_keys.get(&provider.id).is_some_and(Option::is_some) {
+                    key_updates.insert(provider.id.clone(), None);
+                }
+            }
+        }
+    }
+
+    let mut previous_credentials = HashMap::with_capacity(key_updates.len());
+    let mut changes_existing_secret = false;
+    let mut changes_any_credential = false;
+    for (provider_id, new_key) in &key_updates {
+        let previous = local_keys
+            .get(provider_id)
+            .cloned()
+            .unwrap_or(read_api_key(provider_id)?.map(zeroize::Zeroizing::new));
+        let same = match (&previous, new_key) {
+            (Some(old), Some(new)) => old.as_str() == new.as_str(),
+            (None, None) => true,
+            _ => false,
+        };
+        changes_existing_secret |= previous.is_some() && !same;
+        changes_any_credential |= !same;
+        previous_credentials.insert(provider_id.clone(), previous);
+    }
+
+    if changes_existing_secret && !decoded.encrypted {
+        return Err(
+            "Para sustituir o quitar claves locales, importa un archivo con claves cifradas; así Laural podrá guardar una copia recuperable antes del cambio.".into(),
+        );
+    }
+
+    let previous_data = transfer_data(old_store.clone(), current_preferences);
+    let backup_keys = if changes_any_credential {
+        backup_keys
+    } else {
+        Vec::new()
+    };
+    let backup_contains_api_keys = !backup_keys.is_empty();
+    let backup_password = if changes_any_credential && decoded.encrypted {
+        Some(password.as_str())
+    } else if changes_any_credential {
+        return Err(
+            "El archivo no está protegido para guardar una copia recuperable de las claves.".into(),
+        );
+    } else {
+        None
+    };
+    let backup_bytes = configuration_transfer::encode(previous_data, backup_keys, backup_password)?;
+    let backup = backup_path(&app)?;
+    let backup_string = backup.to_string_lossy().into_owned();
+    write_transfer_file(&backup_string, &backup_bytes)?;
+
+    let mut applied_credentials = Vec::new();
+    for (provider_id, new_key) in &key_updates {
+        applied_credentials.push((
+            provider_id.clone(),
+            previous_credentials.get(provider_id).cloned().flatten(),
+        ));
+        let result = match new_key {
+            Some(key) => write_api_key(provider_id, key),
+            None => delete_api_key(provider_id),
+        };
+        if result.is_err() {
+            let restored = restore_credentials(&applied_credentials);
+            return Err(if restored {
+                "No se pudo actualizar el almacén de claves; la configuración anterior se ha restaurado.".into()
+            } else {
+                format!(
+                    "Falló el cambio de claves y no se pudo completar el rollback. La copia recuperable está en {backup_string}."
+                )
+            });
+        }
+    }
+
+    if let Err(error) = write_provider_store(&app, &new_store) {
+        let restored = restore_credentials(&applied_credentials);
+        return Err(if restored {
+            error
+        } else {
+            format!(
+                "Falló el guardado y el rollback de claves. La copia recuperable está en {backup_string}."
+            )
+        });
+    }
+
+    let active = active_provider(&new_store).map(public_provider);
+    let providers = new_store.providers.iter().map(public_provider).collect();
+    Ok(TransferImportResult {
+        preferences: decoded.data.preferences.clone(),
+        active_provider: active,
+        providers,
+        backup_path: backup_string,
+        backup_encrypted: changes_any_credential,
+        backup_contains_api_keys,
+    })
+}
+
 #[tauri::command]
 pub fn select_provider(app: AppHandle, provider_id: String) -> Result<PublicProvider, String> {
     let mut store = read_provider_store(&app)?;
@@ -577,16 +1080,7 @@ pub fn save_provider(app: AppHandle, input: ProviderInput) -> Result<PublicProvi
         .as_deref()
         .filter(|key| !key.trim().is_empty())
     {
-        let entry = Entry::new(KEYRING_SERVICE, id)
-            .map_err(|_| "Windows no pudo acceder al almacén protegido.".to_string())?;
-        entry
-            .set_password(api_key.trim())
-            .map_err(|_| "Windows no pudo guardar la clave en el almacén protegido.".to_string())?;
-        if !matches!(entry.get_password(), Ok(saved) if saved == api_key.trim()) {
-            return Err(
-                "Windows no pudo verificar la clave guardada en el almacén protegido.".into(),
-            );
-        }
+        write_api_key(id, api_key.trim())?;
     }
     let provider = ProviderSettings {
         id: id.to_string(),
@@ -1415,6 +1909,95 @@ pub fn preview_context(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn transfer_profile(id: &str, base_url: &str, name: &str) -> TransferProvider {
+        TransferProvider {
+            id: id.into(),
+            name: name.into(),
+            base_url: base_url.into(),
+            model: "modelo".into(),
+        }
+    }
+
+    fn transfer_data(providers: Vec<TransferProvider>, active: Option<&str>) -> TransferData {
+        TransferData {
+            preferences: TransferPreferences {
+                theme_id: "laurel".into(),
+                appearance: "dark".into(),
+                update_mode: "manual".into(),
+            },
+            active_provider_id: active.map(str::to_string),
+            providers,
+        }
+    }
+
+    #[test]
+    fn fusiona_perfiles_conservando_locales_y_activa_el_importado() {
+        let local = ProviderStore {
+            active_provider_id: Some("local".into()),
+            providers: vec![ProviderSettings {
+                id: "local".into(),
+                name: "Local".into(),
+                base_url: "http://127.0.0.1:11434/v1".into(),
+                model: "qwen".into(),
+            }],
+        };
+        let incoming = transfer_data(
+            vec![transfer_profile("cloud", "https://llm.example/v1", "Nube")],
+            Some("cloud"),
+        );
+        let id_map = remap_provider_ids(&incoming, &local).unwrap();
+        let merged = build_import_store(&local, &incoming, "merge", &id_map).unwrap();
+
+        assert_eq!(merged.providers.len(), 2);
+        assert!(merged.providers.iter().any(|item| item.id == "local"));
+        assert_eq!(merged.active_provider_id.as_deref(), Some("cloud"));
+    }
+
+    #[test]
+    fn reemplazo_no_reutiliza_id_si_cambia_el_destino_del_proveedor() {
+        let local = ProviderStore {
+            active_provider_id: Some("principal".into()),
+            providers: vec![ProviderSettings {
+                id: "principal".into(),
+                name: "Antiguo".into(),
+                base_url: "https://old.example/v1".into(),
+                model: "modelo-a".into(),
+            }],
+        };
+        let incoming = transfer_data(
+            vec![transfer_profile(
+                "principal",
+                "https://new.example/v1",
+                "Nuevo",
+            )],
+            Some("principal"),
+        );
+        let id_map = remap_provider_ids(&incoming, &local).unwrap();
+        let new_id = id_map.get("principal").unwrap();
+        let replaced = build_import_store(&local, &incoming, "replace", &id_map).unwrap();
+
+        assert_ne!(new_id, "principal");
+        assert_eq!(replaced.providers.len(), 1);
+        assert_eq!(replaced.providers[0].id, *new_id);
+        assert_eq!(
+            replaced.active_provider_id.as_deref(),
+            Some(new_id.as_str())
+        );
+    }
+
+    #[test]
+    fn valida_extension_y_transfiere_archivo_de_configuracion() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("settings.laural");
+        write_transfer_file(path.to_str().unwrap(), b"contenido").unwrap();
+        assert_eq!(
+            read_transfer_file(path.to_str().unwrap()).unwrap(),
+            b"contenido"
+        );
+        assert!(validate_transfer_path("settings.json").is_err());
+        assert!(read_transfer_file("missing.laural").is_err());
+    }
 
     #[test]
     fn retencion_de_copias_es_compatible_y_se_valida() {

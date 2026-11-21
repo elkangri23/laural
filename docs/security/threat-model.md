@@ -62,9 +62,18 @@ La limpieza de copias requiere confirmación, fija cada directorio intermedio y 
 La autorización del agente considera metacaracteres de PowerShell, CMD, Bash y WSL para los modos automático y reglas. La confirmación humana permite expresamente comandos complejos. El shell, sus aliases y perfiles personalizados siguen fuera de una sandbox.
 El filtro inicial de comandos del agente también reconoce alias y operaciones habituales de borrado, copia, movimiento, truncado y escritura de archivos en PowerShell, CMD y shells tipo Bash. La lista es heurística: puede pedir confirmación para comandos inocuos y no cubre alias, funciones o perfiles personalizados ni sustituye un sandbox.
 
-## Amenazas de portabilidad y sincronización aprobadas (sin implementar)
+## Amenazas de portabilidad y sincronización
 
-El diseño de sincronización se aprobó, pero la exportación/importación, las cuentas, el servicio, el cliente de sync y la página pública de estado aún no existen. Esta sección describe riesgos que deberán tratarse antes de habilitar esas funciones; no es evidencia de controles ya desplegados.
+La transferencia local está implementada de forma inicial; cuentas, servicio, cliente de sync y página pública de estado aún no existen. Los controles actuales y los riesgos abiertos deben leerse por separado.
+
+| Área | Control actual | Riesgo/residuo |
+| --- | --- | --- |
+| Exportación de claves | Consentimiento explícito, contraseña mínima, Argon2id con parámetros fijos y AES-256-GCM; el formato autentica el contenido. | Una contraseña débil o conocida permite recuperar las claves. El archivo cifrado sigue siendo un secreto. |
+| Importación | Límite de 4 MiB, formato y versión estrictos, validación de perfiles/URLs, vista previa y aplicación desde backend nativo. | Se requiere ensayo manual en Windows y pruebas de fallos reales de Credential Manager. |
+| Cambios de credenciales | Copia previa local cifrada cuando una importación cambia claves; rollback de operaciones de Credential Manager si falla una operación posterior. | Una falla del propio almacén durante rollback puede requerir recuperación manual desde la copia. Las preferencias del WebView se guardan después del backend y no forman una transacción común con Credential Manager. |
+| Almacenamiento de copias | Directorio `transfer-backups` en la carpeta local de configuración. | No protege ante pérdida del equipo/usuario; las copias no tienen política automática de retención hoy. |
+
+La sincronización de cuenta todavía no existe. La sección siguiente describe riesgos y controles aprobados que deben tratarse antes de habilitarla.
 
 | Amenaza | Control requerido en el diseño | Riesgo y condición de salida |
 | --- | --- | --- |

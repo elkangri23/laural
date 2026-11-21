@@ -17,8 +17,8 @@
 - Agente que propone comandos y cambios de archivos para revisión. Las políticas permiten confirmar comandos, aplicar reglas o activar el modo automático; se puede cancelar la planificación, detener comandos en ejecución y las ediciones de archivos requieren aprobación explícita.
 - Icono y favicon propios; la compilación para Windows se puede generar desde GitHub Actions al publicar una etiqueta `v*`.
 - Actualizaciones Windows firmadas desde GitHub, con instalación manual o automática y versión visible en Configuración.
-- La versión actual funciona sin cuenta ni servicio propio. Hay un [diseño aprobado para exportar/importar y sincronizar preferencias](docs/designs/sincronizacion-preferencias-y-portabilidad.md), pero estas funciones aún no están implementadas.
-- Las claves de proveedor se guardan en Windows Credential Manager, no en el archivo de perfiles. La futura exportación de claves exigirá contraseña y cifrado; no habrá archivos con claves en claro. Consulta [privacidad y seguridad](docs/security/privacy.md).
+- La versión actual funciona sin cuenta ni servicio propio. Configuración permite exportar e importar preferencias y perfiles mediante archivos `.laural`, con vista previa y fusión o reemplazo. Las claves se excluyen por defecto; si se incluyen, el archivo exige contraseña y cifrado autenticado. La sincronización de cuenta sigue pendiente; consulta el [diseño aprobado](docs/designs/sincronizacion-preferencias-y-portabilidad.md).
+- Las claves de proveedor se guardan en Windows Credential Manager, no en el archivo de perfiles. Consulta [privacidad y seguridad](docs/security/privacy.md).
 
 Laural es una implementación independiente con marca e interfaz propias. No incluye código, recursos ni componentes de Warp.
 

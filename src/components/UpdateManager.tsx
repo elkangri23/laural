@@ -100,6 +100,12 @@ export function UpdateManager({ settingsOpen, onSettingsOpen, onSettingsClose }:
   }, []);
 
   useEffect(() => {
+    const refreshPreference = () => setMode(readMode());
+    window.addEventListener("laural:update-mode-changed", refreshPreference);
+    return () => window.removeEventListener("laural:update-mode-changed", refreshPreference);
+  }, []);
+
+  useEffect(() => {
     if (!mode) return;
     void checkForUpdates(mode === "automatic");
     const timer = window.setInterval(() => void checkForUpdates(mode === "automatic"), CHECK_INTERVAL_MS);

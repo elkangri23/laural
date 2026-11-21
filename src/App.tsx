@@ -9,6 +9,7 @@ import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import TerminalPane from "./components/TerminalPane";
 import { CommandPalette } from "./components/CommandPalette";
+import { ConfigurationTransfer, type ConfigurationImportResult } from "./components/ConfigurationTransfer";
 import { themeVariables, themes, type AppearanceMode } from "./themes";
 import "./App.css";
 
@@ -58,6 +59,7 @@ function App() {
   const [prompt, setPrompt] = useState("");
   const [providerDialogOpen, setProviderDialogOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [transferOpen, setTransferOpen] = useState(false);
   const [updateSettingsOpen, setUpdateSettingsOpen] = useState(false);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [themeId, setThemeId] = useState(() => localStorage.getItem("laural.theme") ?? "laurel");
@@ -140,6 +142,22 @@ function App() {
     else if (saved.name.toLowerCase().includes("ollama")) setProviderKind("ollama");
     else if (saved.name.toLowerCase().includes("lm studio")) setProviderKind("lmstudio");
     else setProviderKind("custom");
+  }
+
+  function applyImportedConfiguration(result: ConfigurationImportResult) {
+    localStorage.setItem("laural.theme", result.preferences.themeId);
+    localStorage.setItem("laural.appearance", result.preferences.appearance);
+    localStorage.setItem("laural.update-mode.v1", result.preferences.updateMode);
+    window.dispatchEvent(new Event("laural:update-mode-changed"));
+    setThemeId(result.preferences.themeId);
+    setAppearance(result.preferences.appearance);
+    setProviders(result.providers);
+    setApiKey("");
+    if (result.activeProvider) loadProviderIntoForm(result.activeProvider);
+    else {
+      setProvider(null);
+      setEditingProviderId(null);
+    }
   }
 
   useEffect(() => {
@@ -855,6 +873,7 @@ function App() {
       {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)}>
         <button className="settings-link" onClick={() => { setSettingsOpen(false); setAppearanceOpen(true); }}>Apariencia <span>{activeTheme.name} · {appearance === "dark" ? "Oscuro" : "Claro"}</span></button>
         <button className="settings-link" onClick={() => { setSettingsOpen(false); setProviderDialogOpen(true); }}>Proveedores y modelos <span>{provider?.name ?? "Configurar"}</span></button>
+        <button className="settings-link" onClick={() => { setSettingsOpen(false); setTransferOpen(true); }}>Importar y exportar <span>Configuración entre equipos</span></button>
         <button className="settings-link" onClick={() => { setSettingsOpen(false); setUpdateSettingsOpen(true); }}>Actualizaciones <span>Versión y preferencias</span></button>
         <div className="agent-policy-panel">
               <label>Permisos del agente
@@ -876,6 +895,15 @@ function App() {
         <AgentActivity />
         <button className="action-quiet" onClick={clearChat} disabled={!chatMessages.length || chatBusy || agentPlanBusy || agentCommandBusy}>Borrar historial del chat</button>
       </SettingsDialog>}
+      {transferOpen && <ConfigurationTransfer
+        preferences={{
+          themeId,
+          appearance,
+          updateMode: localStorage.getItem("laural.update-mode.v1") === "automatic" ? "automatic" : "manual",
+        }}
+        onClose={() => { setTransferOpen(false); setSettingsOpen(true); }}
+        onImported={applyImportedConfiguration}
+      />}
       {appearanceOpen && <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setAppearanceOpen(false); }}>
         <section className="appearance-dialog" role="dialog" aria-modal="true" aria-labelledby="appearance-title">
           <button className="dialog-close" onClick={() => setAppearanceOpen(false)} aria-label="Cerrar">×</button>

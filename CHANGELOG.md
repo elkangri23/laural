@@ -2,6 +2,7 @@
 
 ## Sin publicar
 
+- Añadida la primera versión de exportar/importar configuración `.laural` en Configuración, con vista previa y opciones de fusión/reemplazo. Las claves API se excluyen por defecto; al incluirlas, el archivo exige contraseña y usa Argon2id + AES-256-GCM. La importación crea una copia local previa y revierte cambios de claves si falla la aplicación.
 - Endurecido el diseño de exportación/importación: las claves quedan fuera por defecto y solo podrán exportarse con contraseña obligatoria y cifrado autenticado; nunca en texto plano. Documentado el alcance y los límites reales de Credential Manager.
 - Añadida paleta `Ctrl+K` para buscar acciones, sesiones y comandos recientes. El historial es efímero y elegir un comando solo lo copia para revisión; no lo ejecuta.
 - Verificada la compatibilidad del descubrimiento de modelos con respuestas OpenAI-compatible y Ollama; se ordenan y deduplican los nombres, y se rechazan listas inválidas o vacías.

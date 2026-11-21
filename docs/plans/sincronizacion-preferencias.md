@@ -1,6 +1,6 @@
 # Especificación: perfiles, portabilidad y sincronización
 
-- **Estado:** diseño aprobado; implementación pendiente.
+- **Estado:** F1 (portabilidad local) en implementación inicial; F2–F4 pendientes.
 - **Fecha:** 2026-11-21.
 - **Alcance:** Windows primero; perfiles locales, exportar/importar y sincronización opcional de preferencias.
 - **Diseño formal:** [sincronización de preferencias y portabilidad](../designs/sincronizacion-preferencias-y-portabilidad.md).
@@ -8,7 +8,7 @@
 
 ## Estado actual
 
-La versión actual no tiene cuentas, servicio de sincronización ni flujos de exportar/importar configuración. Los perfiles viven en `providers.json`, la política del agente en `agent.json`, la apariencia y la preferencia de actualización en `localStorage`, y las claves de proveedores en Windows Credential Manager. El diseño aprobado no implica que estas funciones estén disponibles en el instalador.
+La versión actual ofrece exportar/importar local desde Configuración: formato `.laural` versionado, vista previa, fusión/reemplazo, claves opcionales cifradas y copia previa. Las cuentas y el servicio de sincronización no están implementados. Los perfiles viven en `providers.json`, la política del agente en `agent.json`, la apariencia y la preferencia de actualización en `localStorage`, y las claves de proveedores en Windows Credential Manager.
 
 ## Decisiones funcionales aprobadas
 
@@ -49,7 +49,7 @@ La versión actual no tiene cuentas, servicio de sincronización ni flujos de ex
 
 ## Entregas y tareas
 
-1. **F1 — Portabilidad local:** contrato versionado, adaptador de perfil, exportación/importación, cifrado de claves, vista previa, backup/rollback y pruebas de cobertura.
+1. **F1 — Portabilidad local:** implementación inicial en el escritorio. Restan pruebas de integración de fallos del almacén, ensayo de restauración en Windows y objetivo de cobertura específica.
 2. **F2 — Servicio y cuenta:** Fastify/PostgreSQL, migraciones, Resend para correo transaccional, email/contraseña, Google, passkeys, TOTP, PIN, revocación de sesión y borrado de cuenta.
 3. **F3 — Sincronización:** snapshot cerrado, cliente Rust, estado y cola offline, revisiones condicionales, consentimiento de endpoint, conflictos, **Sincronizar ahora** y revisión cada 3 horas con Laural abierta.
 4. **F4 — Estado y operación:** página `/status`, avisos de mantenimiento/incidentes desde operación protegida, backups, procedimientos de recuperación y despliegue TLS.

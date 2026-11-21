@@ -11,3 +11,7 @@ Desde alpha.14, Laural comprueba actualizaciones al iniciar y cada seis horas. E
 Para desinstalar, abre Aplicaciones instaladas de Windows, selecciona Laural y elige Desinstalar. Si necesitas eliminar conversaciones, usa Borrar historial antes de desinstalar. La eliminación de datos y credenciales por el desinstalador está pendiente de verificación.
 
 Para compilar desde el código consulta el [entorno de desarrollo](development/setup.md).
+
+## Transferir configuración
+
+En **Configuración → Importar y exportar** puedes guardar un archivo `.laural` y abrirlo en otro equipo. El archivo sin claves no requiere contraseña. Si eliges incluir las claves API, define una contraseña de al menos 12 caracteres y consérvala: no se puede recuperar si se pierde. En el equipo destino, revisa la vista previa, elige fusionar o reemplazar y confirma la importación. Laural crea una copia local antes de aplicar el cambio; para una importación que altera claves, la copia protege esas claves con la misma contraseña del archivo de entrada.

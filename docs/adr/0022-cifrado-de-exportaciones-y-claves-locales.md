@@ -2,7 +2,7 @@
 
 ## Estado
 
-Decisión de seguridad aceptada; exportación/importación todavía no implementada.
+Decisión aceptada; aplicada en la implementación inicial de exportación/importación local. Pruebas de integración de fallos del almacén y ensayo de recuperación en Windows siguen pendientes.
 
 ## Contexto
 

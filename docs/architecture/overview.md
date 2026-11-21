@@ -93,7 +93,7 @@ sequenceDiagram
 - La vista previa representa el contenido recogido al abrirla; la terminal puede producir más salida antes de enviar.
 - Sincronización no forma parte de esta arquitectura inicial.
 
-## Extensión aprobada: portabilidad y sync (no implementada)
+## Extensión aprobada: portabilidad local y sync
 
 El diseño posterior aprobado añade una superficie opcional sin cambiar el funcionamiento local actual:
 
@@ -107,7 +107,7 @@ flowchart LR
   STATUS[status estático en Caddy, mismo VPS] --> API
 ```
 
-La API se alojará en `sync.laurafernandezenfermeria.com`. El snapshot excluye claves y datos de agente, chat, terminal y proyecto; los endpoints personalizados requieren consentimiento por perfil. La página pública `/status` se sirve por el proxy y no requiere cuenta. El operador del VPS puede leer el snapshot permitido; la primera versión no ofrece E2EE. Ninguno de estos componentes, el backend, la cuenta, el exportador/importador ni la página de estado está implementado todavía. Ver el [diseño formal](../designs/sincronizacion-preferencias-y-portabilidad.md) y el [plan de entrega](../plans/sincronizacion-preferencias.md).
+La portabilidad local ya cuenta con un módulo Rust para el formato `.laural`, validación, cifrado y descifrado, y comandos Tauri para vista previa, exportación e importación. La UI nativa de Configuración permite fusionar o reemplazar perfiles. Las claves se escriben en Windows Credential Manager; las copias previas se guardan localmente. Falta validar fallos reales y recuperación en Windows. La API de sync se alojará en `sync.laurafernandezenfermeria.com`; excluirá claves y datos de agente, chat, terminal y proyecto. Los endpoints personalizados requerirán consentimiento por perfil. La página pública `/status` será servida por el proxy. El backend, cuenta, cliente de sync y status público siguen pendientes. Ver el [diseño formal](../designs/sincronizacion-preferencias-y-portabilidad.md) y el [plan de entrega](../plans/sincronizacion-preferencias.md).
 
 ## Estructura de código
 

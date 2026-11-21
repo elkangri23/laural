@@ -75,7 +75,11 @@ Estado al 21 de noviembre de 2026. «Implementado» describe código presente; �
 - **Portabilidad y sincronización opcional:** [diseño formal](designs/sincronizacion-preferencias-y-portabilidad.md) aprobado; todavía no implementado. Se eligieron servicio Fastify/PostgreSQL en el VPS, `sync.laurafernandezenfermeria.com`, status público en el mismo VPS, autenticación completa y sincronización cada tres horas con Laural abierta. Decisión del propietario: no habrá copias de desastre fuera del VPS; la pérdida total del host puede borrar cuentas y preferencias sincronizadas. La existencia de una copia PostgreSQL dentro del mismo VPS sigue sin decidirse. Debe mostrarse el riesgo antes de activar sync.
 - Evaluar otras plataformas tras acordar estrategia de PTY, credenciales y empaquetado.
 
-## M8 — Portabilidad local (diseño aprobado; pendiente)
+## M8 — Portabilidad local (implementación inicial)
+
+El flujo de exportar/importar `.laural` ya está integrado en Configuración. Incluye vista previa, fusión o reemplazo, validación de formato y URLs, exclusión de claves por defecto, cifrado Argon2id + AES-256-GCM cuando se eligen claves, copia previa local y rollback de credenciales ante fallos del almacén. La importación no guarda claves en el WebView.
+
+Pendiente antes de dar M8 por cerrado: pruebas de integración con fallos reales de Credential Manager y escritura de `providers.json`, ensayo manual de exportación/importación en Windows limpio, comprobación de recuperación de copias y alcanzar la cobertura acordada para el módulo. La sincronización de cuenta sigue siendo una fase posterior.
 
 - Exportar/importar sin cuenta ni conexión al servicio, con schema versionado, vista previa, fusión/reemplazo y backup previo.
 - Exportar claves solo con consentimiento, contraseña obligatoria y cifrado autenticado; importarlas directamente en Credential Manager y revertir fallos sin aplicar parcialmente.

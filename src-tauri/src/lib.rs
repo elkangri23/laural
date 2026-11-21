@@ -13,6 +13,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 mod activity_log;
 mod agent_files;
 mod chat_stream;
+mod configuration_transfer;
 mod providers;
 
 struct TerminalIo {
@@ -484,6 +485,9 @@ pub fn run() {
             clear_agent_backups,
             providers::get_provider,
             providers::get_providers,
+            providers::export_configuration,
+            providers::import_configuration,
+            providers::preview_configuration,
             providers::select_provider,
             providers::test_provider,
             providers::save_provider,

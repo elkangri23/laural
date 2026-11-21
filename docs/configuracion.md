@@ -2,7 +2,7 @@
 
 Abre **Configuración** en la barra lateral. Los ajustes pertenecen al equipo actual.
 
-La versión actual no incluye cuenta, exportar/importar configuración ni sincronización. Estas funciones tienen un diseño aprobado para una fase futura; no estarán disponibles en Configuración hasta que se implementen. Consulta el [diseño y su estado](designs/sincronizacion-preferencias-y-portabilidad.md).
+La versión actual incluye **Importar y exportar configuración** sin cuenta. La sincronización de cuenta sigue pendiente; consulta el [diseño y su estado](designs/sincronizacion-preferencias-y-portabilidad.md).
 
 | Sección | Opciones y efecto |
 | --- | --- |
@@ -14,6 +14,9 @@ La versión actual no incluye cuenta, exportar/importar configuración ni sincro
 | Paleta de comandos | Pulsa `Ctrl+K` para buscar acciones, sesiones y los últimos 100 comandos de la sesión. El historial vive solo en memoria; elegir un comando lo copia para que lo revises y lo pegues. |
 | Historial | Borrar historial del chat elimina la conversación local. La opción se deshabilita durante una operación activa. |
 | Actualizaciones | Consulta la versión instalada, busca ahora, elige instalación manual o automática y descarga una versión para instalarla y reiniciar Laural. La app busca al iniciar y cada seis horas. |
+| Importar y exportar | Crea un archivo `.laural` con preferencias de apariencia/actualización y perfiles de proveedor. Las claves se excluyen por defecto; para incluirlas se solicita una contraseña (mínimo 12 caracteres) y se cifran con Argon2id + AES-256-GCM. La importación permite vista previa y fusión o reemplazo; antes guarda una copia local en `transfer-backups`. |
+
+Los archivos exportados sin claves contienen nombres, modelos y URLs de los proveedores; considera esas URLs información privada. Una exportación con claves está cifrada, pero quien conozca la contraseña podrá descifrarlas. La copia previa a una importación que cambia claves también se cifra con la contraseña del archivo importado. Sin cambios de claves, la copia local no contiene claves. Chats, terminales, proyectos, reglas del agente e historial no se exportan. La copia local está en el mismo equipo y no sustituye una copia externa.
 
 En el primer inicio puedes escoger el modo de actualización. El modo automático puede cerrar terminales y sus procesos al instalar; guarda antes el trabajo activo. El paquete se valida con la firma criptográfica configurada en la aplicación.
 
