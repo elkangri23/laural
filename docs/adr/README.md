@@ -28,6 +28,7 @@ Los ADR registran por qué se eligió una opción y qué costes trae. Un ADR ace
 | [0022](0022-cifrado-de-exportaciones-y-claves-locales.md) | Contraseña obligatoria para exportar claves y límites del Credential Manager | Decisión aceptada; implementación pendiente |
 | [0023](0023-servicio-de-sincronizacion.md) | Fastify/PostgreSQL, API oficial, revisiones, auth nativa y estado público | Aceptada; implementación pendiente |
 | [0024](0024-sin-copias-fuera-del-vps.md) | No mantener copias de sincronización fuera del VPS | Aceptada; comunicar riesgo de pérdida total |
+| [0025](0025-correo-transaccional-con-resend.md) | Correo transaccional del servicio con Resend | Aceptada; remitente y secretos por configurar |
 
 ## Crear un ADR
 

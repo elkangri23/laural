@@ -29,7 +29,7 @@ Los requisitos distinguen el alcance acordado del estado actual del prototipo. �
 | FR-21 | Consultar y borrar el historial local de acciones del agente. | Implementado con metadatos mínimos, límite de 200 eventos/64 KiB y sin contenido de usuario |
 | FR-22 | Buscar acciones, sesiones y comandos recientes desde una paleta; reutilizar un comando sin ejecutarlo automáticamente. | Implementación inicial; historial solo en memoria, limitado a 100 comandos |
 | FR-23 | Exportar/importar preferencias y, opcionalmente, claves de proveedor entre equipos sin cuenta. | Diseño aprobado; pendiente. Las claves solo podrán exportarse cifradas con contraseña obligatoria; sincronización nunca las incluye |
-| FR-24 | Proteger la cuenta de sincronización con email/contraseña, Google, passkeys y TOTP; usar PIN de correo solo para verificación/recuperación. | Diseño aprobado; pendiente implementación y operación de correo |
+| FR-24 | Proteger la cuenta de sincronización con email/contraseña, Google, passkeys y TOTP; usar PIN de correo solo para verificación/recuperación y enviar el correo transaccional con Resend desde el backend. | Diseño aprobado; pendiente implementación, dominio/remitente verificados y secreto Resend en el VPS |
 | FR-25 | Mostrar disponibilidad, incidentes, acciones en curso y mantenimiento en una página pública sin autenticación. | Diseño aprobado; pendiente implementación en el mismo VPS |
 | FR-26 | Permitir que el administrador revise manualmente una solicitud tras perder todos los factores; el PIN no retira MFA. | Diseño aprobado; pendiente runbook y controles antes de activar |
 

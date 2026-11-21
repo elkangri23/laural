@@ -16,6 +16,7 @@ ADR-0020 decide el alcance funcional: una transferencia local sin cuenta y sincr
 - Guardar localmente la revisión confirmada y el estado pendiente sin credenciales. Guardar primero la configuración local y conservar uso offline.
 - Alojar el inicio de sesión en una página propia HTTPS abierta con el navegador externo. Usar PKCE/estado y callback loopback de un solo uso. WebAuthn usa como origin y RP ID `sync.laurafernandezenfermeria.com`. Guardar credenciales de sesión de Laural en Credential Manager.
 - Mantener email/contraseña, Google, passkeys y TOTP. El email PIN no sustituye un factor ni permite retirar factores. Para pérdida de todos los factores, el administrador revisa evidencia de forma manual y la operación se realiza desde el VPS; no existe ruta pública de retirada de MFA.
+- Enviar correo transaccional mediante Resend; la configuración de remitente, dominio y credenciales queda en variables/secretos del servidor, nunca en el instalador ni en el repositorio.
 - Usar TLS y cifrado de almacenamiento del servidor, sin prometer E2EE. El operador puede leer el snapshot permitido; las claves de modelos nunca se suben.
 - Servir `/status` sin autenticación como contenido estático desde Caddy en el mismo VPS, separado del proceso API. El administrador publica avisos desde una operación protegida en el servidor. La página sobrevive a fallos de API/base de datos mientras Caddy y el VPS estén activos; no sobrevive a una caída total del host o de red.
 
@@ -29,7 +30,7 @@ ADR-0020 decide el alcance funcional: una transferencia local sin cuenta y sincr
 
 ## Consecuencias
 
-- El servicio tiene costos de operación, correo transaccional, respaldos, abuso, incidentes y soporte; la cuenta es optativa.
+- El servicio tiene costos de operación, Resend/correo transaccional, abuso, incidentes y soporte; la cuenta es optativa. No habrá copias fuera del VPS por ADR-0024.
 - Los endpoints personalizados requieren consentimiento por perfil y pueden revelar nombres de host privados al operador.
 - Los conflictos no se fusionan por campo y requieren elección humana con copia recuperable previa.
 - Los snapshots de recuperación visibles no caducan automáticamente. No se configurarán copias de desastre fuera del VPS, según ADR-0024. La pérdida total del host puede destruir datos de cuenta y snapshots; la app debe comunicar esta limitación antes de habilitar sync. La existencia de una copia de PostgreSQL dentro del VPS sigue sin decidirse y no protege ante la pérdida del host.

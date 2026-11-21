@@ -84,7 +84,7 @@ Estado al 21 de noviembre de 2026. «Implementado» describe código presente; �
 ## M9 — Servicio, cuenta y status público (pendiente)
 
 - Publicar API Fastify/PostgreSQL bajo `https://sync.laurafernandezenfermeria.com`.
-- Implementar email/contraseña, Google, passkeys, TOTP, PIN de correo no-MFA, revocación de sesiones y borrado de cuenta.
+- Implementar email/contraseña, Google, passkeys, TOTP, PIN de correo no-MFA, revocación de sesiones y borrado de cuenta. Enviar correo transaccional con Resend; configurar el dominio y remitente verificados y guardar una API key restringida como secreto del VPS.
 - Servir `/status` estáticamente en el mismo VPS; mostrar disponibilidad, incidentes y mantenimiento sin contenido privado.
 - Probar aislamiento por cuenta, recuperación, publicación de avisos y operación del servicio.
 

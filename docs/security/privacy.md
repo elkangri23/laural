@@ -29,6 +29,8 @@ El diseño aprobado para una fase posterior separa transferencia manual de sincr
 
 El servicio de sincronización aún no está desplegado y no tiene copias de desastre. La decisión del propietario es no enviar respaldos fuera del VPS. Si el host se pierde por completo, las cuentas y preferencias guardadas en la nube pueden perderse sin posibilidad de recuperación. Antes de habilitar sincronización, la interfaz debe comunicar este límite. Una copia de PostgreSQL dentro del mismo VPS no está decidida y tampoco protegería frente a la pérdida del host.
 
+El proveedor de correo transaccional elegido para la futura cuenta es Resend. Cuando se implemente, recibirá las direcciones destinatarias y el contenido necesario para verificación, PIN, recuperación, restablecimiento de contraseña y avisos de seguridad. La API key solo estará en el backend del VPS; habrá que incluir Resend y sus prácticas de retención en el aviso de privacidad antes de activar cuentas.
+
 El historial de actividad del agente permanece en el equipo y no contiene comandos, rutas, prompts, salida de terminal, contenido de archivos, URLs, claves ni detalles de error. No es un registro inviolable: cualquier proceso con acceso a la cuenta puede alterarlo o borrarlo.
 
 El updater consulta `raw.githubusercontent.com` y descarga el instalador desde GitHub Releases. Esas solicitudes pueden revelar a GitHub la dirección IP y metadatos HTTP habituales. La firma se verifica localmente antes de instalar; no se envían configuración, claves de proveedores ni contenido del terminal al servicio de actualizaciones.

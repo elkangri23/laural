@@ -31,4 +31,5 @@ El servicio opcional de sincronización guardará cuentas y snapshots de prefere
 ## Referencias
 
 - [ADR-0023: arquitectura del servicio de preferencias](0023-servicio-de-sincronizacion.md)
+- [ADR-0025: correo transaccional con Resend](0025-correo-transaccional-con-resend.md)
 - [Diseño de sincronización y portabilidad](../designs/sincronizacion-preferencias-y-portabilidad.md)

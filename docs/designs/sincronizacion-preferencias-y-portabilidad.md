@@ -25,6 +25,7 @@ The feature must preserve local-only use and manual transfer as complete options
 * Keep Laural usable without an account or network connection, and retain manual export/import as an independent account-free transfer path.
 * Let users opt into account sync for the approved preferences and provider-profile metadata only; never send API keys, passwords, OAuth tokens, passkeys or MFA secrets to the sync service.
 * Host the initial TypeScript/Fastify and PostgreSQL sync service on the project owner's VPS at `https://sync.laurafernandezenfermeria.com`.
+* Use Resend from the server backend for transactional account email; never expose its API key to the desktop client.
 * Synchronize successfully saved local changes automatically, provide a user-triggered **Sync now** action, and check for remote changes every three hours while Laural is open.
 * Ask before initial upload or whole-snapshot replacement, create a recoverable copy before replacement, and stop for user choice when both local and cloud revisions changed.
 * Support email/password, Google, passkeys and MFA/TOTP in the first sync release. A six-digit email PIN is single-use, expires after five minutes, and is limited to email verification and recovery; it cannot sign in by itself or remove enrolled MFA.
@@ -120,7 +121,7 @@ The service hosted on the owner's VPS will be a TypeScript/Fastify application b
 
 The service will use TLS in transit and server-side encryption for stored data and backups. It will not claim end-to-end encryption: the VPS operator can read the permitted snapshot. Operational records use an allowlist of event type, result, duration, client/schema version and opaque operation ID; they exclude payloads, diffs, email addresses, endpoint URLs, IP addresses, tokens and raw exception details. Manual administrator recovery of lost factors is a separately authorized, audited account action; it must not be triggered by the six-digit email PIN alone.
 
-The deployment uses a service container, PostgreSQL, and a reverse proxy with TLS on the dedicated sync subdomain. Runtime credentials, Google OAuth secrets, email credentials, encryption keys and database passwords are supplied by the VPS environment and are never stored in the repository. The design does not add a public administrator dashboard.
+The deployment uses a service container, PostgreSQL, and a reverse proxy with TLS on the dedicated sync subdomain. Transactional account messages are delivered through Resend. Its sending API key, Google OAuth secrets, encryption keys and database passwords are supplied by the VPS environment and are never stored in the repository. Resend must receive a verified sending domain and a restricted sending key before production; the exact sender address remains to be selected. The design does not add a public administrator dashboard.
 
 ### Public service status
 
@@ -339,7 +340,7 @@ Unless noted otherwise, paths in this table are relative to the repository root.
 * **Coverage**: `npm run test:coverage` and `npm --prefix server run test:coverage`; report frontend, Rust and server coverage separately and fail below 85% lines or branches in sync, transfer, authentication and recovery logic.
 * **Integration/security**: verify shared schema fixtures in Rust and TypeScript; prove cross-account read/write rejection, no secret fields in sync, no key-bearing plaintext temporary files, failed imports leave configuration unchanged, email PIN cannot log in or remove factors, admin operation cannot be invoked over HTTP, and all administrative actions are audited.
 * **Windows manual checks**: install, upgrade, PowerShell/CMD/WSL/Git Bash, local-only use, import/export with and without keys, all sign-in methods, passkey callback, offline pending recovery, conflict choice, endpoint consent, service outage, revocation and account deletion.
-* **Operations**: restore a PostgreSQL backup in a test environment, replay deletion records, check TLS certificate renewal, validate email delivery, scan both lockfiles for vulnerabilities and secrets, and inspect logs for forbidden values before opening registration.
+* **Operations**: verify the no-off-VPS-backup disclosure, check TLS certificate renewal, validate Resend delivery and PIN expiration, scan both lockfiles for vulnerabilities and secrets, and inspect logs for forbidden values before opening registration.
 
 ### Release blockers to resolve
 

@@ -18,6 +18,7 @@ La versión actual no tiene cuentas, servicio de sincronización ni flujos de ex
 - El perfil local predeterminado se llama **Usuario desconocido**; no representa una identidad autenticada.
 - Exportar puede incluir claves solo tras selección explícita y contraseña obligatoria. La transferencia con claves usa Argon2id y AES-256-GCM con parámetros acotados; no existe exportación de claves en claro. Importar escribe directamente en Credential Manager y falla sin aplicar parcialmente la operación.
 - El servicio oficial se ejecutará en el VPS del proyecto, con TypeScript, Fastify y PostgreSQL, en `https://sync.laurafernandezenfermeria.com`. No habrá E2EE en la primera versión; el operador podrá leer los campos permitidos.
+- El correo transaccional lo enviará Resend desde el backend. Su API key será un secreto/variable del VPS y nunca estará en Git, la app de escritorio ni el instalador. Aún faltan dominio y remitente verificados.
 - El cliente sincroniza los cambios guardados automáticamente, revisa la nube cada 3 horas mientras Laural está abierta y ofrece **Sincronizar ahora**. Al abrir o reanudar comprueba cambios pendientes.
 - Primera carga, reemplazo o conflicto requieren elección explícita. No hay diferencias por campo, fusión por campo ni «última escritura gana» silenciosa. Antes de reemplazar se crea copia recuperable. Las copias visibles no caducan automáticamente; el usuario puede borrarlas y eliminar la cuenta borra las copias de nube.
 - El servicio ofrecerá email/contraseña, Google, passkeys y TOTP. La autenticación usa navegador externo y retorno local de un solo uso; las credenciales de sesión se guardan en Credential Manager.
@@ -49,7 +50,7 @@ La versión actual no tiene cuentas, servicio de sincronización ni flujos de ex
 ## Entregas y tareas
 
 1. **F1 — Portabilidad local:** contrato versionado, adaptador de perfil, exportación/importación, cifrado de claves, vista previa, backup/rollback y pruebas de cobertura.
-2. **F2 — Servicio y cuenta:** Fastify/PostgreSQL, migraciones, email, email/contraseña, Google, passkeys, TOTP, PIN, revocación de sesión y borrado de cuenta.
+2. **F2 — Servicio y cuenta:** Fastify/PostgreSQL, migraciones, Resend para correo transaccional, email/contraseña, Google, passkeys, TOTP, PIN, revocación de sesión y borrado de cuenta.
 3. **F3 — Sincronización:** snapshot cerrado, cliente Rust, estado y cola offline, revisiones condicionales, consentimiento de endpoint, conflictos, **Sincronizar ahora** y revisión cada 3 horas con Laural abierta.
 4. **F4 — Estado y operación:** página `/status`, avisos de mantenimiento/incidentes desde operación protegida, backups, procedimientos de recuperación y despliegue TLS.
 
@@ -62,6 +63,6 @@ El [backlog](../BACKLOG.md) contiene criterios de cierre por tarea; la [hoja de 
 - **Propuesta por aprobar:** emitir códigos de recuperación de un solo uso al activar MFA; permitir revisión manual del administrador solo con PIN de correo más un factor/prueba independiente preexistente. Sin ella no se retiran factores. Revocar sesiones y notificar al aprobar; registrar categoría de evidencia y decisión, no el contenido de pruebas.
 - Informar claramente del riesgo de pérdida total del VPS antes de activar la sincronización. Mantener la app local-first y no presentar la nube como única copia de la configuración.
 - Fijar límites de cuenta/dispositivos/peticiones, monitorización y procedimiento de incidentes.
-- Configurar proveedor de correo y credenciales de Google fuera del repositorio; nunca publicar secretos en GitHub.
+- Configurar dominio/remitente en Resend y sus registros DNS; crear API key de solo envío restringida al dominio y guardarla como secreto del VPS. No pegarla en el chat ni incluirla en GitHub. Configurar credenciales de Google fuera del repositorio.
 
 El diseño técnico y estos criterios operativos recomendados están en el [diseño formal](../designs/sincronizacion-preferencias-y-portabilidad.md). Se deben aprobar e implementar antes de habilitar cuentas para el público.
