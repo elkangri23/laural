@@ -1,165 +1,63 @@
-# Plan propuesto: perfiles, exportación y sincronización
+# Especificación: perfiles, portabilidad y sincronización
 
-- Estado: propuesta; no implementado ni aprobado como cambio de alcance.
-- Fecha: 2026-11-21
-- Alcance: preferencias de Laural y metadatos de perfiles de proveedor.
-- Fuera de alcance: sincronizar claves API, conversaciones, historial de terminal, proyectos o comandos ejecutados.
+- **Estado:** diseño aprobado; implementación pendiente.
+- **Fecha:** 2026-11-21.
+- **Alcance:** Windows primero; perfiles locales, exportar/importar y sincronización opcional de preferencias.
+- **Diseño formal:** [sincronización de preferencias y portabilidad](../designs/sincronizacion-preferencias-y-portabilidad.md).
+- **Decisiones:** [ADR-0020](../adr/0020-perfiles-y-sincronizacion-opcional.md) y [ADR-0023](../adr/0023-servicio-de-sincronizacion.md).
 
-## Entendimiento del producto
+## Estado actual
 
-Laural conservará dos formas independientes de mover o compartir configuración:
+La versión actual no tiene cuentas, servicio de sincronización ni flujos de exportar/importar configuración. Los perfiles viven en `providers.json`, la política del agente en `agent.json`, la apariencia y la preferencia de actualización en `localStorage`, y las claves de proveedores en Windows Credential Manager. El diseño aprobado no implica que estas funciones estén disponibles en el instalador.
 
-1. **Perfil local y exportar/importar:** no requiere cuenta ni conexión con un servicio de Laural. La app crea un perfil local llamado **Usuario desconocido**; el nombre es una etiqueta editable, no una identidad verificada. La persona exporta un archivo e importa ese archivo en otro equipo. Puede elegir si incluye claves API.
-2. **Cuenta y sincronización:** requiere iniciar sesión y activar la sincronización. La cuenta puede usar nombre, correo y contraseña; también se podrá autenticar con Google, passkeys y un segundo factor. La configuración se sube al servicio de Laural y se recupera en otros equipos. Las claves API nunca forman parte de este flujo.
+## Decisiones funcionales aprobadas
 
-El nombre **perfil de Laural** designa un conjunto de preferencias y perfiles de proveedor. **Cuenta** designa la identidad autenticada del servicio de sincronización. Un perfil local no crea una cuenta ni transmite datos.
+- La app debe seguir funcionando sin cuenta ni red. Exportar/importar será independiente del servicio.
+- La sincronización de cuenta será opcional y solo cubrirá tema/apariencia, preferencia de actualización, tipo/nombre/modelo del proveedor, perfil activo y endpoint personalizado cuando se autorice para ese perfil.
+- Nunca se sincronizan claves API, contraseñas, OAuth/session tokens, passkeys, factores MFA, conversaciones, comandos o salida de terminal, proyectos/rutas, actividad del agente ni políticas de ejecución.
+- El perfil local predeterminado se llama **Usuario desconocido**; no representa una identidad autenticada.
+- Exportar puede incluir claves solo tras selección explícita y contraseña obligatoria. La transferencia con claves usa Argon2id y AES-256-GCM con parámetros acotados; no existe exportación de claves en claro. Importar escribe directamente en Credential Manager y falla sin aplicar parcialmente la operación.
+- El servicio oficial se ejecutará en el VPS del proyecto, con TypeScript, Fastify y PostgreSQL, en `https://sync.laurafernandezenfermeria.com`. No habrá E2EE en la primera versión; el operador podrá leer los campos permitidos.
+- El cliente sincroniza los cambios guardados automáticamente, revisa la nube cada 3 horas mientras Laural está abierta y ofrece **Sincronizar ahora**. Al abrir o reanudar comprueba cambios pendientes.
+- Primera carga, reemplazo o conflicto requieren elección explícita. No hay diferencias por campo, fusión por campo ni «última escritura gana» silenciosa. Antes de reemplazar se crea copia recuperable. Las copias visibles no caducan automáticamente; el usuario puede borrarlas y eliminar la cuenta borra las copias de nube.
+- El servicio ofrecerá email/contraseña, Google, passkeys y TOTP. La autenticación usa navegador externo y retorno local de un solo uso; las credenciales de sesión se guardan en Credential Manager.
+- El PIN de correo tiene 6 dígitos, un uso y 5 minutos de vigencia. Solo verifica correo o inicia una solicitud de recuperación; no permite entrar por sí solo ni quitar MFA.
+- Si se pierden todos los factores, el administrador revisa pruebas independientes y decide manualmente. La retirada revoca sesiones, notifica al usuario y deja un registro mínimo; no hay endpoint público de borrado de factores.
+- La página pública sin autenticación estará en `https://sync.laurafernandezenfermeria.com/status`. El proxy del mismo VPS sirve el contenido estático fuera del proceso API. Puede informar de una caída de la API o la base de datos, pero no de una caída total del VPS/red.
 
-## Alcance de datos
+## Datos incluidos y excluidos
 
-| Dato | Solo local | Exportar/importar | Sincronizar con cuenta |
+| Dato | Local | Exportación/importación | Nube |
 | --- | --- | --- | --- |
-| Tema, modo claro/oscuro y preferencias de interfaz | Sí | Sí | Sí |
-| Preferencia de actualización | Sí | Sí | Sí |
-| Nombre, tipo, modelo y endpoint de perfiles de proveedor | Sí | Sí | Sí, con confirmación para endpoints personalizados |
-| Proveedor activo | Sí | Sí | Sí |
-| Claves API de proveedores | Credential Manager | Solo dentro de un archivo cifrado con contraseña obligatoria | **Nunca** |
-| Contraseña, tokens de sesión, credenciales de Google y passkeys | Almacén seguro apropiado | **Nunca** | **Nunca como datos de configuración** |
-| Modo y reglas del agente | Sí | Sí | Desactivado por defecto; sincronización opcional y separada |
-| Historial de chat/terminal, prompts, proyectos, rutas locales y actividad | Sí, cuando exista | **No** | **No** |
+| Apariencia, tema y actualización | Sí | Sí | Sí |
+| Proveedor: tipo, nombre, modelo y perfil activo | Sí | Sí | Sí |
+| Endpoint personalizado | Sí | Sí | Solo con consentimiento por perfil |
+| Claves API | Credential Manager | Opcional, cifradas con contraseña | Nunca |
+| Credenciales de cuenta, passkeys y MFA | Almacén apropiado | Nunca | No forman parte del snapshot |
+| Agente, chat, historial/comandos, proyecto, rutas y actividad | Local donde exista | Excluido | Excluido |
 
-Los endpoints pueden incluir nombres de host privados. La interfaz de sincronización mostrará cuáles se van a subir, permitirá excluirlos y explicará que `localhost` se refiere al equipo donde se usa. Para perfiles Ollama y LM Studio se recomienda guardar el tipo y reconstruir el endpoint local predeterminado en el dispositivo receptor; los endpoints personalizados requieren confirmación.
+## Flujos y criterios de aceptación
 
-Las reglas y el modo automático del agente pueden ampliar permisos en otro equipo. Por eso, la sincronización general no los activará por defecto: la persona podrá sincronizar esas políticas con una opción separada y una advertencia. En un dispositivo nuevo, el modo inicial será **Confirmar cada comando**.
+1. **Transferencia sin cuenta:** exportar/importar funciona sin servicio. La app valida el archivo y muestra una vista previa antes de aplicar cambios.
+2. **Exportación con claves:** requiere consentimiento y contraseña; el archivo alterado, corrupto, excesivo o con contraseña incorrecta no modifica la configuración.
+3. **Primer acceso a la nube:** si no hay snapshot, Laural pregunta antes de la primera carga. Si hay dos snapshots diferentes, ofrece conservar el local o el de nube y advierte cuál será reemplazado.
+4. **Cambios en línea y fuera de línea:** guarda primero en local. Un cambio guardado intenta sincronizarse; si no hay red, conserva un estado pendiente duradero y visible.
+5. **Conflicto concurrente:** el cliente usa revisiones condicionales e idempotencia. Si la revisión remota avanzó, detiene escrituras y pide elegir un snapshot completo; nunca sobrescribe sin aviso.
+6. **Seguridad de cuenta:** la autorización se comprueba por cuenta en cada lectura/escritura. Una cuenta no puede leer ni modificar otra. El PIN vence, no se reutiliza y nunca sustituye MFA.
+7. **Estado público:** cualquier visitante puede ver disponibilidad general, estado de sincronización/correo, incidentes, acciones en curso y mantenimientos. La página no publica datos de usuarios, logs, IPs, secretos ni detalles internos.
 
-## Flujo A: perfil local y archivo de exportación
+## Entregas y tareas
 
-### Exportar
+1. **F1 — Portabilidad local:** contrato versionado, adaptador de perfil, exportación/importación, cifrado de claves, vista previa, backup/rollback y pruebas de cobertura.
+2. **F2 — Servicio y cuenta:** Fastify/PostgreSQL, migraciones, email, email/contraseña, Google, passkeys, TOTP, PIN, revocación de sesión y borrado de cuenta.
+3. **F3 — Sincronización:** snapshot cerrado, cliente Rust, estado y cola offline, revisiones condicionales, consentimiento de endpoint, conflictos, **Sincronizar ahora** y revisión cada 3 horas con Laural abierta.
+4. **F4 — Estado y operación:** página `/status`, avisos de mantenimiento/incidentes desde operación protegida, backups, procedimientos de recuperación y despliegue TLS.
 
-1. La persona elige **Exportar configuración** y ve el resumen de preferencias, perfiles y campos que contendría el archivo.
-2. Por defecto, se excluyen las claves API. Una casilla independiente permite incluirlas.
-3. Si se incluyen claves, una contraseña de exportación es obligatoria. No existe modo de exportar claves en texto plano ni se reutiliza la contraseña de cuenta.
-4. Exportar sin contraseña sigue siendo posible solo cuando se excluyen las claves API. La interfaz lo indicará claramente.
-5. El formato lleva versión de esquema, límites de tamaño y tipos de dato permitidos. Será un documento de Laural, no un ZIP que extraiga rutas arbitrarias.
+El [backlog](../BACKLOG.md) contiene criterios de cierre por tarea; la [hoja de ruta](../ROADMAP.md) ordena las entregas. Los módulos críticos de sync, cifrado, autenticación y recuperación requieren al menos 85 % de cobertura de líneas y ramas, además de pruebas de integración en PostgreSQL y pruebas manuales de Windows.
 
-La clave de cifrado se derivará con Argon2id, sal aleatoria y parámetros versionados; el contenido completo del perfil, incluidas las claves, se cifrará con un modo autenticado como AES-256-GCM y nonce único. El archivo incluirá los parámetros necesarios para descifrar y verificar integridad, pero no la contraseña. Los parámetros deberán tener límites rígidos antes de calcular la KDF para evitar que un archivo manipulado cause consumo excesivo. Se usarán bibliotecas mantenidas, aleatoriedad del sistema y pruebas de vectores conocidos; no se diseñará criptografía propia. Se medirá el coste en Windows y se fijará una política de parámetros versionada antes de implementar el formato.
+## Pendientes antes de producción
 
-### Importar
-
-1. La app detecta la versión, valida el esquema y, si corresponde, pide la contraseña del archivo.
-2. Presenta una vista previa con las preferencias, perfiles, endpoints y si hay claves dentro del archivo.
-3. Permite **fusionar** o **reemplazar**. La fusión conserva ajustes locales que no estén en la copia; el reemplazo pide confirmación y crea una copia local previa.
-4. Si un perfil trae clave, Laural comprueba que el endpoint normalizado coincide con el perfil al que se asociará. La clave descifrada se mantiene solo en memoria durante la importación y se escribe directamente en Windows Credential Manager; nunca se crea un archivo temporal con claves en claro ni se escriben en `providers.json`, logs, mensajes de error o telemetría. Si falla la validación o el guardado, la importación no aplica parcialmente los perfiles.
-5. Los archivos corruptos, alterados, demasiado grandes, con campos desconocidos críticos o con versiones incompatibles se rechazan sin modificar la configuración.
-
-Un archivo con claves siempre exige contraseña y autenticación criptográfica correcta. Si se pierde la contraseña, no hay recuperación. Tras importar, la clave queda protegida por el almacén del sistema; el archivo cifrado debe guardarse como material sensible porque su seguridad depende también de la contraseña.
-
-## Flujo B: cuenta y sincronización
-
-### Cuenta y métodos de acceso
-
-- Registro con nombre visible, correo y contraseña; el correo debe verificarse antes de habilitar la sincronización.
-- Contraseñas almacenadas solo como hashes Argon2id con sal individual; nunca se recuperan ni se guardan en texto claro. Se aplicarán límites de intentos, protección ante enumeración de cuentas, restablecimiento con token de un solo uso y avisos de seguridad.
-- **Google:** inicio mediante OpenID Connect. La app de escritorio abrirá el navegador predeterminado, usará Authorization Code con PKCE y retorno loopback local; el backend validará el ID token. No se pedirá la contraseña de Google dentro de Laural ni se usará el WebView embebido para autenticación. RFC 8252 establece PKCE y navegador externo para clientes nativos públicos.
-- **Passkeys:** registro y verificación WebAuthn en el backend, con retos de un solo uso, origen/RP ID fijados y validación de firma. La clave privada se queda en el autenticador; Laural guarda la clave pública y metadatos necesarios.
-- **Segundo factor:** TOTP como opción inicial, passkey como autenticador resistente al phishing y códigos de recuperación de un solo uso. Se permitirá registrar más de un método y se protegerán cambios y recuperación con reautenticación y avisos.
-- Vincular Google a una cuenta existente requiere verificar ambas identidades y confirmación explícita. No se fusionarán cuentas solo porque los correos parezcan iguales.
-- Habrá cierre de sesión, listado y revocación de dispositivos/sesiones, recuperación de cuenta y eliminación de cuenta y datos sincronizados.
-
-OWASP recomienda almacenar contraseñas mediante algoritmos adaptativos como Argon2id. WebAuthn define credenciales de clave pública; la clave privada permanece en el autenticador. Las passkeys no eliminan la necesidad de recuperación segura.
-
-### Primer inicio y conflictos
-
-Al iniciar sesión, Laural no sobrescribirá la configuración silenciosamente:
-
-- Si la cuenta no tiene una copia en la nube, preguntará si se sube el perfil local.
-- Si ya hay configuración remota, mostrará diferencias y permitirá **usar la configuración de este equipo**, **descargar la de la cuenta** o **fusionar**.
-- Antes de reemplazar datos locales, guardará una copia recuperable.
-- La fusión usará IDs estables de perfiles y presentará conflictos por campo; las claves, sesiones y valores locales excluidos nunca se consideran para fusionar.
-
-Después, el usuario podrá activar sincronización automática o dejarla manual. La primera versión automática sincronizará solo cambios de preferencias permitidas, con indicador de última sincronización y botón **Sincronizar ahora**. Los cambios concurrentes usarán revisiones/ETag y provocarán una vista de conflicto; no aplicarán «última escritura gana» sin aviso.
-
-### Qué se envía al servicio
-
-La carga de sincronización tendrá un esquema cerrado que no incluye campos secretos. Incluye preferencias explícitamente elegidas y metadatos de proveedor; no incluye claves API, contraseña, tokens de Laural, secretos OAuth, passkeys, historial, comandos, salida de terminal, archivos ni rutas de proyecto.
-
-La comunicación exige TLS. El servicio aplicará cifrado en reposo, autorización por cuenta, separación entre usuarios, límites de tamaño y frecuencia, registros sin payloads ni secretos, copias de seguridad y política de retención. La primera versión no prometerá cifrado de extremo a extremo: el operador del servicio podría acceder a preferencias y endpoints guardados. Si se exige confidencialidad frente al propio operador, habrá que diseñar y aprobar un ADR aparte de cifrado cliente a cliente, recuperación de claves y alta de dispositivos.
-
-## Arquitectura propuesta
-
-- **Aplicación Tauri:** perfil local, importador/exportador, diálogo de conflictos, cliente HTTP de sincronización y almacenamiento local de la sesión de Laural en Credential Manager.
-- **Servicio opcional de Laural:** API de cuenta y API de preferencias versionadas. No tendrá columnas ni endpoints para claves de proveedores.
-- **Identidad:** contraseña verificada por el backend, passkeys WebAuthn y Google OIDC. Los clientes de escritorio son públicos; no llevan un secreto compartido de OAuth dentro del ejecutable.
-- **Almacenamiento:** preferencias versionadas por cuenta; `account_id`, revisión, fecha y payload permitido. Cifrado en reposo administrado por el servicio y backups protegidos.
-- **Despliegue:** servicio y manifiestos de infraestructura en el repositorio público si se mantiene el objetivo de código abierto. Secretos de despliegue y credenciales de correo/OAuth permanecen fuera del repositorio.
-
-La autenticación y sincronización exigen servicio alojado, dominio, correo transaccional, base de datos, monitorización de abuso, respuesta a incidentes, política de privacidad y proceso para borrar cuentas. Mantener las funciones locales sin cuenta será obligatorio; sincronizar será optativo.
-
-## Fases de entrega
-
-### F0 — Decisión y contratos
-
-- Aceptar o revisar ADR-0020.
-- Definir JSON versionado para preferencias y perfiles, datos sincronizables y migración.
-- Decidir límites de tamaño, endpoint personalizado, política de retención, alojamiento y privacidad.
-- Registrar amenazas y casos de uso antes de abrir cuentas.
-
-### F1 — Portabilidad sin cuenta
-
-- Crear y renombrar el perfil local **Usuario desconocido**.
-- Exportar/importar sin secretos por defecto.
-- Añadir inclusión opcional de claves solo en exportación cifrada con contraseña obligatoria; sin contraseña, excluir claves.
-- Añadir vista previa, fusión/reemplazo, copia de seguridad y escritura atómica.
-- Cerrar pruebas de ida y vuelta, corrupción, archivo alterado, contraseña equivocada, migración de versión y separación entre claves y JSON local.
-
-### F2 — Identidad y servicio
-
-- Desplegar backend mínimo y correo de verificación/restablecimiento.
-- Añadir registro y acceso con email/contraseña, limitación de intentos, sesiones revocables y eliminación de cuenta.
-- Añadir login Google OIDC con PKCE y navegador externo.
-- Añadir passkeys WebAuthn, TOTP, códigos de recuperación y flujos de pérdida de dispositivo.
-- Revisar el modelo de amenazas, pruebas de autorización entre cuentas y auditoría de dependencias.
-
-### F3 — Sincronización manual y conflictos
-
-- Sincronizar preferencias permitidas, nunca claves.
-- Añadir vista previa de primera carga/descarga, fusión y resolución de conflictos.
-- Añadir exclusión de endpoints personalizados y opt-in separado para políticas del agente.
-- Probar modo offline, cambios concurrentes, revocación, borrado de cuenta y recuperación.
-
-### F4 — Sincronización automática y operación
-
-- Añadir sincronización automática optativa, estado visible y reintentos limitados.
-- Añadir monitorización operacional sin registrar contenido de configuración.
-- Probar migraciones, restauración de backups y borrado verificable.
-- Publicar guía de privacidad, términos de servicio, disponibilidad y estado del servicio.
-
-## Casos de uso y criterios de aceptación
-
-- Una persona nueva usa Laural como **Usuario desconocido**, sin red ni cuenta.
-- Puede mover la configuración básica a otro equipo sin incluir secretos.
-- Puede incluir claves solo después de elegirlo y establecer contraseña; no existe exportación de claves en claro. La exportación cifrada rechaza contraseña incorrecta, parámetros fuera de límites y cualquier alteración. La importación escribe la clave directamente en Credential Manager y falla sin aplicar una importación parcial.
-- La importación no escribe claves en archivos ni las asocia a un endpoint distinto.
-- Al iniciar sesión en otro equipo puede comparar y elegir cómo combinar los ajustes; ninguna opción envía claves API.
-- Una prueba de contrato confirma que el backend rechaza cualquier campo `apiKey`, token de proveedor, password, OAuth credential o passkey en payload de sincronización.
-- Otra cuenta no puede leer, reemplazar ni borrar la configuración de la cuenta actual.
-- La persona puede revocar dispositivo/sesión, recuperar acceso y borrar la cuenta y la copia remota.
-- Si no hay servicio, todos los flujos locales siguen disponibles y los cambios locales no se pierden.
-
-## Decisiones que aún requieren aceptación
-
-1. Alojamiento oficial operado por el proyecto o servicio autoalojable mantenido por la persona.
-2. Sincronizar endpoints personalizados por defecto o exigir selección por perfil.
-3. Política de sincronización de modo/reglas del agente; propuesta: no sincronizarlos salvo consentimiento separado y usar modo de revisión en dispositivos nuevos.
-4. Cifrado servidor en reposo en F3 frente a cifrado de extremo a extremo. Propuesta inicial: no afirmar E2EE; diseñarlo en un ADR posterior si es requisito.
-5. Disponibilidad, costes de operación, retención de datos y procedimiento de soporte/borrado.
-
-## Referencias de seguridad
-
-- [RFC 8252 — OAuth 2.0 para aplicaciones nativas](https://www.rfc-editor.org/rfc/rfc8252.html)
-- [RFC 9700 — buenas prácticas actuales de seguridad OAuth 2.0](https://www.rfc-editor.org/rfc/rfc9700.html)
-- [Google — OpenID Connect](https://developers.google.com/identity/openid-connect/openid-connect)
-- [W3C — Web Authentication Level 3](https://www.w3.org/TR/webauthn-3/)
-- [OWASP — Password Storage](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html)
-- [OWASP — Passkey Security](https://cheatsheetseries.owasp.org/cheatsheets/Passkey_Security_Cheat_Sheet.html)
-- [OWASP — Multifactor Authentication](https://cheatsheetseries.owasp.org/cheatsheets/Multifactor_Authentication_Cheat_Sheet.html)
-- [OWASP — Cryptographic Storage](https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html)
+- Definir retención de backups de desastre del VPS, separada de las copias de recuperación visibles que no caducan automáticamente, y el borrado al restaurar.
+- Documentar las pruebas aceptables, avisos y registro que usa el administrador para evaluar una recuperación.
+- Fijar límites de cuenta/dispositivos/peticiones, monitorización y procedimiento de incidentes.
+- Configurar proveedor de correo y credenciales de Google fuera del repositorio; nunca publicar secretos en GitHub.

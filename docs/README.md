@@ -8,6 +8,7 @@ Este índice reúne las decisiones y requisitos de la etapa inicial. El código 
 - [Brief de producto](PRODUCT_BRIEF.md)
 - [Hoja de ruta](ROADMAP.md)
 - [Plan de perfiles, exportación/importación y sincronización opcional](plans/sincronizacion-preferencias.md)
+- [Diseño formal de portabilidad, sync y status público](designs/sincronizacion-preferencias-y-portabilidad.md)
 - [Sistema visual: 12 temas y modos](ui/design-system.md)
 - [Configuración de desarrollo](development/setup.md)
 

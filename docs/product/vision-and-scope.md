@@ -31,7 +31,7 @@ Quienes trabajan en terminal alternan entre shells, documentación, asistentes y
 
 - Replicar de forma exacta productos comerciales o usar sus recursos protegidos.
 - Ofrecer funciones de pago, cuentas o monetización.
-- Sincronizar perfiles, credenciales, proyectos o conversaciones entre dispositivos.
+- Incluir cuentas/sincronización en el MVP. La portabilidad y sync se diseñaron para una fase posterior; credenciales, conversaciones, terminal y proyectos/rutas no se sincronizan.
 - Ejecutar código de manera aislada en un sandbox propio.
 - Soportar macOS o Linux en el primer hito.
 - Garantizar compatibilidad con toda API que se describa como OpenAI-compatible.

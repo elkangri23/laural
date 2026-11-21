@@ -15,7 +15,7 @@ Crear una aplicación de terminal open source para Windows con chat contextual y
 - Ollama, LM Studio y API OpenAI-compatible, incluyendo FreeLLMAPI.
 - Operación sin cuenta ni backend obligatorio.
 - Código y un instalador para Windows.
-- Sincronización de configuración y proveedores diferida.
+- Portabilidad y sincronización opcional: diseño aprobado para una fase posterior; no implementado en la versión actual. API keys solo en exportación cifrada con contraseña y nunca en la nube.
 
 ## Requisitos de privacidad y seguridad
 
@@ -25,7 +25,7 @@ Crear una aplicación de terminal open source para Windows con chat contextual y
 - Limitar alcance de archivos al proyecto y conservar respaldos de archivos existentes.
 - Enviar solo el contexto necesario al proveedor que el usuario configuró, tras acción explícita de enviar.
 - Tratar modo automático como comodidad con riesgo, no como sandbox.
-- Si se añade sincronización, diseñar consentimiento, cifrado y recuperación aparte.
+- La nube futura usa allowlist y consentimiento por endpoint personalizado, excluye secretos y no ofrece E2EE inicialmente; el operador puede leer los campos permitidos. El proceso de recuperación y la política de copias deben estar listos antes de producción.
 
 ## Decisiones arquitectónicas
 
@@ -50,4 +50,4 @@ Tauri 2, React/TypeScript, backend Rust con `portable-pty`, xterm.js, protocolo 
 3. Probar proveedor, contexto, streaming y cancelación de chat dentro de la app.
 4. Revisar límites del agente y mejorar feedback por acción.
 5. Firmar y automatizar releases.
-6. Evaluar sincronización opcional después del MVP.
+6. Implementar por fases la [especificación aprobada de portabilidad/sync](plans/sincronizacion-preferencias.md) después del MVP.

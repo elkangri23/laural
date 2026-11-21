@@ -72,9 +72,34 @@ Estado al 21 de noviembre de 2026. «Implementado» describe código presente; �
 - Paleta de acciones y búsqueda de comandos recientes implementada inicialmente: atajo `Ctrl+K`, selección de sesiones y copia de comandos para revisión, con historial efímero de 100 entradas. Falta validar teclado/portapapeles en Windows y contraste en las 12 paletas.
 - Panel Git: siguiente entrega. Empezar con estado, rama y diff de solo lectura; documentar límites y evitar incluir diffs en el proveedor sin vista previa explícita.
 - Recetas de tareas: después del panel Git. Definir plantillas reutilizables con vista previa, pasos claramente enumerados, límites de alcance y confirmación antes de cada operación con efectos.
-- Propuesta documentada en [ADR-0020](adr/0020-perfiles-y-sincronizacion-opcional.md) y [plan de diseño](plans/sincronizacion-preferencias.md): transferencia manual con opción explícita de incluir claves, y sincronización con cuenta que las excluye. No implementado; requiere aceptar alojamiento, privacidad, recuperación y tratamiento de endpoints.
-- Seguridad de exportación definida en [ADR-0022](adr/0022-cifrado-de-exportaciones-y-claves-locales.md): incluir claves exige contraseña y cifrado autenticado; exportar sin contraseña excluye las claves. La implementación/importación transaccional queda pendiente para F1.
+- **Portabilidad y sincronización opcional:** [diseño formal](designs/sincronizacion-preferencias-y-portabilidad.md) aprobado; todavía no implementado. Se eligieron servicio Fastify/PostgreSQL en el VPS, `sync.laurafernandezenfermeria.com`, status público en el mismo VPS, autenticación completa y sincronización cada tres horas con Laural abierta. Las copias de desastre y runbook de recuperación siguen como condiciones previas a producción.
 - Evaluar otras plataformas tras acordar estrategia de PTY, credenciales y empaquetado.
+
+## M8 — Portabilidad local (diseño aprobado; pendiente)
+
+- Exportar/importar sin cuenta ni conexión al servicio, con schema versionado, vista previa, fusión/reemplazo y backup previo.
+- Exportar claves solo con consentimiento, contraseña obligatoria y cifrado autenticado; importarlas directamente en Credential Manager y revertir fallos sin aplicar parcialmente.
+- Completar pruebas de cobertura de formatos, claves, corrupción, contraseñas, migración y rollback.
+
+## M9 — Servicio, cuenta y status público (pendiente)
+
+- Publicar API Fastify/PostgreSQL bajo `https://sync.laurafernandezenfermeria.com`.
+- Implementar email/contraseña, Google, passkeys, TOTP, PIN de correo no-MFA, revocación de sesiones y borrado de cuenta.
+- Servir `/status` estáticamente en el mismo VPS; mostrar disponibilidad, incidentes y mantenimiento sin contenido privado.
+- Probar aislamiento por cuenta, recuperación, publicación de avisos y operación del servicio.
+
+## M10 — Cliente y sincronización (pendiente)
+
+- Sincronizar solo el allowlist aprobado, con endpoint personalizado sujeto a consentimiento por perfil.
+- Guardar local primero; enviar tras los cambios, ofrecer **Sincronizar ahora** y revisar cada tres horas mientras Laural está abierta.
+- Añadir estados pendientes offline, revisiones condicionales, idempotencia, copia previa a reemplazos y elección de snapshot completo ante conflicto.
+- Excluir siempre claves, chats, terminal/historial, proyectos/rutas y política del agente.
+
+## M11 — Preparación para producción (pendiente)
+
+- Definir retención de backups de desastre, procedimiento de restauración/borrado y límites de cuenta/dispositivo/solicitud.
+- Publicar runbook de recuperación manual del administrador; no habilitar retirada de factores antes de definir evidencias y avisos.
+- Completar revisión de seguridad, cobertura de líneas y ramas (mínimo 85 % para lógica crítica), instalación/actualización Windows y plan de incidentes.
 
 ## No planificado para el MVP
 

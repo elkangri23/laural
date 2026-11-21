@@ -21,14 +21,17 @@ Los requisitos distinguen el alcance acordado del estado actual del prototipo. �
 | FR-13 | Mostrar bloques de comandos y resultados como unidades navegables. | Implementación inicial; PowerShell, CMD y Bash señalizan fin/código cuando sus hooks están activos; edición de línea y shells personalizados requieren validación manual |
 | FR-14 | Conservar un historial de chat local y permitir borrarlo. | Implementación inicial en almacenamiento local del WebView; límite de 100 mensajes |
 | FR-15 | Cancelar una operación del agente durante la generación o ejecución. | Implementación inicial; cancela planificación, detiene el ciclo automático y envía Ctrl+C al comando activo; validar por shell |
-| FR-16 | Sincronizar configuración/proveedores entre dispositivos. | Diferido; fuera del MVP |
+| FR-16 | Sincronizar preferencias y metadatos de perfiles entre dispositivos con cuenta opcional. | Diseño aprobado; pendiente implementación |
 | FR-17 | Elegir entre 12 paletas visuales y cambiar entre modo claro y oscuro. | Implementación inicial |
 | FR-18 | Mantener la preferencia de apariencia tras reiniciar Laural. | Implementación inicial; localStorage |
 | FR-19 | Revisar el contexto terminal/proyecto/archivos antes de enviarlo al proveedor. | Implementación inicial; muestra el contenido con los mismos límites de envío |
 | FR-20 | Consultar, descargar e instalar actualizaciones de GitHub; permitir decisión manual o instalación automática y mostrar versión. | Integrado para instaladores NSIS de Windows; validación real de release pendiente |
 | FR-21 | Consultar y borrar el historial local de acciones del agente. | Implementado con metadatos mínimos, límite de 200 eventos/64 KiB y sin contenido de usuario |
 | FR-22 | Buscar acciones, sesiones y comandos recientes desde una paleta; reutilizar un comando sin ejecutarlo automáticamente. | Implementación inicial; historial solo en memoria, limitado a 100 comandos |
-| FR-23 | Exportar/importar preferencias y, opcionalmente, claves de proveedor entre equipos. | Pendiente; las claves solo podrán exportarse en un archivo cifrado con contraseña obligatoria; sincronización nunca las incluye |
+| FR-23 | Exportar/importar preferencias y, opcionalmente, claves de proveedor entre equipos sin cuenta. | Diseño aprobado; pendiente. Las claves solo podrán exportarse cifradas con contraseña obligatoria; sincronización nunca las incluye |
+| FR-24 | Proteger la cuenta de sincronización con email/contraseña, Google, passkeys y TOTP; usar PIN de correo solo para verificación/recuperación. | Diseño aprobado; pendiente implementación y operación de correo |
+| FR-25 | Mostrar disponibilidad, incidentes, acciones en curso y mantenimiento en una página pública sin autenticación. | Diseño aprobado; pendiente implementación en el mismo VPS |
+| FR-26 | Permitir que el administrador revise manualmente una solicitud tras perder todos los factores; el PIN no retira MFA. | Diseño aprobado; pendiente runbook y controles antes de activar |
 
 ## No funcionales
 
@@ -43,11 +46,12 @@ Los requisitos distinguen el alcance acordado del estado actual del prototipo. �
 | NFR-07 | Accesibilidad básica. | Navegación por teclado, etiquetas accesibles, contraste suficiente y escalado de ventana. |
 | NFR-08 | Instalación reproducible. | Instrucciones de desarrollo y empaquetado versionadas junto al código. |
 | NFR-09 | Sin telemetría por defecto. | Ningún evento de uso sale a un servicio de Laural. |
-| NFR-10 | Portabilidad de datos futura. | Configuración no secreta legible y documentada; sincronización requiere decisión y diseño separados. |
+| NFR-10 | Portabilidad y sincronización local-first. | Snapshot cerrado/versionado; guardar local antes de red; claves y datos de proyecto nunca sincronizados. |
 | NFR-11 | Legibilidad visual. | Contraste de texto y controles legibles en las 12 paletas y en ambos modos; cambio de tema no debe reiniciar shells. |
 | NFR-12 | Integridad de actualizaciones. | HTTPS y firma del paquete verificada con clave pública antes de instalación; secreto privado solo en GitHub Actions. |
 | NFR-13 | Privacidad del historial de terminal. | Los comandos recientes viven solo en memoria y se pierden al cerrar Laural; nunca se persisten ni sincronizan. |
 | NFR-14 | Protección de credenciales exportadas y locales. | Sin claves en claro en archivos; Credential Manager para almacenamiento local y cifrado autenticado con contraseña para transferencia de claves. No prometer protección contra malware de la sesión activa. |
+| NFR-15 | Transparencia del servicio hospedado. | TLS, logs sin payloads/secrets y aviso de que el operador puede leer snapshots permitidos; la primera versión no ofrece E2EE. |
 
 ## Supuestos y dependencias
 

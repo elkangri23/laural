@@ -1,46 +1,46 @@
 # ADR-0020: Perfiles locales, portabilidad y sincronización opcional
 
-- Estado: Propuesta
-- Fecha: 2026-11-21
-- Decisores: Laural contributors
+- **Estado:** Aceptada
+- **Fecha:** 2026-11-21
+- **Decisores:** Antonio Moles
 
 ## Contexto
 
-El MVP funciona sin cuenta, mantiene perfiles y preferencias en el equipo y guarda las claves API en Credential Manager. Se solicita mover ajustes a otro equipo mediante un archivo, con inclusión voluntaria de claves, o sincronizarlos con una cuenta. La sincronización autenticada requeriría operar un backend e identidad.
+Laural ya mantiene perfiles y preferencias en el dispositivo y guarda claves de proveedores en Windows Credential Manager. Se necesita transferir la configuración a otro equipo sin cuenta y, de forma opcional, mantener preferencias actualizadas mediante una cuenta. La nube aumenta la carga de privacidad, seguridad, recuperación y operación, por lo que debe tener un alcance explícito y no ser requisito para usar la app.
 
-## Decisión propuesta
+## Decisión
 
-- Mantener el uso local sin registro; el perfil local inicial se etiqueta **Usuario desconocido** y no representa una cuenta.
-- Separar **exportar/importar** de **sincronizar** como flujos y formatos distintos.
-- Permitir exportar preferencias y metadatos de perfiles. Las claves API se excluyen por defecto y solo entran al archivo tras selección explícita y contraseña obligatoria. No habrá exportación de claves en texto plano; sin contraseña se exporta solo configuración no secreta.
-- No sincronizar nunca claves API, contraseñas, tokens OAuth/de sesión, passkeys, historial de chat/terminal ni contexto de proyectos.
-- Sincronizar preferencias y perfiles de proveedor tras registro/inicio de sesión opcional. Registrar nombre, correo verificado y credenciales de cuenta en el servicio; ofrecer contraseña, Google OIDC, passkeys y MFA.
-- Para la app nativa, usar navegador externo y Authorization Code con PKCE para Google. Implementar passkeys con WebAuthn y validar credenciales en servidor.
-- No sobrescribir configuración al iniciar sesión sin vista previa y elección explícita; conservar copia local y detectar conflictos mediante revisiones.
-- Mantener la app completa en modo local cuando la persona no quiera cuenta o el servicio no esté disponible.
-
-Los detalles criptográficos del archivo, retención del servicio, sincronización de políticas del agente y alojamiento se desarrollan en el [plan de sincronización](../plans/sincronizacion-preferencias.md). Este ADR permanece propuesto hasta acordar servicio, privacidad y recuperación de cuenta.
+- Mantener Laural funcional localmente sin cuenta ni servicio.
+- Separar **Exportar/importar** de **Sincronizar**. El perfil local inicial se llama **Usuario desconocido** y no es una identidad verificada.
+- Exportar preferencias y perfiles sin claves por defecto. Las claves solo se incluyen con consentimiento y contraseña obligatoria, dentro de un archivo cifrado autenticado; no se permite exportar claves en claro. Importar directamente en Credential Manager.
+- La nube nunca contiene claves API, credenciales de cuenta, tokens, passkeys, MFA, chat, comandos/historial, proyecto/rutas, actividad del agente ni reglas de ejecución.
+- Sincronizar tema/apariencia, actualización y metadatos de perfiles de proveedor. Los endpoints personalizados requieren consentimiento individual por perfil.
+- Mantener el servicio opcional, alojado por el proyecto. La primera versión no promete E2EE y debe informar que el operador puede leer el snapshot permitido.
+- Solicitar elección antes de la primera carga, reemplazo o conflicto. Elegir un snapshot completo sin diferencias por campo ni fusión. Guardar copia recuperable antes del reemplazo; no aplicar «última escritura gana» en silencio.
+- Sincronizar cambios guardados automáticamente, ofrecer **Sincronizar ahora** y revisar la nube cada tres horas mientras Laural está abierta. Guardar en local primero y mantener cambios pendientes si no hay red.
+- Admitir email/contraseña, Google, passkeys y TOTP en la primera versión de sync. El PIN de correo de seis dígitos dura cinco minutos y es de un solo uso; solo sirve para verificación/recuperación, nunca como acceso por sí solo ni como sustituto MFA.
+- Si se pierden todos los factores, el administrador evalúa el caso con pruebas independientes y decide manualmente. El PIN no autoriza a retirar factores.
+- Añadir un estado público sin autenticación para disponibilidad, avisos y mantenimiento.
 
 ## Alternativas consideradas
 
-- Mantener solo configuración local: conserva privacidad y simplicidad, pero no resuelve transferencia segura ni sincronización.
-- Sincronizar directamente un JSON con claves: descarta el aislamiento de Credential Manager y puede filtrar secretos; rechazada.
-- Usar Google Drive/Dropbox como backend: acopla Laural a un tercero y no define autenticación, conflictos ni eliminación; no elegida para la propuesta.
-- Sincronización en nube sin cuenta: no ofrece autorización individual, recuperación ni revocación de dispositivos.
-- Añadir cifrado de extremo a extremo desde el primer incremento: ofrece confidencialidad frente al operador, pero requiere diseño adicional de recuperación y vinculación de dispositivos. Se deja como decisión pendiente, sin prometerlo.
+- **Solo configuración local:** se conserva como modo garantizado, pero no cubre sincronización entre dispositivos.
+- **Solo transferencia manual:** no requiere cuenta ni servidor, pero no mantiene dispositivos al día; se conserva como opción completa.
+- **Sincronización mediante nube de terceros:** no ofrece un contrato uniforme de conflictos, acceso, revocación y borrado; no elegida para la primera versión.
+- **E2EE desde el primer lanzamiento:** reduciría el acceso del operador, pero requiere definir recuperación de claves y nuevos dispositivos; queda fuera de la primera versión.
+- **Diferencias por campo/fusión:** conserva cambios parciales, pero complica la interfaz y los conflictos; se elige un snapshot completo con advertencia genérica y copia recuperable.
 
 ## Consecuencias
 
-- El modo local sigue sin coste operativo para la persona y sin registro.
-- La transferencia puede contener claves solo si la persona lo solicita y protege el archivo con contraseña y cifrado autenticado. La configuración sin claves puede exportarse sin contraseña.
-- El servicio opcional implica hosting, correo, almacenamiento, protección contra abuso, soporte, borrado de cuenta y política de privacidad.
-- La metadata de endpoints personalizados puede revelar infraestructura privada; la app debe mostrarla antes de sincronizar y permitir excluirla.
-- Los perfiles de proveedor sincronizados no contendrán claves. En un dispositivo nuevo, el usuario tendrá que introducir sus claves localmente.
-- El modo/reglas del agente no se sincronizan por defecto; se requiere consentimiento separado para transferir permisos entre equipos.
+- Los perfiles importados no llevan claves de proveedores; cada dispositivo requiere configurar sus secretos localmente, salvo que la persona eligiera exportarlos cifrados.
+- Los snapshots de recuperación visibles no caducan automáticamente. El usuario puede borrarlos; eliminar cuenta elimina las copias de nube. La retención de backups de desastre del VPS se documenta por separado.
+- La URL de endpoint puede revelar infraestructura privada y por eso no se sincroniza sin consentimiento expreso para ese perfil.
+- Los perfiles y reglas del agente permanecen locales para evitar transferir permisos de ejecución.
+- El diseño aprobado no implica que exportación, cuentas o sincronización estén implementados. Las fases y criterios están en el [plan de sincronización](../plans/sincronizacion-preferencias.md) y el [diseño formal](../designs/sincronizacion-preferencias-y-portabilidad.md).
 
 ## Evidencia
 
-- [Plan de sincronización y portabilidad](../plans/sincronizacion-preferencias.md)
-- [ADR-0007: sin cuentas ni sincronización en el MVP](0007-local-first-no-sync-mvp.md)
-- [RFC 8252: OAuth para apps nativas](https://www.rfc-editor.org/rfc/rfc8252.html)
-- [OWASP: almacenamiento de contraseñas](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html)
+- [ADR-0007: sin cuenta ni sincronización en el MVP](0007-local-first-no-sync-mvp.md)
+- [ADR-0005: Credential Manager](0005-windows-credential-storage.md)
+- [ADR-0022: cifrado de exportaciones](0022-cifrado-de-exportaciones-y-claves-locales.md)
+- [ADR-0023: servicio de sincronización](0023-servicio-de-sincronizacion.md)

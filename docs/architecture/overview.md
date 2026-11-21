@@ -93,6 +93,22 @@ sequenceDiagram
 - La vista previa representa el contenido recogido al abrirla; la terminal puede producir más salida antes de enviar.
 - Sincronización no forma parte de esta arquitectura inicial.
 
+## Extensión aprobada: portabilidad y sync (no implementada)
+
+El diseño posterior aprobado añade una superficie opcional sin cambiar el funcionamiento local actual:
+
+```mermaid
+flowchart LR
+  UI[Configuración React] -->|IPC| R[Rust: allowlist y cliente HTTPS]
+  R --> LOCAL[Preferencias y perfiles locales]
+  R -->|snapshot versionado, revisiones condicionales| API[Fastify en VPS del proyecto]
+  API --> DB[(PostgreSQL)]
+  R -. claves siempre locales .-> CM[Credential Manager]
+  STATUS[status estático en Caddy, mismo VPS] --> API
+```
+
+La API se alojará en `sync.laurafernandezenfermeria.com`. El snapshot excluye claves y datos de agente, chat, terminal y proyecto; los endpoints personalizados requieren consentimiento por perfil. La página pública `/status` se sirve por el proxy y no requiere cuenta. El operador del VPS puede leer el snapshot permitido; la primera versión no ofrece E2EE. Ninguno de estos componentes, el backend, la cuenta, el exportador/importador ni la página de estado está implementado todavía. Ver el [diseño formal](../designs/sincronizacion-preferencias-y-portabilidad.md) y el [plan de entrega](../plans/sincronizacion-preferencias.md).
+
 ## Estructura de código
 
 | Ruta | Propósito |

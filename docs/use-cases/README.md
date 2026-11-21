@@ -17,6 +17,14 @@ Los casos describen el comportamiento esperado del producto. Los estados disting
 | UC-11 | Revisar contexto antes de enviarlo al proveedor | Desarrollador | Implementación inicial |
 | UC-12 | Detener una planificación o comando del agente | Desarrollador | Implementación inicial; validar en cada shell |
 | UC-15 | Consultar y borrar actividad del agente | Desarrollador | Implementado; registro local de metadatos acotado |
+| UC-17 | Exportar/importar perfil sin cuenta | Usuario | Diseño aprobado; no implementado |
+| UC-18 | Transferir claves en archivo cifrado | Usuario | Diseño aprobado; no implementado |
+| UC-19 | Activar cuenta y escoger snapshot inicial | Usuario | Diseño aprobado; no implementado |
+| UC-20 | Sincronizar cambios y resolver conflicto | Usuario | Diseño aprobado; no implementado |
+| UC-21 | Recuperar acceso tras perder factores | Usuario/administrador | Diseño aprobado; runbook pendiente |
+| UC-22 | Consultar estado público del servicio | Visitante | Diseño aprobado; no implementado |
+
+Los casos UC-17 a UC-22 están detallados en [portabilidad y sincronización](sincronizacion-preferencias.md). No describen funciones disponibles en la versión instalada.
 
 ## UC-01 — Abrir terminal
 

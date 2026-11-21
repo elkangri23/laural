@@ -2,6 +2,8 @@
 
 Abre **Configuración** en la barra lateral. Los ajustes pertenecen al equipo actual.
 
+La versión actual no incluye cuenta, exportar/importar configuración ni sincronización. Estas funciones tienen un diseño aprobado para una fase futura; no estarán disponibles en Configuración hasta que se implementen. Consulta el [diseño y su estado](designs/sincronizacion-preferencias-y-portabilidad.md).
+
 | Sección | Opciones y efecto |
 | --- | --- |
 | Apariencia | Selecciona una de las doce paletas y el modo claro u oscuro. El cambio se aplica de inmediato. |

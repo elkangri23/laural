@@ -23,9 +23,9 @@ Credential Manager protege las claves guardadas en reposo a través de Windows; 
 
 ## Telemetría y sincronización
 
-No existe telemetría ni cuenta de Laural en el MVP. La sincronización queda diferida; perfiles y credenciales no se envían a servicio alguno de Laural.
+No existe telemetría ni cuenta de Laural en la versión actual. Perfiles y credenciales no se envían a servicio alguno de Laural.
 
-La propuesta futura separa transferencia manual de configuración de sincronización autenticada. El archivo exportado podrá incluir claves solo si el usuario lo elige y establece una contraseña; un archivo sin contraseña excluirá siempre las claves. La sincronización de cuenta excluye claves API, credenciales de login, tokens, passkeys, historial y contexto de proyectos. Consulta el [plan de sincronización](../plans/sincronizacion-preferencias.md); ninguna de estas funciones está implementada en el MVP.
+El diseño aprobado para una fase posterior separa transferencia manual de sincronización autenticada. En exportación, las claves solo se incluirán si el usuario lo elige y establece contraseña; sin contraseña el archivo las excluye. La sincronización de cuenta excluye claves API, credenciales de login, tokens, passkeys, historial y contexto de proyectos. El operador del VPS podrá leer el snapshot permitido porque la primera versión no tiene E2EE. Ninguna cuenta, exportador/importador, sincronización ni status page está implementada todavía. Consulta el [plan de sincronización](../plans/sincronizacion-preferencias.md) y el [diseño formal](../designs/sincronizacion-preferencias-y-portabilidad.md).
 
 El historial de actividad del agente permanece en el equipo y no contiene comandos, rutas, prompts, salida de terminal, contenido de archivos, URLs, claves ni detalles de error. No es un registro inviolable: cualquier proceso con acceso a la cuenta puede alterarlo o borrarlo.
 

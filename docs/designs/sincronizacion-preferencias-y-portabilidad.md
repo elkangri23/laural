@@ -1,7 +1,7 @@
 # Optional Preference Sync and Profile Portability
 
 * **Author:** Antonio Moles
-* **Status:** Proposed
+* **Status:** Approved; implementation pending
 * **Date:** 2026-11-21
 
 --------------------------------------------------------------------------------
@@ -225,11 +225,11 @@ Email PINs are six digits, single-use, expire after five minutes, are rate-limit
 ### Additional Resources
 
 * [Concepts brief](../plans/concepts_brief.md) — approved problem scope and author decisions.
-* [Existing sync proposal](../plans/sincronizacion-preferencias.md) — reconcile before implementation.
+* [Implementation specification](../plans/sincronizacion-preferencias.md) — approved scope, stages and acceptance criteria.
 * [ADR-0005](../adr/0005-windows-credential-storage.md) — provider credential storage boundary.
 * [ADR-0009](../adr/0009-local-json-profile-storage.md) — local provider profile storage.
 * [ADR-0015](../adr/0015-csp-y-minimo-de-permisos.md) — Tauri WebView policy and capability boundary.
-* [ADR-0020](../adr/0020-perfiles-y-sincronizacion-opcional.md) — existing proposed sync decision to update.
+* [ADR-0020](../adr/0020-perfiles-y-sincronizacion-opcional.md) — accepted product decision for portability and optional sync.
 * [ADR-0022](../adr/0022-cifrado-de-exportaciones-y-claves-locales.md) — encrypted configuration export decisions.
 * [Privacy policy](../security/privacy.md) and [threat model](../security/threat-model.md) — current privacy and threat boundaries.
 
