@@ -9,13 +9,16 @@ import "@xterm/xterm/css/xterm.css";
 type Shell = "powershell" | "cmd" | "wsl" | "git-bash";
 const TERMINAL_SCROLLBACK_LINES = 2_500;
 type OutputEvent = { terminalId: string; data: number[] };
-type TerminalPaneProps = { terminalId: string; shell: Shell; cwd: string | null; visible: boolean; active: boolean; onRestart: (terminalId: string) => void; theme: ThemeDefinition; appearance: AppearanceMode; onTextOutput: (terminalId: string, text: string) => void; onCommandSubmit: (terminalId: string, command: string) => void; onCommandFinish: (terminalId: string, exitCode: number | null) => void };
+type TerminalRequest = { sequence: number; terminalId: string };
+type TerminalPaneProps = { terminalId: string; shell: Shell; cwd: string | null; visible: boolean; active: boolean; copyRequest: TerminalRequest; clearRequest: TerminalRequest; onActionNotice: (message: string) => void; onRestart: (terminalId: string) => void; theme: ThemeDefinition; appearance: AppearanceMode; onTextOutput: (terminalId: string, text: string) => void; onCommandSubmit: (terminalId: string, command: string) => void; onCommandFinish: (terminalId: string, exitCode: number | null) => void };
 
-function TerminalPane({ terminalId, shell, cwd, visible, active, onRestart, theme, appearance, onTextOutput, onCommandSubmit, onCommandFinish }: TerminalPaneProps) {
+function TerminalPane({ terminalId, shell, cwd, visible, active, copyRequest, clearRequest, onActionNotice, onRestart, theme, appearance, onTextOutput, onCommandSubmit, onCommandFinish }: TerminalPaneProps) {
   const [ended, setEnded] = useState(false);
   const hostRef = useRef<HTMLDivElement>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
+  const handledCopyRef = useRef(0);
+  const handledClearRef = useRef(0);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -160,6 +163,34 @@ function TerminalPane({ terminalId, shell, cwd, visible, active, onRestart, them
     });
     return () => cancelAnimationFrame(frame);
   }, [visible, active]);
+
+  useEffect(() => {
+    if (copyRequest.sequence === 0 || copyRequest.sequence === handledCopyRef.current) return;
+    handledCopyRef.current = copyRequest.sequence;
+    if (copyRequest.terminalId !== terminalId) return;
+    const selection = terminalRef.current?.getSelection() ?? "";
+    if (!selection) {
+      onActionNotice("Selecciona texto en la terminal para copiarlo.");
+      return;
+    }
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("Clipboard API unavailable");
+      void navigator.clipboard.writeText(selection).then(
+        () => onActionNotice("Selección copiada al portapapeles."),
+        () => onActionNotice("No se pudo acceder al portapapeles."),
+      );
+    } catch {
+      onActionNotice("No se pudo acceder al portapapeles.");
+    }
+  }, [copyRequest, onActionNotice, terminalId]);
+
+  useEffect(() => {
+    if (clearRequest.sequence === 0 || clearRequest.sequence === handledClearRef.current) return;
+    handledClearRef.current = clearRequest.sequence;
+    if (clearRequest.terminalId !== terminalId) return;
+    terminalRef.current?.clear();
+    onActionNotice("Pantalla de terminal limpiada.");
+  }, [clearRequest, onActionNotice, terminalId]);
 
   return <div className={`terminal-pane ${visible ? "visible" : "hidden"}`} ><div className="terminal-host" ref={hostRef} />
     {ended && <div className="terminal-ended" role="status">Sesión finalizada <button onClick={() => onRestart(terminalId)}>Reiniciar terminal</button></div>}

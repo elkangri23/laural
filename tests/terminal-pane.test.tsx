@@ -5,8 +5,8 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import TerminalPane from "../src/components/TerminalPane";
 import { themes } from "../src/themes";
 
-const { invoke, listen, write, onData, registerOscHandler, terminalOptions } = vi.hoisted(() => ({
-  invoke: vi.fn(), listen: vi.fn(), write: vi.fn(), onData: vi.fn(), registerOscHandler: vi.fn(), terminalOptions: vi.fn(),
+const { invoke, listen, write, onData, registerOscHandler, terminalOptions, clear, getSelection } = vi.hoisted(() => ({
+  invoke: vi.fn(), listen: vi.fn(), write: vi.fn(), onData: vi.fn(), registerOscHandler: vi.fn(), terminalOptions: vi.fn(), clear: vi.fn(), getSelection: vi.fn(),
 }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 vi.mock("@tauri-apps/api/event", () => ({ listen }));
@@ -17,6 +17,7 @@ vi.mock("@xterm/xterm", () => ({
     constructor(options: unknown) { terminalOptions(options); }
     write = write; writeln = write;
     loadAddon() {} open() {} focus() {} dispose() {}
+    clear = clear; getSelection = getSelection;
     onData = onData;
   },
 }));
@@ -24,10 +25,12 @@ vi.mock("@xterm/xterm", () => ({
 let root: Root | undefined;
 let host: HTMLDivElement;
 const finished = vi.fn(), restart = vi.fn(), output = vi.fn(), submit = vi.fn();
+const actionNotice = vi.fn();
 const handlers = new Map<string, (event: { payload: unknown }) => void>();
 const removeOutput = vi.fn(), removeExit = vi.fn();
-function pane(visible = true) {
+function pane(visible = true, copyRequest = { sequence: 0, terminalId: "" }, clearRequest = { sequence: 0, terminalId: "" }, onActionNotice = actionNotice) {
   return <TerminalPane terminalId="uno" shell="cmd" cwd={null} visible={visible} active={visible}
+    copyRequest={copyRequest} clearRequest={clearRequest} onActionNotice={onActionNotice}
     appearance="dark" theme={themes[0]} onCommandFinish={finished} onRestart={restart}
     onTextOutput={output} onCommandSubmit={submit} />;
 }
@@ -74,6 +77,45 @@ test("ocultar la pestaña conserva el proceso y su salida; salir permite reinici
 test("limita el historial en memoria del terminal a 2.500 líneas", async () => {
   await act(async () => root!.render(pane()));
   expect(terminalOptions).toHaveBeenCalledWith(expect.objectContaining({ scrollback: 2_500 }));
+});
+
+test("copia la selección de xterm y limpia solo la pantalla solicitada", async () => {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+  getSelection.mockReturnValue("texto seleccionado");
+  await act(async () => root!.render(pane(true, { sequence: 1, terminalId: "uno" }, { sequence: 1, terminalId: "uno" })));
+  await act(async () => Promise.resolve());
+
+  expect(writeText).toHaveBeenCalledWith("texto seleccionado");
+  expect(clear).toHaveBeenCalledOnce();
+  expect(actionNotice).toHaveBeenCalledWith("Pantalla de terminal limpiada.");
+  expect(actionNotice).toHaveBeenCalledWith("Selección copiada al portapapeles.");
+});
+
+test("copiar sin selección avisa y no escribe en el portapapeles", async () => {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+  getSelection.mockReturnValue("");
+  await act(async () => root!.render(pane(true, { sequence: 1, terminalId: "uno" })));
+
+  expect(writeText).not.toHaveBeenCalled();
+  expect(actionNotice).toHaveBeenCalledWith("Selecciona texto en la terminal para copiarlo.");
+});
+
+test("copiar con portapapeles no disponible muestra aviso y no rompe la terminal", async () => {
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: undefined });
+  getSelection.mockReturnValue("texto seleccionado");
+  await act(async () => root!.render(pane(true, { sequence: 1, terminalId: "uno" })));
+
+  expect(actionNotice).toHaveBeenCalledWith("No se pudo acceder al portapapeles.");
+  expect(host.querySelector(".terminal-pane")).not.toBeNull();
+});
+
+test("una petición de terminal dirigida a otra pestaña no altera esta sesión", async () => {
+  await act(async () => root!.render(pane(true, { sequence: 1, terminalId: "otra" }, { sequence: 1, terminalId: "otra" })));
+  expect(getSelection).not.toHaveBeenCalled();
+  expect(clear).not.toHaveBeenCalled();
+  expect(actionNotice).not.toHaveBeenCalled();
 });
 
 test("cerrar mientras se registra la salida evita arrancar el proceso", async () => {

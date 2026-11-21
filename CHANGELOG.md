@@ -2,6 +2,7 @@
 
 ## Sin publicar
 
+- Los controles de terminal permiten copiar la selección actual y limpiar la pantalla sin ejecutar comandos adicionales.
 - La navegación Historial abre una vista filtrada de comandos recientes de la sesión; desde ahí solo se copian, nunca se ejecutan.
 - El panel lateral del asistente se puede ocultar y volver a mostrar; la preferencia se conserva en este equipo.
 - La paleta de comandos ahora permite recorrer acciones y comandos recientes con las flechas y abrir/copiar con Enter.

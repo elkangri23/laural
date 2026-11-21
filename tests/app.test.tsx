@@ -4,13 +4,14 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import App from "../src/App";
 
-const mocks = vi.hoisted(() => ({ invoke: vi.fn(), open: vi.fn(), terminalPaneRenderCount: 0 }));
+const mocks = vi.hoisted(() => ({ invoke: vi.fn(), open: vi.fn(), terminalPaneRenderCount: 0, terminalRequests: [] as Array<{ terminalId: string; copySequence: number; copyTarget: string; clearSequence: number; clearTarget: string }> }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: mocks.invoke }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open: mocks.open }));
 vi.mock("../src/components/TerminalPane", async () => {
   const { memo } = await import("react");
-  const MockTerminalPane = (props: { terminalId: string; onTextOutput: (id: string, text: string) => void; onCommandSubmit: (id: string, command: string) => void; onCommandFinish: (id: string, code: number) => void }) => {
+  const MockTerminalPane = (props: { terminalId: string; copyRequest: { sequence: number; terminalId: string }; clearRequest: { sequence: number; terminalId: string }; onTextOutput: (id: string, text: string) => void; onCommandSubmit: (id: string, command: string) => void; onCommandFinish: (id: string, code: number) => void }) => {
     mocks.terminalPaneRenderCount += 1;
+    mocks.terminalRequests.push({ terminalId: props.terminalId, copySequence: props.copyRequest.sequence, copyTarget: props.copyRequest.terminalId, clearSequence: props.clearRequest.sequence, clearTarget: props.clearRequest.terminalId });
     return <div data-testid="terminal-pane">
       <button data-testid="begin-command" onClick={() => props.onCommandSubmit(props.terminalId, "git status")}>Iniciar comando</button>
       <button data-testid="output-one" onClick={() => props.onTextOutput(props.terminalId, "primera ")}>Salida uno</button>
@@ -53,6 +54,7 @@ beforeEach(() => {
   });
   mocks.open.mockReset();
   mocks.terminalPaneRenderCount = 0;
+  mocks.terminalRequests.length = 0;
   host = document.createElement("div");
   root = createRoot(host);
 });
@@ -364,6 +366,15 @@ test("el panel del asistente se puede ocultar, mostrar y recuerda la preferencia
   await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Mostrar asistente IA"]')!.click());
   expect(host.querySelector(".assistant-panel")).not.toBeNull();
   expect(localStorage.getItem("laural.assistant-visible.v1")).toBe("true");
+});
+
+test("los controles Copiar y Limpiar envían la acción a la pestaña activa", async () => {
+  await act(async () => root!.render(<App />));
+  const lastRequest = () => mocks.terminalRequests[mocks.terminalRequests.length - 1];
+  await act(async () => buttonIncluding("Copiar").click());
+  expect(lastRequest()).toEqual(expect.objectContaining({ copySequence: 1, copyTarget: lastRequest()?.terminalId }));
+  await act(async () => buttonIncluding("Limpiar").click());
+  expect(lastRequest()).toEqual(expect.objectContaining({ clearSequence: 1, clearTarget: lastRequest()?.terminalId }));
 });
 
 test("los tres puntos del perfil abren sus opciones de portabilidad y cuenta", async () => {

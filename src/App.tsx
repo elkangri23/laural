@@ -54,6 +54,9 @@ function App() {
   const [splitTabId, setSplitTabId] = useState<string | null>(null);
   const [splitOrientation, setSplitOrientation] = useState<"vertical" | "horizontal" | null>(null);
   const [commandBlocks, setCommandBlocks] = useState<CommandBlock[]>([]);
+  const [terminalCopyRequest, setTerminalCopyRequest] = useState({ sequence: 0, terminalId: "" });
+  const [terminalClearRequest, setTerminalClearRequest] = useState({ sequence: 0, terminalId: "" });
+  const [terminalActionNotice, setTerminalActionNotice] = useState("");
   const [commandHistory, setCommandHistory] = useState<CommandHistoryEntry[]>([]);
   const [blocksOpen, setBlocksOpen] = useState(false);
   const [assistantVisible, setAssistantVisible] = useState(() => localStorage.getItem("laural.assistant-visible.v1") !== "false");
@@ -896,10 +899,10 @@ function App() {
           <section className="terminal-area" aria-label="Terminal">
             <div className="terminal-heading">
               <div><div className="terminal-title-line"><span className="terminal-title-mark">⌁</span><h1>{activeTab?.title ?? "Terminal"}</h1><span className="connection-pill"><span /> Local</span></div><p className="terminal-path">{activeTab?.cwd ?? "Directorio de inicio"} <span>·</span> Windows</p></div>
-              <div className="terminal-heading-actions"><button className={`small-action ${blocksOpen ? "selected" : ""}`} onClick={() => setBlocksOpen((open) => !open)} aria-pressed={blocksOpen}>Bloques <span className="block-count">{visibleBlocks.length}</span></button><button className="small-action"><CopyIcon /> Copiar</button><button className="small-action"><ClearIcon /> Limpiar</button></div>
+              <div className="terminal-heading-actions"><button className={`small-action ${blocksOpen ? "selected" : ""}`} onClick={() => setBlocksOpen((open) => !open)} aria-pressed={blocksOpen}>Bloques <span className="block-count">{visibleBlocks.length}</span></button><button className="small-action" title="Copiar el texto seleccionado en la terminal" onClick={() => { setTerminalActionNotice(""); setTerminalCopyRequest((request) => ({ sequence: request.sequence + 1, terminalId: activeTabId })); }}><CopyIcon /> Copiar selección</button><button className="small-action" title="Limpiar la pantalla de la terminal activa" onClick={() => { setTerminalActionNotice(""); setTerminalClearRequest((request) => ({ sequence: request.sequence + 1, terminalId: activeTabId })); }}><ClearIcon /> Limpiar</button>{terminalActionNotice && <span className="terminal-action-notice" role="status">{terminalActionNotice}</span>}</div>
             </div>
             <div className={`terminal-frame ${blocksOpen ? "with-blocks" : ""} ${splitTabId ? `is-split split-${splitOrientation}` : ""}`}>
-              {tabs.map((tab) => <TerminalPane key={tab.id} terminalId={tab.id} active={tab.id === activeTabId} onRestart={restartTab} shell={tab.shell} cwd={tab.cwd} visible={tab.id === activeTabId || tab.id === splitTabId} theme={activeTheme} appearance={appearance} onTextOutput={captureTerminalOutput} onCommandSubmit={startCommandBlock} onCommandFinish={finishCommandBlock} />)}
+              {tabs.map((tab) => <TerminalPane key={tab.id} terminalId={tab.id} active={tab.id === activeTabId} copyRequest={terminalCopyRequest} clearRequest={terminalClearRequest} onActionNotice={setTerminalActionNotice} onRestart={restartTab} shell={tab.shell} cwd={tab.cwd} visible={tab.id === activeTabId || tab.id === splitTabId} theme={activeTheme} appearance={appearance} onTextOutput={captureTerminalOutput} onCommandSubmit={startCommandBlock} onCommandFinish={finishCommandBlock} />)}
               <div className="terminal-caption"><span className="shortcut-hint"><kbd>Ctrl</kbd> + <kbd>`</kbd> alternar terminal</span><span><span className="activity-pulse" /> Shell conectado</span></div>
             </div>
             {blocksOpen && <section className="command-blocks-panel" aria-label="Bloques de comandos">
