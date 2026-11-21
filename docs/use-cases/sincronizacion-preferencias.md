@@ -1,6 +1,6 @@
 # Casos de uso: portabilidad y sincronización
 
-- **Estado:** UC-17/18 tienen una implementación inicial en la app; API, registro/verificación y login web con PKCE están implementados localmente. Integración de login en Tauri, sincronización, recuperación de cuenta y status público siguen pendientes.
+- **Estado:** UC-17/18 tienen una implementación inicial en la app; API, registro/verificación, login web con PKCE y cliente inicial de login Tauri están implementados localmente. La sincronización, revocación, recuperación de cuenta y status público siguen pendientes.
 - **Especificación:** [plan de sincronización](../plans/sincronizacion-preferencias.md).
 - **Diseño técnico:** [diseño formal](../designs/sincronizacion-preferencias-y-portabilidad.md).
 
@@ -24,15 +24,15 @@
 
 **Aceptación:** sin contraseña no hay claves en el archivo; cifrado autenticado con parámetros acotados; claves descifradas solo en memoria y escritas directamente a Credential Manager; el reemplazo de varias credenciales se revierte si falla.
 
-## UC-19 — Activar sync y elegir snapshot inicial
+## UC-19 — Iniciar sesión y preparar la cuenta
 
 **Actor:** usuario con una cuenta.
 
-**Precondición:** cuenta verificada y preferencias locales.
+**Precondición:** cuenta verificada, servicio publicado/habilitado y preferencias locales.
 
-**Flujo:** desde Configuración abre el acceso de cuenta en el navegador externo. En el primer inicio, Laural consulta la nube y, si está vacía, pregunta si se carga el snapshot local.
+**Flujo:** desde Configuración → Cuenta y sincronización, Laural abre el navegador externo. Tras autenticarse, el navegador redirige al listener local de un solo uso; Rust valida `state`, canjea el código con PKCE y guarda el token en Credential Manager. Esta fase no lee ni escribe snapshots.
 
-**Aceptación:** el navegador devuelve código de un solo uso mediante callback loopback; tokens se guardan en Credential Manager; la carga exige confirmación; ningún secreto de proveedor se envía.
+**Aceptación:** redirect limitado a loopback, código de un solo uso, `state` validado, canje HTTPS y PKCE; token ausente del WebView y guardado en Credential Manager. Quitar la cuenta elimina solo el token local; hasta que exista revocación remota, el servidor puede aceptar la sesión hasta su caducidad. Ningún secreto de proveedor se envía.
 
 ## UC-20 — Sincronizar, desconectarse y resolver conflicto
 

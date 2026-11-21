@@ -10,6 +10,7 @@ use portable_pty::{Child, CommandBuilder, MasterPty, PtySize, native_pty_system}
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 
+mod account;
 mod activity_log;
 mod agent_files;
 mod chat_stream;
@@ -471,8 +472,12 @@ pub fn run() {
         .manage(PtyStore::default())
         .manage(providers::ChatStreamRegistry::default())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
+            account::account_session_status,
+            account::start_account_login,
+            account::clear_account_session,
             create_terminal,
             write_terminal,
             resize_terminal,

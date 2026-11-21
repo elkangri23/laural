@@ -1,6 +1,6 @@
 # Auditoría de seguridad
 
-- Fecha: 2026-11-20
+- Fecha: 2026-11-21
 - Alcance: código fuente de Laural, configuración de Tauri, dependencias declaradas, controles de tamaño, canal de actualización y verificación de firma.
 - Objetivo de distribución: aplicación de escritorio Windows.
 - Tipo: revisión estática y pruebas automatizadas; no es una certificación ni una prueba de penetración externa.
@@ -12,7 +12,7 @@
 | Alta | WebView sin CSP (`csp: null`), aumentando el impacto de contenido/script inyectado | CSP local: scripts propios; IPC de Tauri como única conexión; objetos, frames y formularios externos bloqueados; sin `unsafe-eval`. Se conserva `unsafe-inline` solo para estilos requeridos. |
 | Media | Respuestas HTTP no streaming se leían sin límite y podían consumir memoria | Lectura incremental con límite de 2 MB para respuestas de proveedor. Las respuestas streaming mantienen límites propios. |
 | Media | El descubrimiento de contexto de proyecto podía enumerar un árbol enorme antes de limitar los resultados | Recorrido acotado a 1.000 entradas y 200 archivos; contexto de contenido con límites de tamaño. |
-| Baja | Plugin y permiso de apertura externa no usados estaban habilitados | Eliminados dependencia, inicialización y permiso de opener. |
+| Baja | El login necesita abrir el navegador externo sin conceder esa capacidad al WebView | Opener se invoca solo desde Rust y recibe una URL HTTPS construida con un origen fijo; JavaScript no recibe permiso genérico de apertura. |
 | Media | Solicitudes de IA podían reutilizar identificadores o crecer sin límite | Rechazo de IDs inválidos/duplicados y máximo de ocho consultas simultáneas. |
 | Media | Datos IPC de chat, contexto y escritura carecían de límites uniformes | Límite de 1 MB por escritura de terminal/contexto, 100 mensajes con 64 KB cada uno, 12 archivos elegidos, URL de 2.048 caracteres, clave de 16 KB, y límites del agente aplicados en backend. |
 | Media | Un proveedor podía responder con una redirección a otro destino | El cliente no sigue redirecciones; una regresión local confirma que una solicitud con autenticación no llega al destino indicado por un 302. |
@@ -26,7 +26,8 @@
 ## Dependencias
 
 - `npm audit --audit-level=high`: 0 vulnerabilidades conocidas en dependencias npm al auditar.
-- `cargo audit` sobre `Cargo.lock` reportó tres avisos: `chrono` (sin mantenimiento), `proc-macro-error` (sin mantenimiento) y `glib 0.18.5` con una advertencia de soundness RUSTSEC-2024-0429 (solución `>=0.20.0`). `cargo tree -i <crate> --target x86_64-pc-windows-msvc` no encuentra ninguno en el árbol de Windows; son dependencias para otros targets de Tauri. Son avisos del lockfile multi-plataforma, no componentes del artefacto Windows auditado. Repetir auditoría al habilitar distribución para esos otros targets.
+- `npm audit --omit=dev`: 0 vulnerabilidades conocidas en dependencias de producción del servicio.
+- `cargo audit` sobre el lockfile actual termina con seis avisos, sin vulnerabilidades explotables reportadas: `chrono`, `proc-macro-error`, `zbus_names` y `zvariant`/`zvariant_derive` figuran como sin mantenimiento; `glib 0.18.5` reporta RUSTSEC-2024-0429 (soundness; parche desde `>=0.20.0`). `zbus*` entra por el soporte Linux del plugin opener; `cargo tree --target x86_64-pc-windows-msvc -i <crate>` no encuentra los seis crates en el árbol Windows. Mantener la advertencia para futuros targets Linux y revisar al actualizar Tauri.
 
 ## Riesgos pendientes / límites
 
@@ -35,15 +36,17 @@
 - La conexión HTTPS a un endpoint configurado por el usuario puede enviarle prompts, contexto de terminal y archivos elegidos. Revisar el destino y el contexto antes de enviar.
 - El historial local del agente sirve para consulta, no es inviolable: una aplicación ejecutada con la misma cuenta puede alterarlo o borrarlo.
 - El almacenamiento actual de claves usa Windows Credential Manager mediante `keyring` y no guarda claves en `providers.json`. Credential Manager protege secretos en reposo a través del sistema; no impide que malware bajo la cuenta activa o un proceso Laural comprometido recupere una clave cuando se usa. La exportación/importación cifrada sigue pendiente.
+- El token de cuenta se guarda solo en Credential Manager. La acción actual de quitar la cuenta elimina el token local, pero no lo revoca en el servidor; una sesión remota puede seguir válida hasta 30 días. No presentar esto como cierre de sesión remoto y añadir revocación antes de habilitar cuentas.
+- El login nativo tiene límites por flow/código, pero aún no límites persistentes por IP ni mitigación distribuida. El backend permanece desactivado por defecto y sin despliegue público.
 - La paleta mantiene hasta 100 comandos en memoria y puede copiarlos al portapapeles tras una acción explícita. Los comandos pueden incluir datos sensibles; el historial se pierde al cerrar Laural, pero el portapapeles permanece sujeto al sistema operativo.
 - La sustitución de un archivo existente consta de dos renombrados para conservar un backup y rechazar destinos concurrentes. Si Laural se interrumpe entre ambos, el archivo puede faltar hasta restaurar su versión desde `.laural-backups`.
 - No se probó malware local, una cadena de suministro comprometida, instalación limpia, escape del sandbox del WebView ni seguridad del sistema operativo. La firma del updater no equivale a Authenticode ni protege frente a una cuenta/repositorio o clave privada comprometidos.
 
 ## Verificación
 
-Se ejecutaron `git diff --check`, `npm audit`, `cargo audit`, pruebas frontend con cobertura, cobertura Rust y build NSIS de Windows con generación de `.sig`. La prueba estática no sustituye la validación manual del instalador y actualización real.
+La revisión de esta entrega ejecutó `git diff --check`, auditoría npm/Rust, pruebas frontend con cobertura, tests Rust, compilación Tauri y build frontend. No se probó el login contra un servicio habilitado ni contra PostgreSQL/Resend reales. La revisión estática no sustituye una prueba de penetración ni la validación manual del instalador/actualizador.
 
-- Interfaz (21-11-2026): 39 pruebas pasadas; cobertura global 64,27 % de líneas (58,46 % sentencias, 50,60 % ramas, 53,61 % funciones). `App.tsx` alcanza 48,80 % de líneas; `CommandPalette.tsx`, 95,23 %; `TerminalPane.tsx`, 89,09 %; y el gestor de actualizaciones, 95,29 %.
-- Backend Rust (21-11-2026): 43 pruebas pasadas, 0 fallidas, 1 ignorada; cobertura 57,56 % de líneas (59,93 % de regiones). `providers.rs` alcanza 55,18 % de líneas; `agent_files.rs`, 91,55 %; `lib.rs` sigue requiriendo más cobertura.
-- `npm audit`: 0 vulnerabilidades; `cargo check`, build frontend, formato Rust y `git diff --check` pasan en la entrega actual. `cargo audit` conserva tres avisos heredados de mantenimiento/soundness de dependencias no usadas en el artefacto Windows. El build frontend advierte que el chunk JavaScript principal supera 500 kB.
-- Build NSIS: completado con firma de updater; generó `Laural_0.1.0-alpha.14_x64-setup.exe` (2,97 MiB) y su archivo `.sig`. Instalación limpia, aviso de Windows y actualización real aún requieren ejecución manual.
+- Interfaz (21-11-2026): 49 pruebas pasadas; cobertura global 66,96 % de líneas, 52,70 % de ramas, 60,87 % de sentencias y 55,68 % de funciones. El panel nuevo de cuenta tiene 100 % de líneas y 76,19 % de ramas.
+- Backend Rust (21-11-2026): 66 pruebas pasadas, 0 fallidas, 1 ignorada. `cargo llvm-cov` ejecuta la suite, pero MSVC no deja datos de cobertura y no genera informe (`no coverage data found`); no se declara porcentaje Rust para esta ejecución.
+- Servicio sync: 62 pruebas, 96,45 % líneas y 91,75 % ramas con PostgreSQL/Resend simulados.
+- `npm audit --omit=dev`: 0 vulnerabilidades; `cargo check`, build frontend y formato Rust pasan. El build advierte que el chunk JavaScript principal supera 500 kB. La generación NSIS firmada se verificó el 20-11-2026; esta entrega no reconstruyó el instalador.

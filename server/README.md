@@ -1,6 +1,6 @@
 # Servicio de sincronización de Laural
 
-Backend TypeScript con Fastify y PostgreSQL para snapshots permitidos de preferencias. Esta fase implementa la API privada de lectura/escritura, registro/verificación por correo, login web por contraseña con PKCE, migraciones, autorización por sesión y control de revisión. **No incluye login Google, passkeys, TOTP, recuperación, estado público ni la integración de login/sync en la app Tauri; no debe publicarse todavía en Internet.**
+Backend TypeScript con Fastify y PostgreSQL para snapshots permitidos de preferencias. Esta fase implementa la API privada de lectura/escritura, registro/verificación por correo, login web por contraseña con PKCE, migraciones, autorización por sesión y control de revisión. La integración de login nativo inicial ya está conectada en Tauri. **No incluye login Google, passkeys, TOTP, recuperación, revocación de sesiones, sincronización de snapshots desde la app ni estado público; no debe publicarse todavía en Internet.**
 
 ## Requisitos
 
@@ -41,7 +41,7 @@ En desarrollo se puede usar `npm run dev`; las tablas deben existir antes de arr
 
 El registro y login de navegador están desactivados por defecto. Para probarlos, define `EMAIL_AUTH_ENABLED=true`, `RESEND_API_KEY`, `RESEND_FROM` y `AUTH_PIN_PEPPER` en el entorno privado del proceso. Nunca subas esas variables. Los passwords se derivan con Argon2id. Los PIN de verificación son aleatorios, se guardan como HMAC con una clave del servidor, caducan a los cinco minutos, tienen cinco intentos y se limitan por cuenta a un envío por minuto y tres en quince minutos. Reenviar y confirmar devuelven respuestas genéricas; confirmar el correo no crea sesión. El correo dice expresamente que el PIN no permite iniciar sesión ni retirar MFA. Resend solo recibe el correo y el mensaje de verificación necesario.
 
-Las rutas de cuenta no deben exponerse públicamente todavía: faltan límites persistentes por IP/origen, controles de abuso distribuidos, integración Tauri del listener loopback/validación de state/almacenamiento en Credential Manager, Google, passkeys, MFA, recuperación y pruebas con PostgreSQL real. Los flujos PKCE caducan en 10 minutos, los códigos en 2 minutos y las sesiones en 30 días. El código y la sesión son secretos aleatorios opacos; solo sus SHA-256 se almacenan. No se registran cabeceras ni se habilitan logs de petición.
+Las rutas de cuenta no deben exponerse públicamente todavía: faltan límites persistentes por IP/origen, controles de abuso distribuidos, Google, passkeys, MFA, recuperación, revocación remota y pruebas con PostgreSQL real. El cliente Tauri ya abre el navegador, valida state, usa listener loopback, canjea por HTTPS y guarda el token en Credential Manager. Los flujos PKCE caducan en 10 minutos, los códigos en 2 minutos y las sesiones en 30 días. El código y la sesión son secretos aleatorios opacos; solo sus SHA-256 se almacenan en PostgreSQL. No se registran cabeceras ni se habilitan logs de petición.
 
 Consulta el contrato en [OpenAPI](openapi.yaml), el [diseño aprobado](../docs/designs/sincronizacion-preferencias-y-portabilidad.md) y el [plan por fases](../docs/plans/sincronizacion-preferencias.md).
 

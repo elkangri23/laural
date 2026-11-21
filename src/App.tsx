@@ -2,6 +2,7 @@ import { appendTerminalOutput, COMMAND_BLOCK_OUTPUT_LIMIT } from "./terminalOutp
 import { SettingsDialog } from "./components/SettingsDialog";
 import { BackupRetentionControl } from "./components/BackupRetentionControl";
 import { AgentActivity } from "./components/AgentActivity";
+import { AccountSettings } from "./components/AccountSettings";
 import { UpdateManager } from "./components/UpdateManager";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
@@ -60,6 +61,7 @@ function App() {
   const [providerDialogOpen, setProviderDialogOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
+  const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
   const [updateSettingsOpen, setUpdateSettingsOpen] = useState(false);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [themeId, setThemeId] = useState(() => localStorage.getItem("laural.theme") ?? "laurel");
@@ -882,6 +884,7 @@ function App() {
         <button className="settings-link" onClick={() => { setSettingsOpen(false); setAppearanceOpen(true); }}>Apariencia <span>{activeTheme.name} · {appearance === "dark" ? "Oscuro" : "Claro"}</span></button>
         <button className="settings-link" onClick={() => { setSettingsOpen(false); setProviderDialogOpen(true); }}>Proveedores y modelos <span>{provider?.name ?? "Configurar"}</span></button>
         <button className="settings-link" onClick={() => { setSettingsOpen(false); setTransferOpen(true); }}>Importar y exportar <span>Configuración entre equipos</span></button>
+        <button className="settings-link" onClick={() => { setSettingsOpen(false); setAccountSettingsOpen(true); }}>Cuenta y sincronización <span>Inicio de sesión de Laural</span></button>
         <button className="settings-link" onClick={() => { setSettingsOpen(false); setUpdateSettingsOpen(true); }}>Actualizaciones <span>Versión y preferencias</span></button>
         <div className="agent-policy-panel">
               <label>Permisos del agente
@@ -912,6 +915,7 @@ function App() {
         onClose={() => { setTransferOpen(false); setSettingsOpen(true); }}
         onImported={applyImportedConfiguration}
       />}
+      {accountSettingsOpen && <AccountSettings onClose={() => setAccountSettingsOpen(false)} />}
       {appearanceOpen && <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setAppearanceOpen(false); }}>
         <section className="appearance-dialog" role="dialog" aria-modal="true" aria-labelledby="appearance-title">
           <button className="dialog-close" onClick={() => setAppearanceOpen(false)} aria-label="Cerrar">×</button>

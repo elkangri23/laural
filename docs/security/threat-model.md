@@ -22,7 +22,7 @@ Versión inicial de Laural para escritorio Windows: frontend Tauri, procesos PTY
 | Ruta manipulada o directorio reemplazado concurrentemente | Escribir o eliminar fuera del proyecto | Rutas relativas, cadena canónica de directorios fijada, rechazo de reparse points, renombrado por handle sin sobrescritura y backup | El proceso podría interrumpirse entre los dos renombrados; el original queda recuperable desde el backup. |
 | Proveedor remoto | Retención o uso del contexto enviado | El usuario configura host; HTTPS requerido; contexto acotado | Política del proveedor controla retención y uso. |
 | Proveedor redirige la petición autenticada | Reenviar clave o contexto a un host distinto | El cliente HTTP no sigue redirecciones; regresión local comprueba el rechazo | El host configurado recibe la solicitud original y puede procesar los datos según su política. |
-| Contenido web o XSS en WebView | Ejecutar JavaScript con acceso a comandos Tauri | CSP local con `script-src 'self'`, sin scripts remotos ni `unsafe-eval`; se eliminó el plugin de apertura no usado | Código local comprometido o una vulnerabilidad del WebView aún puede alcanzar permisos de la ventana. |
+| Contenido web o XSS en WebView | Ejecutar JavaScript con acceso a comandos Tauri | CSP local con `script-src 'self'`, sin scripts remotos ni `unsafe-eval`; el plugin opener solo se invoca desde Rust para la URL HTTPS fija del login y no se habilita a JavaScript | Código local comprometido o una vulnerabilidad del WebView aún puede alcanzar permisos de la ventana. |
 | Endpoint o proyecto hostil | Agotar memoria con respuestas HTTP o árboles de archivos grandes | Límites de tamaño de respuesta y presupuesto de entradas al recorrer proyectos | El usuario aún puede consumir recursos al abrir voluntariamente un proyecto grande o iniciar muchas terminales. |
 | Fuga de API key | Incluir clave en logs, archivos o repo | Windows Credential Manager nativo; clave verificada tras guardar; no se guarda en JSON. Transferencia futura exige archivo cifrado con contraseña y nunca permite exportación de claves en claro. | Malware con acceso a la cuenta o proceso comprometido puede recuperar la clave mientras Laural la usa; el almacén local no es impenetrable. |
 | Binario comprometido | Ejecutar código no revisado | El updater verifica la firma criptográfica del paquete; el código y las releases son públicos | Los instaladores no tienen Authenticode; la publicación, la clave y la instalación limpia requieren validación continua. |
@@ -64,7 +64,7 @@ El filtro inicial de comandos del agente también reconoce alias y operaciones h
 
 ## Amenazas de portabilidad y sincronización
 
-La transferencia local está implementada de forma inicial; cuentas, servicio, cliente de sync y página pública de estado aún no existen. Los controles actuales y los riesgos abiertos deben leerse por separado.
+La transferencia local está implementada de forma inicial; existe el backend privado de cuentas y snapshots y el cliente Tauri ya tiene el login PKCE inicial. El cliente de sync y la página pública de estado aún no existen. Los controles actuales y los riesgos abiertos deben leerse por separado.
 
 | Área | Control actual | Riesgo/residuo |
 | --- | --- | --- |
@@ -73,15 +73,15 @@ La transferencia local está implementada de forma inicial; cuentas, servicio, c
 | Cambios de credenciales | Copia previa local cifrada cuando una importación cambia claves; rollback de operaciones de Credential Manager si falla una operación posterior. | Una falla del propio almacén durante rollback puede requerir recuperación manual desde la copia. Las preferencias del WebView se guardan después del backend y no forman una transacción común con Credential Manager. |
 | Almacenamiento de copias | Directorio `transfer-backups` en la carpeta local de configuración. | No protege ante pérdida del equipo/usuario; las copias no tienen política automática de retención hoy. |
 
-La API privada inicial de snapshots existe localmente; el flujo de cuentas y el despliegue todavía no existen. La sección siguiente describe los riesgos y controles aprobados antes de habilitar sync.
+La API privada inicial de snapshots y los flujos de cuenta existen localmente; el despliegue todavía no existe. La sección siguiente describe los riesgos y controles aprobados antes de habilitar sync.
 
 | Área | Control implementado en API local | Riesgo/residuo |
 |---|---|---|
-| Acceso a snapshots | Bearer opaco de 32 bytes; solo se guarda/compara SHA-256; cada lectura/escritura verifica sesión y cuenta activa/verificada; transacción bloquea la cuenta antes de escribir. | No hay todavía emisión, almacenamiento de sesión de escritorio, límites de abuso ni PostgreSQL real en pruebas; no exponer públicamente. |
+| Acceso a snapshots | Bearer opaco de 32 bytes; hash SHA-256 en PostgreSQL, token local en Credential Manager y comprobación por cuenta en cada lectura/escritura. | El login Tauri inicial ya está conectado, pero sync aún no usa el token; faltan límites de abuso y pruebas PostgreSQL reales. No exponer públicamente. |
 | Datos aceptados | Schema v1 cerrado, AJV, máximo 256 KiB, IDs y endpoint validados; errores genéricos, sin logs de solicitud; JSONB contiene solo el allowlist. | El administrador del VPS puede leer estos metadatos; no hay E2EE. |
 | Escrituras concurrentes | `ETag`/`If-Match`, idempotency key por cuenta y escritura transaccional. | La limpieza/retención de idempotencias, rate limits y pruebas de carreras con PostgreSQL real están pendientes. |
 | Registro y PIN de correo | Argon2id para passwords; PIN de seis dígitos con HMAC keyed, expiración a cinco minutos, cinco intentos, consumo único y topes por cuenta; respuestas genéricas. Registro deshabilitado por defecto. | Faltan límites persistentes por IP/origen y prueba con PostgreSQL real. No exponer las rutas en Internet. La verificación no autentica ni crea sesión. |
-| Login nativo | Página HTTPS fuera del WebView; cookie `Secure`/`HttpOnly`/`SameSite=Strict`, token CSRF; redirect solo `127.0.0.1:<port>/callback`; state, PKCE S256, código de un uso y sesión almacenada por hash. | Falta integración Rust para validar state, abrir/cerrar listener loopback y guardar token en Credential Manager. Flujos de login carecen de rate limit por IP y límites distribuidos; mantener apagado y no publicar. |
+| Login nativo | Página HTTPS externa; cookie `Secure`/`HttpOnly`/`SameSite=Strict`, token CSRF; listener efímero solo en `127.0.0.1`, state validado en tiempo constante, PKCE S256, canje HTTPS sin redirects y token en Credential Manager. | Aún no hay revocación remota ni límites por IP/distribuidos; falta probar con servicio habilitado y PostgreSQL real. Mantener el backend apagado y no publicar. |
 
 | Amenaza | Control requerido en el diseño | Riesgo y condición de salida |
 | --- | --- | --- |

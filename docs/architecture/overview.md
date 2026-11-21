@@ -92,7 +92,7 @@ sequenceDiagram
 - El contexto se envía al endpoint elegido por el usuario. Un endpoint remoto puede almacenar solicitudes según sus propias condiciones.
 - Las marcas de bloques y códigos de salida varían por shell; PowerShell, CMD y Bash están instrumentados inicialmente. Scripts de inicio pueden sobrescribir `PROMPT_COMMAND` y comandos interactivos pueden no terminar solos.
 - La vista previa representa el contenido recogido al abrirla; la terminal puede producir más salida antes de enviar.
-- La aplicación instalada todavía no se conecta al backend de sincronización. La API local acepta snapshots para sesiones previamente provisionadas, pero no crea cuentas ni está desplegada.
+- La aplicación instalada todavía no sincroniza snapshots. El inicio de sesión de cuenta ya conecta con el servidor configurado si está habilitado; el backend local aún no se ha desplegado y sus rutas de registro/login permanecen desactivadas por defecto.
 
 ## Extensión aprobada: portabilidad local y sync
 
@@ -108,7 +108,7 @@ flowchart LR
   STATUS[status estático en Caddy, mismo VPS] --> API
 ```
 
-La portabilidad local ya cuenta con un módulo Rust para el formato `.laural`, validación, cifrado y descifrado, y comandos Tauri para vista previa, exportación e importación. La UI nativa de Configuración permite fusionar o reemplazar perfiles. Las claves se escriben en Windows Credential Manager; las copias previas se guardan localmente. Falta validar fallos reales y recuperación en Windows. El contrato cerrado v1 tiene schema compartido y tipos Rust/TypeScript; Rust construye snapshots desde preferencias y metadatos permitidos. Los perfiles guardan el tipo y el consentimiento opcional del endpoint, falso por defecto, con migración compatible. El backend local incluye API Fastify de snapshots, registro/verificación, página web de login por contraseña, PKCE, códigos loopback y sesiones por hash. La app de escritorio aún no abre el navegador ni recibe/guarda la sesión; la sync, Google, passkeys/MFA, status público e integración con PostgreSQL real siguen pendientes. Consulta el [servicio](../../server/README.md), el [diseño formal](../designs/sincronizacion-preferencias-y-portabilidad.md) y el [plan de entrega](../plans/sincronizacion-preferencias.md).
+La portabilidad local ya cuenta con un módulo Rust para el formato `.laural`, validación, cifrado y descifrado, y comandos Tauri para vista previa, exportación e importación. La UI nativa de Configuración permite fusionar o reemplazar perfiles. Las claves se escriben en Windows Credential Manager; las copias previas se guardan localmente. Falta validar fallos reales y recuperación en Windows. El contrato cerrado v1 tiene schema compartido y tipos Rust/TypeScript; Rust construye snapshots desde preferencias y metadatos permitidos. Los perfiles guardan el tipo y el consentimiento opcional del endpoint, falso por defecto, con migración compatible. El backend local incluye API Fastify de snapshots, registro/verificación, página web de login por contraseña, PKCE, códigos loopback y sesiones por hash. Tauri ya abre el navegador, valida el callback y guarda el token en Credential Manager; la sincronización de snapshots, Google, passkeys/MFA, revocación de sesiones, status público e integración con PostgreSQL real siguen pendientes. Consulta el [servicio](../../server/README.md), el [diseño formal](../designs/sincronizacion-preferencias-y-portabilidad.md) y el [plan de entrega](../plans/sincronizacion-preferencias.md).
 
 ## Estructura de código
 

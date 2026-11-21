@@ -31,7 +31,7 @@ Los ADR registran por qué se eligió una opción y qué costes trae. Un ADR ace
 | [0025](0025-correo-transaccional-con-resend.md) | Correo transaccional del servicio con Resend | Aceptada; primer adapter implementado, remitente/secretos por configurar |
 | [0026](0026-api-inicial-de-snapshots.md) | API privada de snapshots con revisión, idempotencia y schema compartido | Aceptada; integración Tauri y despliegue pendientes |
 | [0027](0027-registro-y-verificacion-de-correo.md) | Registro inicial y PIN de correo no autenticador mediante Resend | Aceptada; primera fase implementada |
-| [0028](0028-login-nativo-pkce.md) | Login por navegador externo, callback loopback y canje PKCE | Aceptada; servidor parcial, Tauri pendiente |
+| [0028](0028-login-nativo-pkce.md) | Login por navegador externo, callback loopback y canje PKCE | Aceptada; cliente inicial implementado, VPS pendiente |
 
 ## Crear un ADR
 

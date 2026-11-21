@@ -35,6 +35,9 @@ argon2 = { version = "0.6.0", features = ["zeroize"] }
 base64 = "0.23.1"
 getrandom = { version = "0.4.3", features = ["sys_rng"] }
 zeroize = { version = "1.9.2", features = ["alloc", "derive"] }
+sha2 = "0.11.1"
+url = "2.5.9"
+tauri-plugin-opener = "2"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem"] }

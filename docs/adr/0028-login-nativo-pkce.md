@@ -1,6 +1,6 @@
 # ADR-0028: Login nativo mediante navegador y PKCE
 
-- **Estado:** Aceptada; servidor implementado, integración Tauri pendiente
+- **Estado:** Aceptada; integración inicial de servidor y cliente implementada, validación con VPS pendiente
 - **Fecha:** 2026-11-21
 - **Decisores:** Antonio Moles
 
@@ -16,11 +16,12 @@ El login de Laural debe mantener las contraseñas fuera del WebView y devolver l
 - El callback loopback recibe un código aleatorio, ligado al flow y al challenge PKCE, de un solo uso y con dos minutos de vigencia. PostgreSQL conserva solo el hash del código.
 - `/v1/auth/native/exchange` valida S256, consume el código dentro de una transacción y crea un token de sesión aleatorio válido 30 días. Solo el hash del token se almacena. La respuesta queda reservada al cliente Rust, nunca al formulario/WebView.
 - Los componentes de cuenta/login permanecen desmontados salvo configurar `EMAIL_AUTH_ENABLED=true` con Resend y pepper de PIN correctos; el valor predeterminado es desactivado.
+- El cliente nativo abre el navegador con el plugin opener invocado desde Rust. Un listener de un solo uso se enlaza a `127.0.0.1` en puerto efímero, limita el tamaño y tiempo de lectura, comprueba `state` en tiempo constante y solo acepta `code`/`state` válidos. El canje usa HTTPS, timeout, límite de 4 KiB y sin seguir redirects. El token queda en Credential Manager y el WebView solo recibe el estado.
 
 ## Consecuencias
 
-- La contraseña nunca atraviesa la WebView ni aparece en la redirect URI. State se debe validar en el callback Rust, que aún está pendiente junto al listener loopback, intercambio HTTPS desde Rust y guardado en Credential Manager.
-- Los tokens son revocables en base de datos, pero aún no hay UI de dispositivos/logout, rotación ni renovación; la caducidad fija es 30 días.
+- La contraseña nunca atraviesa la WebView ni aparece en la redirect URI. El callback y almacenamiento seguro ya están conectados en Tauri, pero falta una prueba de integración contra un servicio desplegado y habilitado.
+- Quitar la cuenta actualmente borra solo el token local; no invalida la sesión remota, que puede seguir activa hasta 30 días. Añadir revocación remota antes de presentar esta acción como cierre completo de sesión.
 - Login por Google, passkeys, TOTP y recuperación se implementan aparte; el flujo email actual no retira MFA.
 - Faltan límites persistentes por IP/origen y mitigaciones de abuso distribuido. No habilitar ni publicar estas rutas todavía.
 - Los códigos/flows vencidos y sesiones requieren limpieza/retención operativa; falta integración de PostgreSQL real y pruebas de carrera.
