@@ -36,6 +36,7 @@ type AgentPlan = { summary: string; actions: PlanAction[] };
 const COMMAND_OUTPUT_BATCH_MS = 33;
 const MAX_COMMAND_BLOCKS = 80;
 const MAX_COMMAND_HISTORY = 100;
+const SYNC_RISK_ACK_KEY = "laural.sync-risk-ack.v1";
 
 const shellNames: Record<Shell, string> = {
   powershell: "PowerShell",
@@ -85,6 +86,7 @@ function App() {
   const [updateSettingsOpen, setUpdateSettingsOpen] = useState(false);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [syncNotice, setSyncNotice] = useState("");
+  const [syncRiskAcknowledged, setSyncRiskAcknowledged] = useState(() => localStorage.getItem(SYNC_RISK_ACK_KEY) === "true");
   const [themeId, setThemeId] = useState(() => localStorage.getItem("laural.theme") ?? "laurel");
   const [appearance, setAppearance] = useState<AppearanceMode>(() => localStorage.getItem("laural.appearance") === "light" ? "light" : "dark");
   const [provider, setProvider] = useState<Provider | null>(null);
@@ -138,6 +140,7 @@ function App() {
   const appearanceSyncReadyRef = useRef(false);
 
   const syncSavedPreferences = useCallback(async () => {
+    if (localStorage.getItem(SYNC_RISK_ACK_KEY) !== "true") return;
     try {
       const preferences = {
         themeId: localStorage.getItem("laural.theme") ?? themeId,
@@ -170,6 +173,17 @@ function App() {
 
   function clearSyncNotice() {
     setSyncNotice("");
+  }
+
+  function acknowledgeSyncRisk(): boolean {
+    try {
+      localStorage.setItem(SYNC_RISK_ACK_KEY, "true");
+      setSyncRiskAcknowledged(true);
+      schedulePreferenceSync(0);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   function requestTerminalCopy() {
@@ -1175,6 +1189,8 @@ function App() {
         }}
         onImported={applyImportedConfiguration}
         onSyncSettled={clearSyncNotice}
+        syncRiskAcknowledged={syncRiskAcknowledged}
+        onAcknowledgeSyncRisk={acknowledgeSyncRisk}
         onClose={() => setAccountSettingsOpen(false)}
       />}
       </Suspense>

@@ -54,6 +54,8 @@ The feature must preserve local-only use and manual transfer as complete options
 * **Accepted decision:** Laural will not send disaster-recovery backups outside the VPS. No off-site storage or external backup provider is part of this service.
 * No disaster backup is currently configured. Whether to keep a local database copy on the same VPS is a separate choice and remains undecided; do not describe such a copy as disaster recovery.
 * A total VPS loss, disk failure, or destructive compromise may permanently erase accounts and cloud preference snapshots. There is no recovery-point or recovery-time guarantee after total host loss. The service must disclose this before account sync is enabled.
+* The desktop client shows this risk, the server-readable snapshot boundary, and the exclusion of API keys before enabling sync. The user must check an acknowledgment and confirm it on each device. This acknowledgment is stored locally and is never synchronized.
+* The client enforces the acknowledgment before automatic snapshot construction/network sync as well as before manual comparison, upload, or cloud application. Signing in alone does not acknowledge the risk or trigger sync.
 * Laural remains local-first: sync is optional, local settings continue working, and users should retain their devices or use manual export/import when implemented. Cloud sync must not be presented as the only copy of a user's configuration.
 
 ### Lost-factor account recovery (recommended runbook)
@@ -131,7 +133,7 @@ Health checks report only whether the service and its required dependencies resp
 
 ### Sync behavior and data flow
 
-1. When a user enables sync, the app authenticates and reads local snapshot metadata and the cloud snapshot state.
+1. Before sync is enabled, the client requires a per-device acknowledgment of VPS-loss risk, server-readable preferences, and API-key exclusion. Signing in alone does not enable sync. After acknowledgment, the app reads local snapshot metadata and the cloud snapshot state.
 2. If cloud state is absent, the app asks before uploading the local snapshot. If both snapshots exist and differ, it asks which complete snapshot to keep, identifies the side to be replaced, and confirms that a recoverable copy will be made. It does not show a field-level diff or merge.
 3. A successful local preference save updates the local store first. The sync module coalesces rapid changes and attempts a conditional upload. A failed upload remains visibly pending.
 4. While the app is open and sync is enabled, it checks for remote revision changes every three hours. A local save can trigger an earlier upload; **Sync now** triggers an immediate check and sync attempt. Closed apps do not run a background task. On next launch the app resumes pending work and checks the current revision.

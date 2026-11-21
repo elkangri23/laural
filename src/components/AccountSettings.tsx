@@ -14,7 +14,7 @@ type Snapshot = {
 type Remote = { snapshot: Snapshot | null; revision: number };
 type ImportResult = { preferences: Preferences; activeProvider: { id: string; providerKind: string; name: string; baseUrl: string; model: string; hasApiKey: boolean; shareCustomEndpoint: boolean } | null; providers: { id: string; providerKind: string; name: string; baseUrl: string; model: string; hasApiKey: boolean; shareCustomEndpoint: boolean }[]; backupPath: string; backupEncrypted: boolean; backupContainsApiKeys: boolean };
 
-export function AccountSettings({ onClose, preferences, onImported, onSyncSettled }: { onClose: () => void; preferences: Preferences; onImported: (result: ImportResult) => void; onSyncSettled: () => void }) {
+export function AccountSettings({ onClose, preferences, onImported, onSyncSettled, syncRiskAcknowledged, onAcknowledgeSyncRisk }: { onClose: () => void; preferences: Preferences; onImported: (result: ImportResult) => void; onSyncSettled: () => void; syncRiskAcknowledged: boolean; onAcknowledgeSyncRisk: () => boolean }) {
   const [connected, setConnected] = useState(false);
   const [busy, setBusy] = useState(false);
   const [listenerReady, setListenerReady] = useState(false);
@@ -22,6 +22,10 @@ export function AccountSettings({ onClose, preferences, onImported, onSyncSettle
   const [message, setMessage] = useState("Comprobando la sesión local…");
   const [remote, setRemote] = useState<Remote | null>(null);
   const [hasConflict, setHasConflict] = useState(false);
+  const [riskChecked, setRiskChecked] = useState(false);
+  const [riskAcknowledged, setRiskAcknowledged] = useState(syncRiskAcknowledged);
+
+  useEffect(() => setRiskAcknowledged(syncRiskAcknowledged), [syncRiskAcknowledged]);
 
   useEffect(() => {
     let disposed = false;
@@ -101,6 +105,7 @@ export function AccountSettings({ onClose, preferences, onImported, onSyncSettle
   }
 
   async function refreshComparison() {
+    if (!riskAcknowledged) return;
     setBusy(true);
     setRemote(null);
     try {
@@ -130,6 +135,7 @@ export function AccountSettings({ onClose, preferences, onImported, onSyncSettle
   }
 
   async function keepLocal() {
+    if (!riskAcknowledged) return;
     setBusy(true);
     setMessage("Guardando la configuración de este equipo en la nube…");
     try {
@@ -153,6 +159,7 @@ export function AccountSettings({ onClose, preferences, onImported, onSyncSettle
   }
 
   async function keepCloud() {
+    if (!riskAcknowledged) return;
     if (!remote?.snapshot) return;
     setBusy(true);
     setMessage("Creando una copia local y aplicando la configuración de la nube…");
@@ -178,15 +185,28 @@ export function AccountSettings({ onClose, preferences, onImported, onSyncSettle
       <p className="eyebrow">CUENTA</p>
       <h3 id="account-settings-title">Cuenta y sincronización</h3>
       <p className="dialog-copy">Conecta una cuenta desde el navegador. La sesión se guarda en el almacén seguro de Windows y nunca se entrega al WebView.</p>
+      <div className="sync-risk-notice" role="note" aria-label="Riesgo de sincronización">
+        <strong>Antes de sincronizar</strong>
+        <p>La configuración permitida se guardará en el VPS del servicio. No hay copias de desastre fuera de ese servidor: una pérdida total del VPS puede borrar tus datos sincronizados. El operador del VPS puede leer esta configuración; no hay cifrado de extremo a extremo. Las claves API nunca se sincronizan. Conserva una exportación local si necesitas otra copia.</p>
+        {riskAcknowledged
+          ? <p className="sync-risk-accepted">Riesgo revisado en este equipo.</p>
+          : <>
+            <label><input type="checkbox" checked={riskChecked} onChange={(event) => setRiskChecked(event.currentTarget.checked)} /> Entiendo que la pérdida total del VPS puede borrar los datos sincronizados.</label>
+            <button className="secondary-button" disabled={!riskChecked} onClick={() => {
+              if (onAcknowledgeSyncRisk()) setRiskAcknowledged(true);
+              else setMessage("No se pudo guardar la aceptación en este equipo. La sincronización sigue bloqueada.");
+            }}>Aceptar riesgo y habilitar sincronización</button>
+          </>}
+      </div>
       <p className="form-message" role="status" aria-live="polite">{message}</p>
       {connected
         ? <>
           <div className="account-sync-actions">
-            <button className="primary-button" onClick={() => void refreshComparison()} disabled={busy}>Sincronizar ahora</button>
+            <button className="primary-button" onClick={() => void refreshComparison()} disabled={busy || !riskAcknowledged}>Sincronizar ahora</button>
             {remote && <>
-              {remote.snapshot && hasConflict && <button className="secondary-button" onClick={() => void keepLocal()} disabled={busy}>Usar este equipo</button>}
-              {remote.snapshot && hasConflict && <button className="secondary-button" onClick={() => void keepCloud()} disabled={busy}>Usar la nube</button>}
-              {!remote.snapshot && <button className="secondary-button" onClick={() => void keepLocal()} disabled={busy}>Subir esta configuración</button>}
+              {remote.snapshot && hasConflict && <button className="secondary-button" onClick={() => void keepLocal()} disabled={busy || !riskAcknowledged}>Usar este equipo</button>}
+              {remote.snapshot && hasConflict && <button className="secondary-button" onClick={() => void keepCloud()} disabled={busy || !riskAcknowledged}>Usar la nube</button>}
+              {!remote.snapshot && <button className="secondary-button" onClick={() => void keepLocal()} disabled={busy || !riskAcknowledged}>Subir esta configuración</button>}
             </>}
           </div>
           <button className="secondary-button" onClick={() => void removeLocalSession()} disabled={busy}>Quitar cuenta de este equipo</button>

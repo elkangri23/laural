@@ -2,6 +2,7 @@
 
 ## Sin publicar
 
+- La sincronización queda bloqueada hasta aceptar en este equipo el riesgo de pérdida total del VPS y la lectura de preferencias por su operador. La aceptación protege tanto el flujo automático como las acciones manuales; las claves API siguen excluidas.
 - Separada la carga de la terminal, el renderizado Markdown y paneles secundarios: la entrada JavaScript baja de 824 KB a 297 KB; la terminal se sirve en su propio bloque de 336 KB y el Markdown se carga al necesitarlo. Ningún bloque supera 500 KB.
 - Mejorado el contraste de etiquetas secundarias de navegación y paneles en ambos modos; pruebas de regresión comparan sus tokens reales con los fondos que usan.
 - Mejorado el contraste del texto secundario en modo claro y añadidas regresiones que comprueban ese texto sobre las tres superficies principales de ambos modos.

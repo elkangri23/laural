@@ -20,7 +20,7 @@ vi.mock("../src/components/SettingsDialog", () => ({
 let host: HTMLDivElement;
 let root: Root;
 const preferences = { themeId: "laurel", appearance: "dark" as const, updateMode: "manual" as const };
-const renderAccountSettings = (onImported = vi.fn()) => <AccountSettings onClose={vi.fn()} preferences={preferences} onImported={onImported} onSyncSettled={vi.fn()} />;
+const renderAccountSettings = (onImported = vi.fn(), syncRiskAcknowledged = true, onAcknowledgeSyncRisk = vi.fn(() => true)) => <AccountSettings onClose={vi.fn()} preferences={preferences} onImported={onImported} onSyncSettled={vi.fn()} syncRiskAcknowledged={syncRiskAcknowledged} onAcknowledgeSyncRisk={onAcknowledgeSyncRisk} />;
 
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -117,6 +117,28 @@ test("compara el snapshot y ofrece elección sin revelar los cambios", async () 
   expect(host.textContent).not.toContain("ocean");
   expect([...host.querySelectorAll("button")].map((button) => button.textContent)).toContain("Usar este equipo");
   expect([...host.querySelectorAll("button")].map((button) => button.textContent)).toContain("Usar la nube");
+});
+
+test("bloquea la sincronización hasta aceptar el riesgo del VPS", async () => {
+  const onAcknowledge = vi.fn(() => true);
+  mocks.invoke.mockImplementation(async (command: string) => command === "account_session_status");
+  await act(async () => root.render(renderAccountSettings(vi.fn(), false, onAcknowledge)));
+
+  expect(host.textContent).toContain("una pérdida total del VPS puede borrar tus datos sincronizados");
+  expect(host.textContent).toContain("no hay cifrado de extremo a extremo");
+  const syncButton = [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Sincronizar ahora");
+  expect(syncButton?.disabled).toBe(true);
+  await act(async () => syncButton?.click());
+  expect(mocks.invoke).not.toHaveBeenCalledWith("read_remote_preferences");
+
+  const checkbox = host.querySelector<HTMLInputElement>('input[type="checkbox"]');
+  await act(async () => { if (checkbox) checkbox.click(); });
+  const acceptButton = [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Aceptar riesgo y habilitar sincronización");
+  expect(acceptButton?.disabled).toBe(false);
+  await act(async () => acceptButton?.click());
+  expect(onAcknowledge).toHaveBeenCalledOnce();
+  expect(host.textContent).toContain("Riesgo revisado en este equipo");
+  expect([...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Sincronizar ahora")?.disabled).toBe(false);
 });
 
 test("aplica la configuración cloud mediante Rust y comunica la copia local", async () => {
