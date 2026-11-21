@@ -381,6 +381,24 @@ test("los tres puntos del perfil abren sus opciones de portabilidad y cuenta", a
   expect(host.querySelector("#account-settings-title")?.textContent).toBe("Cuenta y sincronización");
 });
 
+test("la navegación Historial muestra solo comandos recientes de la sesión", async () => {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+  await act(async () => root!.render(<App />));
+  await act(async () => buttonIncluding("Historial").click());
+  expect(host.textContent).toContain("Todavía no hay comandos recientes en esta sesión.");
+  await act(async () => buttonIncluding("Cerrar").click());
+
+  await act(async () => host.querySelector<HTMLButtonElement>('[data-testid="begin-command"]')!.click());
+  await act(async () => buttonIncluding("Historial").click());
+  expect(host.querySelector("#palette-title")?.textContent).toBe("Historial de comandos");
+  expect(buttonIncluding("git status")).not.toBeUndefined();
+  expect(host.querySelector(".palette-group-label")?.textContent).toContain("COMANDOS RECIENTES");
+  expect(host.querySelector(".palette-group-label")?.textContent).not.toContain("ACCIONES");
+  await act(async () => buttonIncluding("git status").click());
+  expect(writeText).toHaveBeenCalledWith("git status");
+});
+
 test("si el portapapeles no está disponible muestra el comando para copiarlo manualmente", async () => {
   Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: vi.fn().mockRejectedValue(new Error("denegado")) } });
   await act(async () => root!.render(<App />));

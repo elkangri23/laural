@@ -6,18 +6,19 @@ export type PaletteAction = { id: string; label: string; description: string; ru
 type CommandPaletteProps = {
   commands: PaletteCommand[];
   actions: PaletteAction[];
+  view?: "all" | "history";
   onClose: () => void;
 };
 
-export function CommandPalette({ commands, actions, onClose }: CommandPaletteProps) {
+export function CommandPalette({ commands, actions, view = "all", onClose }: CommandPaletteProps) {
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [notice, setNotice] = useState("");
   const [manualCopyCommand, setManualCopyCommand] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const normalizedQuery = query.trim().toLocaleLowerCase("es");
-  const filteredActions = useMemo(() => actions.filter((action) =>
-    `${action.label} ${action.description}`.toLocaleLowerCase("es").includes(normalizedQuery)), [actions, normalizedQuery]);
+  const filteredActions = useMemo(() => view === "history" ? [] : actions.filter((action) =>
+    `${action.label} ${action.description}`.toLocaleLowerCase("es").includes(normalizedQuery)), [actions, normalizedQuery, view]);
   const filteredCommands = useMemo(() => [...commands].reverse().filter((item) =>
     `${item.command} ${item.shell}`.toLocaleLowerCase("es").includes(normalizedQuery)).slice(0, 20), [commands, normalizedQuery]);
   const resultCount = filteredActions.length + filteredCommands.length;
@@ -62,8 +63,8 @@ export function CommandPalette({ commands, actions, onClose }: CommandPalettePro
 
   return <div className="palette-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <section className="command-palette" role="dialog" aria-modal="true" aria-labelledby="palette-title" onKeyDown={(event) => { if (event.key === "Escape") onClose(); }}>
-      <h2 id="palette-title" className="sr-only">Paleta de comandos</h2>
-      <label className="palette-search"><span aria-hidden="true">⌕</span><input ref={inputRef} role="combobox" aria-expanded={resultCount > 0} aria-controls="palette-results" aria-activedescendant={resultCount > 0 ? `palette-result-${selectedIndex}` : undefined} value={query} onChange={(event) => { setQuery(event.target.value); setNotice(""); }} onKeyDown={handleSearchKeyDown} placeholder="Buscar acciones e historial…" aria-label="Buscar acciones e historial" /><kbd>↑ ↓ · Enter · Esc</kbd></label>
+      <h2 id="palette-title" className="sr-only">{view === "history" ? "Historial de comandos" : "Paleta de comandos"}</h2>
+      <label className="palette-search"><span aria-hidden="true">⌕</span><input ref={inputRef} role="combobox" aria-expanded={resultCount > 0} aria-controls="palette-results" aria-activedescendant={resultCount > 0 ? `palette-result-${selectedIndex}` : undefined} value={query} onChange={(event) => { setQuery(event.target.value); setNotice(""); }} onKeyDown={handleSearchKeyDown} placeholder={view === "history" ? "Buscar comandos recientes…" : "Buscar acciones e historial…"} aria-label={view === "history" ? "Buscar comandos recientes" : "Buscar acciones e historial"} /><kbd>↑ ↓ · Enter · Esc</kbd></label>
       <div className="palette-results" id="palette-results">
         {filteredActions.length > 0 && <>
           <p className="palette-group-label">ACCIONES</p>
@@ -76,7 +77,7 @@ export function CommandPalette({ commands, actions, onClose }: CommandPalettePro
             return <button className="palette-result palette-command" data-selected={selectedIndex === resultIndex} id={`palette-result-${resultIndex}`} key={item.id} onMouseEnter={() => setSelectedIndex(resultIndex)} onClick={() => void copyCommand(item)}><span className="palette-result-icon">&gt;_</span><span><code>{item.command}</code><small>{item.shell} · Copiar para revisar y pegar</small></span><kbd>⧉</kbd></button>;
           })}
         </>}
-        {filteredActions.length === 0 && filteredCommands.length === 0 && <p className="palette-empty">No hay resultados para «{query}».</p>}
+        {filteredActions.length === 0 && filteredCommands.length === 0 && <p className="palette-empty">{view === "history" && !query.trim() ? "Todavía no hay comandos recientes en esta sesión." : `No hay resultados para «${query}».`}</p>}
       </div>
       <footer className="palette-footer"><span>{notice || "Los comandos no se ejecutan desde esta paleta."}{manualCopyCommand && <code className="palette-fallback-command">{manualCopyCommand}</code>}</span><button onClick={onClose}>Cerrar</button></footer>
     </section>

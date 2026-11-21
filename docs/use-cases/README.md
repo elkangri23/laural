@@ -184,7 +184,7 @@ Después de aplicar un archivo, el usuario puede listar copias y restaurar una v
 
 **Objetivo:** abrir acciones frecuentes, cambiar de sesión y recuperar un comando sin volver a escribirlo.
 
-**Flujo principal:** pulsa `Ctrl+K` o el botón de búsqueda. Escribe parte del nombre de una acción, una sesión o un comando. Recorre los resultados con las flechas y pulsa Enter para abrir la acción o copiar un comando al portapapeles. La paleta ofrece accesos a terminales, proyectos, Git, recetas, ayuda, notificaciones y configuración.
+**Flujo principal:** pulsa `Ctrl+K` o el botón de búsqueda. Escribe parte del nombre de una acción, una sesión o un comando. Recorre los resultados con las flechas y pulsa Enter para abrir la acción o copiar un comando al portapapeles. La paleta ofrece accesos a terminales, proyectos, Git, recetas, ayuda, notificaciones y configuración. **Historial** en la barra lateral abre una vista de solo comandos recientes de la sesión.
 
 **Criterios:** la paleta se cierra con `Escape`; el historial no supera 100 comandos y solo vive en memoria. Enter en un comando solo lo copia; la paleta no ejecuta comandos. Los comandos no se envían a los servicios de Laural ni se incluyen en la sincronización.
 

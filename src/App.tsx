@@ -58,6 +58,7 @@ function App() {
   const [blocksOpen, setBlocksOpen] = useState(false);
   const [assistantVisible, setAssistantVisible] = useState(() => localStorage.getItem("laural.assistant-visible.v1") !== "false");
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [commandPaletteView, setCommandPaletteView] = useState<"all" | "history">("all");
   const [gitPanelOpen, setGitPanelOpen] = useState(false);
   const [taskRecipesOpen, setTaskRecipesOpen] = useState(false);
   const [contextPreview, setContextPreview] = useState<ContextPreview | null>(null);
@@ -197,6 +198,7 @@ function App() {
     function handlePaletteShortcut(event: KeyboardEvent) {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
+        setCommandPaletteView("all");
         setCommandPaletteOpen((open) => !open);
       }
     }
@@ -828,9 +830,9 @@ function App() {
           </div>}
         </div>
         <nav className="primary-nav" aria-label="Navegación principal">
-          <button className="nav-item active"><TerminalIcon /><span>Terminal</span><kbd>⌘ 1</kbd></button>
+          <button className={`nav-item ${!(commandPaletteOpen && commandPaletteView === "history") ? "active" : ""}`}><TerminalIcon /><span>Terminal</span><kbd>⌘ 1</kbd></button>
           <button className="nav-item" onClick={() => setProviderDialogOpen(true)}><SparkIcon /><span>Asistente IA</span><span className="nav-dot" /></button>
-          <button className="nav-item"><HistoryIcon /><span>Historial</span></button>
+          <button className={`nav-item ${commandPaletteOpen && commandPaletteView === "history" ? "active" : ""}`} onClick={() => { setCommandPaletteView("history"); setCommandPaletteOpen(true); }}><HistoryIcon /><span>Historial</span></button>
         </nav>
         <div className="sidebar-section">
           <div className="section-label"><span>PROYECTOS</span><button className="quiet-icon" aria-label="Añadir proyecto"><PlusIcon /></button></div>
@@ -864,7 +866,7 @@ function App() {
         <header className="topbar">
           <div className="breadcrumb"><span className="breadcrumb-muted">Mi equipo</span><ChevronRightIcon /><strong>Terminal</strong></div>
           <div className="topbar-actions">
-            <button className="search-button" onClick={() => setCommandPaletteOpen(true)}><SearchIcon /><span>Buscar comandos y sesiones</span><kbd>Ctrl K</kbd></button>
+            <button className="search-button" onClick={() => { setCommandPaletteView("all"); setCommandPaletteOpen(true); }}><SearchIcon /><span>Buscar comandos y sesiones</span><kbd>Ctrl K</kbd></button>
             <button className="icon-button top-icon" aria-label="Ayuda" title="Ayuda" onClick={() => setHelpOpen(true)}><HelpIcon /></button>
             <button className="icon-button top-icon" aria-label="Notificaciones" title="Notificaciones" onClick={() => setNotificationsOpen(true)}><BellIcon /></button>
           </div>
@@ -964,8 +966,8 @@ function App() {
 
       {gitPanelOpen && <GitPanel projectPath={projectPath} onClose={() => setGitPanelOpen(false)} onOpenProject={() => { setGitPanelOpen(false); void openProject(); }} />}
       {taskRecipesOpen && <TaskRecipes onClose={() => setTaskRecipesOpen(false)} onUse={(recipePrompt) => { setAgentMode(true); setPrompt(recipePrompt); }} />}
-      {commandPaletteOpen && <CommandPalette commands={commandHistory.map((item) => ({ ...item, shell: shellNames[item.shell] }))} actions={paletteActions} onClose={() => setCommandPaletteOpen(false)} />}
-      {helpOpen && <HelpDialog onClose={() => setHelpOpen(false)} onConfigureProvider={() => { setHelpOpen(false); setProviderDialogOpen(true); }} onOpenSettings={() => { setHelpOpen(false); setSettingsOpen(true); }} onOpenPalette={() => { setHelpOpen(false); setCommandPaletteOpen(true); }} />}
+      {commandPaletteOpen && <CommandPalette commands={commandHistory.map((item) => ({ ...item, shell: shellNames[item.shell] }))} actions={paletteActions} view={commandPaletteView} onClose={() => setCommandPaletteOpen(false)} />}
+      {helpOpen && <HelpDialog onClose={() => setHelpOpen(false)} onConfigureProvider={() => { setHelpOpen(false); setProviderDialogOpen(true); }} onOpenSettings={() => { setHelpOpen(false); setSettingsOpen(true); }} onOpenPalette={() => { setHelpOpen(false); setCommandPaletteView("all"); setCommandPaletteOpen(true); }} />}
       {notificationsOpen && <NotificationCenter syncNotice={syncNotice} onClose={() => setNotificationsOpen(false)} onOpenUpdates={() => { setNotificationsOpen(false); setUpdateSettingsOpen(true); }} onOpenAccount={() => { setNotificationsOpen(false); setAccountSettingsOpen(true); }} />}
 
       {contextPreview && <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setContextPreview(null); }}>
