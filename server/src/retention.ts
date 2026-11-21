@@ -2,6 +2,7 @@ import type { Pool } from "pg";
 
 const RETENTION_POLICIES = [
   "DELETE FROM email_verification_codes WHERE created_at < now() - interval '15 minutes'",
+  "DELETE FROM account_password_reset_codes WHERE created_at < now() - interval '15 minutes'",
   "DELETE FROM native_authorization_codes WHERE created_at < now() - interval '24 hours'",
   "DELETE FROM native_auth_flows WHERE created_at < now() - interval '24 hours'",
   "DELETE FROM account_sessions WHERE expires_at <= now() OR revoked_at IS NOT NULL",

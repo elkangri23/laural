@@ -19,7 +19,7 @@ F3 necesita permitir crear cuentas verificables y usar el proveedor Resend aprob
 
 ## Consecuencias
 
-- El PIN de email no puede iniciar sesión ni retirar MFA. Confirmar el correo no devuelve token ni crea una sesión; el login email/contraseña por navegador y el canje PKCE se decidieron después en ADR-0028.
+- El PIN de email no puede iniciar sesión ni retirar MFA. Un propósito independiente permite cambiar la contraseña y revoca las sesiones activas, sin crear sesión ni alterar factores; el verificador usa un HMAC con separación de propósito. Confirmar el correo tampoco devuelve token ni crea sesión; el login por navegador y el canje PKCE se decidieron después en ADR-0028. Véase ADR-0037.
 - Una falla de entrega no revela el estado de cuenta; la persona puede solicitar un reenvío sujeto al límite por cuenta.
 - El registro no debe exponerse públicamente aún: los límites persistentes por IP/ruta ya están en el servicio y se prueban en PostgreSQL temporal de CI; faltan validarlos detrás de Caddy, protección anti-abuso coordinado y operación del dominio/remitente Resend.
 - Rotar el pepper invalida los PIN pendientes. Los PIN y sus verificadores se conservan como máximo 15 minutos, para mantener la ventana del límite por cuenta, y se eliminan en el barrido horario.

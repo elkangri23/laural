@@ -3,15 +3,20 @@ import argon2 from "argon2";
 
 export type RegistrationInput = { displayName: string; email: string; password: string };
 export type VerificationChallenge = { accountId: string; displayName: string; challengeId: string };
+export type PasswordResetChallenge = { accountId: string; displayName: string; challengeId: string };
 
 export interface EmailAuthStore {
   createUnverifiedAccount(input: { displayName: string; email: string; passwordHash: string }): Promise<{ id: string } | null>;
   createVerification(email: string, verifier: string): Promise<VerificationChallenge | null>;
   verifyEmail(email: string, verifier: string): Promise<boolean>;
+  createPasswordReset(email: string, verifier: string): Promise<PasswordResetChallenge | null>;
+  checkPasswordReset(email: string, verifier: string): Promise<boolean>;
+  resetPassword(email: string, verifier: string, passwordHash: string): Promise<boolean>;
 }
 
 export interface VerificationMailer {
   sendVerification(input: { email: string; displayName: string; pin: string; challengeId: string }): Promise<void>;
+  sendPasswordReset(input: { email: string; displayName: string; pin: string; challengeId: string }): Promise<void>;
 }
 
 export type RegistrationResult = "accepted" | "invalid_request";
@@ -55,6 +60,37 @@ export class EmailAuthService {
       : "invalid_or_expired";
   }
 
+  async requestPasswordReset(emailInput: string): Promise<"accepted" | "invalid_request"> {
+    const email = normalizeEmail(emailInput);
+    if (!email) return "invalid_request";
+    const pin = randomInt(0, 1_000_000).toString().padStart(6, "0");
+    const challenge = await this.store.createPasswordReset(email, this.passwordResetVerifier(email, pin));
+    if (challenge) {
+      try {
+        await this.mailer.sendPasswordReset({ ...challenge, email, pin });
+      } catch {
+        // The public response stays generic; never log the address or PIN.
+      }
+    }
+    return "accepted";
+  }
+
+  async confirmPasswordReset(emailInput: string, pin: string, password: string): Promise<"reset" | "invalid_or_expired" | "invalid_request"> {
+    const email = normalizeEmail(emailInput);
+    if (!email || !/^\d{6}$/.test(pin) || !isValidPassword(password)) return "invalid_request";
+    const verifier = this.passwordResetVerifier(email, pin);
+    if (!await this.store.checkPasswordReset(email, verifier)) return "invalid_or_expired";
+    const passwordHash = await argon2.hash(password, {
+      type: argon2.argon2id,
+      memoryCost: 65_536,
+      timeCost: 3,
+      parallelism: 1,
+      hashLength: 32,
+      salt: randomBytes(16),
+    });
+    return await this.store.resetPassword(email, verifier, passwordHash) ? "reset" : "invalid_or_expired";
+  }
+
   private async sendCode(email: string): Promise<void> {
     const pin = randomInt(0, 1_000_000).toString().padStart(6, "0");
     const challenge = await this.store.createVerification(email, this.verifier(email, pin));
@@ -74,6 +110,15 @@ export class EmailAuthService {
       .update(pin)
       .digest("hex");
   }
+
+  private passwordResetVerifier(email: string, pin: string): string {
+    return createHmac("sha256", this.pinPepper)
+      .update("password-reset\0")
+      .update(email)
+      .update("\0")
+      .update(pin)
+      .digest("hex");
+  }
 }
 
 function normalizeRegistration(input: RegistrationInput): RegistrationInput | null {
@@ -82,8 +127,12 @@ function normalizeRegistration(input: RegistrationInput): RegistrationInput | nu
   const displayName = typeof input.displayName === "string" ? input.displayName.trim() : "";
   const password = input.password;
   if (!email || displayName.length < 1 || displayName.length > 80 || /[\u0000-\u001f\u007f]/u.test(displayName)) return null;
-  if (typeof password !== "string" || [...password].length < 12 || [...password].length > 128 || /[\u0000-\u001f\u007f]/u.test(password)) return null;
+  if (!isValidPassword(password)) return null;
   return { displayName, email, password };
+}
+
+function isValidPassword(password: unknown): password is string {
+  return typeof password === "string" && [...password].length >= 12 && [...password].length <= 128 && !/[\u0000-\u001f\u007f]/u.test(password);
 }
 
 function normalizeEmail(value: string): string | null {

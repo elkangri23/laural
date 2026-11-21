@@ -1,6 +1,6 @@
 # Casos de uso: portabilidad y sincronización
 
-- **Estado:** UC-17/18 tienen una implementación inicial; login Tauri, revocación de sesiones y cliente manual/automático están implementados. Pendientes pruebas de reconexión, sondeo real y VPS. UC-21 tiene runbook documentado, pero MFA/recuperación no están implementadas; UC-22 tiene sitio y contrato local estático, con operación VPS pendiente.
+- **Estado:** UC-17/18 tienen una implementación inicial; login Tauri, revocación de sesiones y cliente manual/automático están implementados. Pendientes pruebas de reconexión, sondeo real y VPS. UC-21 tiene runbook documentado, pero MFA/recuperación de factores no están implementadas; UC-22 tiene sitio y contrato local estático, con operación VPS pendiente. UC-25 implementa restablecimiento de contraseña con PIN, aún sin despliegue VPS/Resend.
 - **Especificación:** [plan de sincronización](../plans/sincronizacion-preferencias.md).
 - **Diseño técnico:** [diseño formal](../designs/sincronizacion-preferencias-y-portabilidad.md).
 
@@ -59,3 +59,11 @@
 **Flujo:** abre `https://sync.laurafernandezenfermeria.com/status` para consultar salud general, incidentes, acciones en curso y ventanas de mantenimiento.
 
 **Aceptación:** no requiere autenticación; no muestra usuarios, logs, IPs, claves ni diagnósticos internos; si no puede verificar disponibilidad muestra estado desconocido/último chequeo. La página estática sobrevive a una caída de API/DB, pero no a una caída completa del VPS/red.
+
+## UC-25 — Restablecer contraseña mediante PIN
+
+**Actor:** titular de una cuenta verificada.
+
+**Flujo:** solicita el restablecimiento con su correo; Laural responde igual exista o no la cuenta. Si existe, recibe un PIN de seis dígitos válido cinco minutos. Introduce el PIN y una contraseña nueva de 12 a 128 caracteres.
+
+**Aceptación:** el PIN tiene HMAC separado por propósito, cinco intentos, un solo uso y límites por cuenta/IP. PIN incorrecto o cuenta inexistente no inicia sesión. Al cambiar la contraseña se revocan todas las sesiones activas; no se crea sesión ni se retiran/cambian factores MFA. Resend y PostgreSQL reales requieren despliegue/validación antes de habilitar la ruta públicamente.

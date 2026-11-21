@@ -2,6 +2,7 @@
 
 ## Sin publicar
 
+- Implementado el restablecimiento de contraseña mediante PIN de correo de seis dígitos y cinco minutos. Respuestas genéricas, HMAC separado, límites y máximo de intentos; el cambio de contraseña invalida sesiones y no inicia sesión ni modifica MFA. Añadidas migración PostgreSQL, correo Resend y pruebas unitarias/de integración. Falta el despliegue/validación del VPS con Resend.
 - Documentado el runbook de recuperación de cuenta: el PIN solo demuestra acceso al buzón y el administrador necesita una prueba preexistente e independiente para retirar factores. Sin esa prueba, la solicitud se deniega. El procedimiento todavía no se puede operar; MFA, códigos, acción administrativa local al VPS y ensayos siguen pendientes.
 - Añadida gestión de sesiones de cuenta: consulta limitada a 100 sesiones con fechas y marca «Este equipo», y revocación individual de otras sesiones con confirmación. No se guardan ni muestran IP, ubicación, tokens o huellas de dispositivo; se cubre la API con PostgreSQL real en CI.
 - Añadida una acción confirmada para revocar todas las demás sesiones, incluida cualquier sesión fuera de las 100 mostradas; el token de este equipo se valida de nuevo dentro de la operación SQL y se mantiene activo.
@@ -10,7 +11,7 @@
 - Añadida revocación remota de la sesión actual al cerrar cuenta: endpoint autenticado con limitador, invalidación por hash en PostgreSQL y cliente Tauri que borra siempre Credential Manager aunque no haya conexión. La interfaz distingue revocación confirmada de cierre solo local.
 - Ampliada la integración PostgreSQL para cubrir registro con Argon2id, verificación de PIN sin inicio de sesión, login nativo PKCE, creación de sesión por hash y uso posterior de sync; el correo se captura en un mailer de prueba y no sale del proceso. El job PostgreSQL de CI pasó.
 - La integración PostgreSQL ahora atraviesa Fastify y el almacén real de snapshots: verifica aislamiento por cuenta, lectura/escritura, `ETag`/conflicto, idempotencia y rechazo de campos no permitidos. CI ejecuta esta prueba junto con las migraciones y el rate limit; la integración de login/verificación y el VPS aún quedan pendientes.
-- Añadida prueba de integración PostgreSQL aislada: aplica migraciones v1–v4, verifica el rate limit atómico en concurrencia y ejecuta en CI con una base efímera. Para correrla localmente, `server` requiere `TEST_DATABASE_URL`.
+- Añadida prueba de integración PostgreSQL aislada: aplica migraciones v1–v5, verifica rate limits, autenticación y restablecimiento con una base efímera en CI. Para correrla localmente, `server` requiere `TEST_DATABASE_URL`.
 - El servicio aplica límites persistentes por IP y ruta en PostgreSQL, comparte los contadores entre instancias y guarda solo huellas HMAC de IP. Se limitan auth y snapshots; el exceso recibe `429` con `Retry-After` y el proxy confiable queda restringido a loopback.
 - La comprobación al reconectar/volver a primer plano agrupa eventos y se prueba junto a la reanudación. El lector del estado de sync local valida campos obligatorios, contenido, integridad y tamaño antes de usarlo.
 - Al recuperar la conexión o volver a la app, se programa una comprobación sincronizada de preferencias; las comprobaciones cercanas se agrupan y la aceptación local de riesgos sigue siendo obligatoria.

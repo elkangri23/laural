@@ -27,6 +27,29 @@ export class ResendMailer implements VerificationMailer {
     await response.body?.cancel();
     if (!response.ok) throw new Error("No se pudo entregar el correo de verificación.");
   }
+
+  async sendPasswordReset(input: { email: string; displayName: string; pin: string; challengeId: string }): Promise<void> {
+    const safeName = escapeHtml(input.displayName);
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${this.config.apiKey}`,
+        "Content-Type": "application/json",
+        "Idempotency-Key": `password-reset/${input.challengeId}`,
+      },
+      body: JSON.stringify({
+        from: this.config.from,
+        to: [input.email],
+        subject: "PIN para restablecer tu contraseña de Laural",
+        text: `Hola ${input.displayName}, tu PIN para cambiar la contraseña es ${input.pin}. Caduca en 5 minutos, se usa una sola vez y no inicia sesión ni elimina factores de seguridad. Si no solicitaste este cambio, ignora el mensaje.`,
+        html: `<p>Hola ${safeName},</p><p>Tu PIN para cambiar la contraseña es <strong>${input.pin}</strong>.</p><p>Caduca en 5 minutos, se usa una sola vez y no inicia sesión ni elimina factores de seguridad. Si no solicitaste este cambio, ignora el mensaje.</p>`,
+      }),
+      signal: AbortSignal.timeout(10_000),
+      redirect: "error",
+    });
+    await response.body?.cancel();
+    if (!response.ok) throw new Error("No se pudo entregar el correo de restablecimiento.");
+  }
 }
 
 function escapeHtml(value: string): string {

@@ -194,9 +194,13 @@ describePostgres("integración real de PostgreSQL para rate limits", () => {
     const email = `${randomUUID()}@example.test`;
     const password = "contraseña segura para integración 2026";
     let deliveredPin = "";
+    let deliveredResetPin = "";
     const emailAuth = new EmailAuthService(
       new PostgresEmailAuthStore(isolatedPool),
-      { sendVerification: async ({ pin }) => { deliveredPin = pin; } },
+      {
+        sendVerification: async ({ pin }) => { deliveredPin = pin; },
+        sendPasswordReset: async ({ pin }) => { deliveredResetPin = pin; },
+      },
       "integracion-email-pin-pepper-32-bytes-minimo",
     );
     const app = createApp({
@@ -350,6 +354,26 @@ describePostgres("integración real de PostgreSQL para rate limits", () => {
       });
       expect(reusedCode.statusCode).toBe(400);
       expect(reusedCode.json()).toEqual({ error: "invalid_or_expired_code" });
+
+      const activeToken = randomBytes(32).toString("base64url");
+      await isolatedPool.query(
+        `INSERT INTO account_sessions (account_id, token_hash, expires_at)
+         SELECT id, $2, now() + interval '30 days' FROM accounts WHERE email = $1`,
+        [email, createHash("sha256").update(activeToken).digest("hex")],
+      );
+      const resetRequest = await app.inject({ method: "POST", url: "/v1/auth/password-reset/request", payload: { email } });
+      expect(resetRequest.statusCode).toBe(202);
+      expect(resetRequest.json()).toEqual({ status: "accepted" });
+      expect(deliveredResetPin).toMatch(/^\d{6}$/);
+      const invalidReset = await app.inject({ method: "POST", url: "/v1/auth/password-reset/confirm", payload: { email, pin: "999999" === deliveredResetPin ? "000000" : "999999", password: "nueva contraseña integración 2026" } });
+      expect(invalidReset.statusCode).toBe(202);
+      expect(invalidReset.json()).toEqual(resetRequest.json());
+      const reset = await app.inject({ method: "POST", url: "/v1/auth/password-reset/confirm", payload: { email, pin: deliveredResetPin, password: "nueva contraseña integración 2026" } });
+      expect(reset.statusCode).toBe(202);
+      expect(reset.json()).toEqual(resetRequest.json());
+      expect((await app.inject({ method: "GET", url: "/v1/preferences/current", headers: { authorization: `Bearer ${activeToken}` } })).statusCode).toBe(401);
+      const passwordRecord = await isolatedPool.query<{ password_hash: string }>("SELECT password_hash FROM accounts WHERE email = $1", [email]);
+      expect(passwordRecord.rows[0]?.password_hash).toMatch(/^\$argon2id\$/);
     } finally {
       await app.close();
     }

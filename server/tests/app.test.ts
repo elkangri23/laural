@@ -142,8 +142,12 @@ describe("API de snapshots de preferencias", () => {
         return { accountId: "account-a", displayName: "A", challengeId: "challenge-a" };
       },
       verifyEmail: async (_email, verifier) => verifier === savedVerifier,
+      createPasswordReset: async () => null,
+      checkPasswordReset: async () => false,
+      resetPassword: async () => false,
     }, {
       sendVerification: async ({ pin }) => { sentPin = pin; },
+      sendPasswordReset: async () => undefined,
     }, "a-server-pepper-with-enough-entropy-for-this-test");
     const app = createTestApp({ emailAuth });
     const registration = await app.inject({
@@ -162,6 +166,16 @@ describe("API de snapshots de preferencias", () => {
     expect(verified.statusCode).toBe(202);
     expect(verified.json()).toEqual({ status: "accepted" });
     expect(verified.headers.authorization).toBeUndefined();
+
+    const resetRequest = await app.inject({ method: "POST", url: "/v1/auth/password-reset/request", payload: { email: "a@example.test" } });
+    const missingResetRequest = await app.inject({ method: "POST", url: "/v1/auth/password-reset/request", payload: { email: "missing@example.test" } });
+    expect(resetRequest.statusCode).toBe(202);
+    expect(resetRequest.json()).toEqual({ status: "accepted" });
+    expect(missingResetRequest.json()).toEqual(resetRequest.json());
+    const resetResponse = await app.inject({ method: "POST", url: "/v1/auth/password-reset/confirm", payload: { email: "a@example.test", pin: "000000", password: "una nueva contraseña 2026" } });
+    expect(resetResponse.statusCode).toBe(202);
+    expect(resetResponse.json()).toEqual({ status: "accepted" });
+    expect(resetResponse.headers.authorization).toBeUndefined();
   });
 
   it("sirve página propia sin scripts y restringe el inicio a callback loopback", async () => {
@@ -169,7 +183,10 @@ describe("API de snapshots de preferencias", () => {
       createUnverifiedAccount: async () => null,
       createVerification: async () => null,
       verifyEmail: async () => false,
-    }, { sendVerification: async () => undefined }, "a-pepper-long-enough-for-auth-page-test" ) });
+      createPasswordReset: async () => null,
+      checkPasswordReset: async () => false,
+      resetPassword: async () => false,
+    }, { sendVerification: async () => undefined, sendPasswordReset: async () => undefined }, "a-pepper-long-enough-for-auth-page-test" ) });
     expect((await disabled.inject({ method: "GET", url: "/auth/native" })).statusCode).toBe(404);
 
     const nativeStore: NativeAuthStore = {
@@ -184,7 +201,10 @@ describe("API de snapshots de preferencias", () => {
       createUnverifiedAccount: async () => null,
       createVerification: async () => null,
       verifyEmail: async () => false,
-    }, { sendVerification: async () => undefined }, "a-pepper-long-enough-for-auth-page-test");
+      createPasswordReset: async () => null,
+      checkPasswordReset: async () => false,
+      resetPassword: async () => false,
+    }, { sendVerification: async () => undefined, sendPasswordReset: async () => undefined }, "a-pepper-long-enough-for-auth-page-test");
     const app = createTestApp({ emailAuth, nativeAuth: new NativeAuthService(nativeStore) });
     const query = new URLSearchParams({
       redirect_uri: "http://127.0.0.1:49152/callback",
@@ -196,6 +216,8 @@ describe("API de snapshots de preferencias", () => {
     expect(response.headers["set-cookie"]).toContain("HttpOnly; SameSite=Strict");
     expect(response.body).toContain("lang=\"es\"");
     expect(response.body).toContain("name=\"password\"");
+    expect(response.body).toContain("Restablecer contraseña");
+    expect(response.body).toContain("no inicia sesión ni elimina passkeys o MFA");
     expect(response.body).not.toContain("<script");
     const css = await app.inject({ method: "GET", url: "/auth.css" });
     expect(css.headers["content-type"]).toContain("text/css");
@@ -220,12 +242,23 @@ describe("API de snapshots de preferencias", () => {
 
   it("valida la cookie y el CSRF en registro, reenvío y confirmación del navegador", async () => {
     const verificationEmail = "user@example.test";
+    let resetVerifier = "";
+    let resetPin = "";
     const accountStore = {
       createUnverifiedAccount: async () => ({ id: "account-a" }),
       createVerification: async () => ({ accountId: "account-a", displayName: "User", challengeId: "challenge-a" }),
       verifyEmail: async () => true,
+      createPasswordReset: async (_email: string, verifier: string) => {
+        resetVerifier = verifier;
+        return { accountId: "account-a", displayName: "User", challengeId: "reset-a" };
+      },
+      checkPasswordReset: async (_email: string, verifier: string) => verifier === resetVerifier,
+      resetPassword: async (_email: string, verifier: string) => verifier === resetVerifier,
     };
-    const mailer = { sendVerification: async () => undefined };
+    const mailer = {
+      sendVerification: async () => undefined,
+      sendPasswordReset: async ({ pin }: { pin: string }) => { resetPin = pin; },
+    };
     const emailAuth = new EmailAuthService(accountStore, mailer, "a-pepper-long-enough-for-browser-forms");
     const nativeStore: NativeAuthStore = {
       createFlow: async () => undefined,
@@ -274,6 +307,29 @@ describe("API de snapshots de preferencias", () => {
     });
     expect(confirmed.statusCode).toBe(200);
     expect(confirmed.body).toContain("Si el PIN era correcto");
+
+    const resetWithoutCookie = await app.inject({
+      method: "POST", url: "/auth/native/password-reset/request",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      payload: new URLSearchParams({ csrf, email: verificationEmail }).toString(),
+    });
+    expect(resetWithoutCookie.statusCode).toBe(400);
+    expect(resetPin).toBe("");
+    const resetRequest = await app.inject({
+      method: "POST", url: "/auth/native/password-reset/request",
+      headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+      payload: new URLSearchParams({ csrf, email: verificationEmail }).toString(),
+    });
+    expect(resetRequest.statusCode).toBe(200);
+    expect(resetRequest.body).toContain("Si la cuenta puede recuperarse");
+    expect(resetPin).toMatch(/^\d{6}$/);
+    const passwordReset = await app.inject({
+      method: "POST", url: "/auth/native/password-reset/confirm",
+      headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+      payload: new URLSearchParams({ csrf, email: verificationEmail, pin: resetPin, password: "nueva contraseña segura 2026" }).toString(),
+    });
+    expect(passwordReset.statusCode).toBe(200);
+    expect(passwordReset.body).toContain("no inicia sesión ni elimina factores de seguridad");
   });
 
   it("hace login en navegador y canjea PKCE sin entregar el token en la página", async () => {
@@ -304,7 +360,10 @@ describe("API de snapshots de preferencias", () => {
       createUnverifiedAccount: async () => null,
       createVerification: async () => null,
       verifyEmail: async () => false,
-    }, { sendVerification: async () => undefined }, "a-pepper-long-enough-for-login-route-test");
+      createPasswordReset: async () => null,
+      checkPasswordReset: async () => false,
+      resetPassword: async () => false,
+    }, { sendVerification: async () => undefined, sendPasswordReset: async () => undefined }, "a-pepper-long-enough-for-login-route-test");
     const app = createTestApp({ emailAuth, nativeAuth: new NativeAuthService(nativeStore) });
     const verifier = "v".repeat(43);
     expectedChallenge = createHash("sha256").update(verifier).digest("base64url");

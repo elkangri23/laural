@@ -3,9 +3,10 @@ import { describe, expect, it, vi } from "vitest";
 import { EmailAuthService, type EmailAuthStore, type RegistrationInput, type VerificationMailer } from "../src/email-auth.js";
 
 class MemoryEmailStore implements EmailAuthStore {
-  account: { id: string; displayName: string; passwordHash: string } | null = null;
+  account: { id: string; displayName: string; email: string; passwordHash: string } | null = null;
   verification: { email: string; digest: string } | null = null;
   verified = false;
+  passwordReset: { email: string; digest: string } | null = null;
   createUnverifiedAccount = vi.fn(async (input: { displayName: string; email: string; passwordHash: string }) => {
     if (this.account) return null;
     this.account = { id: "account-1", ...input };
@@ -22,6 +23,18 @@ class MemoryEmailStore implements EmailAuthStore {
     this.verification = null;
     return true;
   });
+  createPasswordReset = vi.fn(async (email: string, verifier: string) => {
+    if (!this.account || email !== this.account.email || !this.verified) return null;
+    this.passwordReset = { email, digest: verifier };
+    return { accountId: this.account.id, displayName: this.account.displayName, challengeId: "reset-1" };
+  });
+  checkPasswordReset = vi.fn(async (email: string, verifier: string) => this.passwordReset?.email === email && this.passwordReset.digest === verifier);
+  resetPassword = vi.fn(async (email: string, verifier: string, passwordHash: string) => {
+    if (!this.account || this.passwordReset?.email !== email || this.passwordReset.digest !== verifier) return false;
+    this.account.passwordHash = passwordHash;
+    this.passwordReset = null;
+    return true;
+  });
 }
 
 const input: RegistrationInput = {
@@ -30,9 +43,9 @@ const input: RegistrationInput = {
   password: "una contraseña larga 2026",
 };
 
-function service(store = new MemoryEmailStore(), send = vi.fn(async () => undefined)) {
-  const mailer: VerificationMailer = { sendVerification: send };
-  return { store, send, auth: new EmailAuthService(store, mailer, "server-pepper-that-is-long-enough-for-tests") };
+function service(store = new MemoryEmailStore(), send = vi.fn(async () => undefined), sendPasswordReset = vi.fn(async () => undefined)) {
+  const mailer: VerificationMailer = { sendVerification: send, sendPasswordReset };
+  return { store, send, sendPasswordReset, auth: new EmailAuthService(store, mailer, "server-pepper-that-is-long-enough-for-tests") };
 }
 
 describe("registro y verificación por correo", () => {
@@ -85,5 +98,30 @@ describe("registro y verificación por correo", () => {
     const sentPin = send.mock.calls[1]?.[0].pin;
     expect(await test.auth.verify("laura@example.test", sentPin!)).toBe("verified");
     expect(store.verified).toBe(true);
+  });
+
+  it("restablece la contraseña solo tras un PIN válido y no concede una sesión", async () => {
+    const store = new MemoryEmailStore();
+    store.account = { id: "account-1", displayName: "Laura", email: "laura@example.test", passwordHash: "previous-hash" };
+    store.verified = true;
+    const test = service(store);
+    expect(await test.auth.requestPasswordReset(" LAURA@example.test ")).toBe("accepted");
+    expect(test.sendPasswordReset).toHaveBeenCalledOnce();
+    const pin = test.sendPasswordReset.mock.calls[0]?.[0].pin;
+    expect(pin).toMatch(/^\d{6}$/);
+    expect(await test.auth.confirmPasswordReset("laura@example.test", "999999", "nueva contraseña segura 2026")).toBe("invalid_or_expired");
+    expect(store.resetPassword).not.toHaveBeenCalled();
+    expect(await test.auth.confirmPasswordReset("laura@example.test", pin!, "nueva contraseña segura 2026")).toBe("reset");
+    expect(store.account.passwordHash).toMatch(/^\$argon2id\$/);
+    expect(await argon2.verify(store.account.passwordHash, "nueva contraseña segura 2026")).toBe(true);
+  });
+
+  it("da respuesta genérica para cuenta inexistente y rechaza formato de PIN/contraseña inválido", async () => {
+    const test = service();
+    expect(await test.auth.requestPasswordReset("missing@example.test")).toBe("accepted");
+    expect(test.sendPasswordReset).not.toHaveBeenCalled();
+    expect(await test.auth.confirmPasswordReset("missing@example.test", "123456", "nueva contraseña segura 2026")).toBe("invalid_or_expired");
+    expect(await test.auth.confirmPasswordReset("laura@example.test", "12345", "nueva contraseña segura 2026")).toBe("invalid_request");
+    expect(await test.auth.confirmPasswordReset("laura@example.test", "123456", "corta")).toBe("invalid_request");
   });
 });

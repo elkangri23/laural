@@ -24,6 +24,7 @@ describe("limpieza de retención PostgreSQL", () => {
 
     expect(statements[0]).toBe("BEGIN");
     expect(statements).toContain("DELETE FROM email_verification_codes WHERE created_at < now() - interval '15 minutes'");
+    expect(statements).toContain("DELETE FROM account_password_reset_codes WHERE created_at < now() - interval '15 minutes'");
     expect(statements).toContain("DELETE FROM native_authorization_codes WHERE created_at < now() - interval '24 hours'");
     expect(statements).toContain("DELETE FROM native_auth_flows WHERE created_at < now() - interval '24 hours'");
     expect(statements).toContain("DELETE FROM account_sessions WHERE expires_at <= now() OR revoked_at IS NOT NULL");
