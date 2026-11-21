@@ -116,10 +116,13 @@ test("reanuda la comprobación pendiente al recuperar la red", async () => {
 
   await act(async () => {
     window.dispatchEvent(new Event("online"));
+    window.dispatchEvent(new Event("focus"));
+    document.dispatchEvent(new Event("visibilitychange"));
     await new Promise((resolve) => setTimeout(resolve, 20));
   });
 
   expect(mocks.invoke).toHaveBeenCalledWith("get_preference_snapshot", expect.anything());
+  expect(mocks.invoke.mock.calls.filter(([command]) => command === "get_preference_snapshot")).toHaveLength(1);
   expect(mocks.invoke).toHaveBeenCalledWith("sync_local_preferences", expect.anything());
 });
 

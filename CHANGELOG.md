@@ -2,6 +2,7 @@
 
 ## Sin publicar
 
+- La comprobación al reconectar/volver a primer plano agrupa eventos y se prueba junto a la reanudación. El lector del estado de sync local valida campos obligatorios, contenido, integridad y tamaño antes de usarlo.
 - Al recuperar la conexión o volver a la app, se programa una comprobación sincronizada de preferencias; las comprobaciones cercanas se agrupan y la aceptación local de riesgos sigue siendo obligatoria.
 - La sincronización queda bloqueada hasta aceptar en este equipo el riesgo de pérdida total del VPS y la lectura de preferencias por su operador. La aceptación protege tanto el flujo automático como las acciones manuales; las claves API siguen excluidas.
 - Separada la carga de la terminal, el renderizado Markdown y paneles secundarios: la entrada JavaScript baja de 824 KB a 297 KB; la terminal se sirve en su propio bloque de 336 KB y el Markdown se carga al necesitarlo. Ningún bloque supera 500 KB.

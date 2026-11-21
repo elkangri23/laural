@@ -289,11 +289,30 @@ fn read_sync_state(app: &AppHandle) -> Result<Option<SyncState>, String> {
     }
     let bytes = fs::read(&path)
         .map_err(|_| "No se pudo leer el estado local de sincronización.".to_string())?;
+    parse_sync_state(&bytes).map(Some)
+}
+
+fn parse_sync_state(bytes: &[u8]) -> Result<SyncState, String> {
     if bytes.len() > MAX_SYNC_STATE_BYTES {
         return Err("El estado local de sincronización supera el límite permitido.".into());
     }
-    let state: SyncState = serde_json::from_slice(&bytes)
+    let value: serde_json::Value = serde_json::from_slice(bytes)
         .map_err(|_| "El estado local de sincronización no es válido.".to_string())?;
+    let fields = value
+        .as_object()
+        .ok_or_else(|| "El estado local de sincronización no es válido.".to_string())?;
+    if !["localSnapshot", "cloudSnapshot", "revision", "pending"]
+        .iter()
+        .all(|field| fields.contains_key(*field))
+    {
+        return Err("El estado local de sincronización no es válido.".into());
+    }
+    let state: SyncState = serde_json::from_value(value)
+        .map_err(|_| "El estado local de sincronización no es válido.".to_string())?;
+    validate_sync_state(state)
+}
+
+fn validate_sync_state(state: SyncState) -> Result<SyncState, String> {
     if let Some(snapshot) = &state.local_snapshot {
         snapshot::encode(snapshot)?;
     }
@@ -306,7 +325,7 @@ fn read_sync_state(app: &AppHandle) -> Result<Option<SyncState>, String> {
     {
         return Err("El estado local de sincronización está incompleto.".into());
     }
-    Ok(Some(state))
+    Ok(state)
 }
 
 fn write_sync_state(app: &AppHandle, state: &SyncState) -> Result<(), String> {
@@ -630,6 +649,53 @@ mod tests {
         assert!(
             key.bytes()
                 .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-')
+        );
+    }
+
+    #[test]
+    fn valida_estado_local_serializado_y_rechaza_datos_danados_o_incompletos() {
+        let valid = state(3, snapshot("laurel"));
+        let bytes = serde_json::to_vec(&valid).unwrap();
+        assert_eq!(parse_sync_state(&bytes).unwrap().revision, Some(3));
+
+        assert_eq!(
+            parse_sync_state(b"{").err().unwrap(),
+            "El estado local de sincronización no es válido."
+        );
+        assert_eq!(
+            parse_sync_state(b"{\"pending\":true}").err().unwrap(),
+            "El estado local de sincronización no es válido."
+        );
+
+        let incomplete = SyncState {
+            local_snapshot: Some(snapshot("laurel")),
+            cloud_snapshot: None,
+            revision: Some(3),
+            pending: true,
+        };
+        let bytes = serde_json::to_vec(&incomplete).unwrap();
+        assert_eq!(
+            parse_sync_state(&bytes).err().unwrap(),
+            "El estado local de sincronización está incompleto."
+        );
+
+        let mut invalid_snapshot = state(3, snapshot("laurel"));
+        invalid_snapshot
+            .local_snapshot
+            .as_mut()
+            .unwrap()
+            .preferences
+            .theme_id = "desconocido".into();
+        let bytes = serde_json::to_vec(&invalid_snapshot).unwrap();
+        assert!(parse_sync_state(&bytes).is_err());
+    }
+
+    #[test]
+    fn rechaza_estado_local_mayor_que_el_limite_antes_de_parsearlo() {
+        let bytes = vec![b' '; MAX_SYNC_STATE_BYTES + 1];
+        assert_eq!(
+            parse_sync_state(&bytes).err().unwrap(),
+            "El estado local de sincronización supera el límite permitido."
         );
     }
 }
