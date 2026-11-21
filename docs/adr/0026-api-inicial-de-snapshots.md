@@ -20,7 +20,7 @@ F2 ya define un snapshot allowlisted v1. F3 necesita persistirlo por cuenta sin 
 
 - El servicio puede probarse con cuentas/sesiones provisionadas, pero aún no puede crear usuarios ni emitir sesiones; no se debe exponer públicamente hasta completar esa fase.
 - El snapshot se almacena como JSONB legible por el operador. No contiene claves API y no ofrece E2EE.
-- Las rutas completas aún se prueban principalmente con almacenes simulados. CI aplica las cuatro migraciones en PostgreSQL temporal y comprueba allí el rate limit concurrente; faltan integración de la API de snapshots/cuenta con la base real del servicio y validación en VPS.
+- Las rutas de preferencias se prueban con el almacén PostgreSQL real en CI: lectura/escritura, aislamiento por cuenta, conflicto de revisión, idempotencia y esquema cerrado, junto con migraciones y rate limit concurrente. La autenticación sigue inyectada en esta prueba; faltan integración real de los flujos de cuenta, validación en VPS y Caddy.
 - Las claves idempotentes requieren política de retención y limpieza antes del uso público.
 
 ## Evidencia
