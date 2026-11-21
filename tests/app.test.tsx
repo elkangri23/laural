@@ -244,6 +244,35 @@ test("la paleta permite abrir paneles Git y recetas", async () => {
   expect(host.querySelector('[role="dialog"][aria-labelledby="recipes-title"]')).not.toBeNull();
 });
 
+test("la paleta recorre acciones con flechas y abre la selección con Enter", async () => {
+  await act(async () => root!.render(<App />));
+  await act(async () => host.querySelector<HTMLButtonElement>(".search-button")!.click());
+  const input = host.querySelector<HTMLInputElement>(".palette-search input")!;
+  await act(async () => input.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })));
+  await act(async () => input.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })));
+  expect(host.querySelector<HTMLButtonElement>("#palette-result-2")?.dataset.selected).toBe("true");
+  await act(async () => input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+  expect(host.querySelector(".git-panel-dialog")).not.toBeNull();
+});
+
+test("Enter en un comando reciente lo copia y nunca lo ejecuta", async () => {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+  await act(async () => root!.render(<App />));
+  await act(async () => host.querySelector<HTMLButtonElement>('[data-testid="begin-command"]')!.click());
+  await act(async () => host.querySelector<HTMLButtonElement>(".search-button")!.click());
+  const input = host.querySelector<HTMLInputElement>(".palette-search input")!;
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+  await act(async () => {
+    setValue.call(input, "git status");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+  expect(writeText).toHaveBeenCalledWith("git status");
+  expect(mocks.invoke).not.toHaveBeenCalledWith("run_command", expect.anything());
+  expect(host.querySelector('[role="dialog"][aria-labelledby="palette-title"]')).not.toBeNull();
+});
+
 test("la paleta permite ir a una pestaña y cerrar con Escape", async () => {
   await act(async () => root!.render(<App />));
   await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Nueva terminal"]')!.click());

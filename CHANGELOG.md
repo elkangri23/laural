@@ -2,6 +2,7 @@
 
 ## Sin publicar
 
+- La paleta de comandos ahora permite recorrer acciones y comandos recientes con las flechas y abrir/copiar con Enter.
 - El menú de los tres puntos del perfil local abre configuración, portabilidad y sincronización.
 - La paleta `Ctrl+K` incorpora accesos a proyectos, Git, recetas, ayuda y notificaciones.
 - El selector del espacio personal ahora muestra su estado local y accesos a proyectos y sincronización.

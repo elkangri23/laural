@@ -572,6 +572,7 @@ svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width:
 .palette-group-label span { font-weight: 400; letter-spacing: 0; text-transform: none; }
 .palette-result { width: 100%; display: flex; align-items: center; gap: 11px; padding: 9px; border: 0; border-radius: 7px; color: var(--text); text-align: left; background: transparent; cursor: pointer; }
 .palette-result:hover, .palette-result:focus-visible { outline: 0; background: color-mix(in srgb, var(--theme-accent) 13%, var(--surface)); }
+.palette-result[data-selected="true"] { outline: 0; background: color-mix(in srgb, var(--theme-accent) 13%, var(--surface)); }
 .palette-result-icon { width: 28px; height: 28px; display: grid; flex: 0 0 28px; place-items: center; border: 1px solid var(--line); border-radius: 7px; color: var(--theme-accent); background: var(--surface); font: 12px var(--mono); }
 .palette-result > span:nth-child(2) { min-width: 0; flex: 1; display: grid; gap: 3px; }
 .palette-result strong { font-size: 12px; font-weight: 550; }
