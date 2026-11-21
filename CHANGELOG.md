@@ -2,6 +2,7 @@
 
 ## Sin publicar
 
+- El asistente ahora representa Markdown con títulos, listas, tablas, enlaces y código formateado. HTML arbitrario no se ejecuta, los esquemas de enlace se limitan a HTTP(S)/mailto y las imágenes remotas no se cargan.
 - Conectado el cliente de escritorio con la API privada de snapshots: consulta `ETag`, escribe con `If-Match` e idempotencia, y no expone la sesión al WebView. Configuración permite comparar, elegir entre equipo/nube y subir por primera vez; aplicar la nube crea antes un `.laural` local sin claves. Las API keys permanecen en Credential Manager y los endpoints no compartidos no se envían. Pendientes auto-sync al guardar, comprobación cada tres horas, cola offline y prueba con VPS habilitado.
 - Añadido el primer servicio privado de snapshots: Fastify, schema v1 cerrado, límite de tamaño, revisión condicional, idempotencia transaccional en PostgreSQL, autenticación mediante hash de sesión y migraciones. Aún no se puede publicar: faltan login/emisión de sesión, rate limits por origen, status público y pruebas con PostgreSQL real.
 - Añadido el flujo de registro/verificación por correo, desactivado por defecto: contraseñas Argon2id, PIN aleatorio de seis cifras con HMAC, cinco minutos, cinco intentos y límites de reenvío por cuenta. Resend se configura solo en el servidor; verificar correo no inicia sesión.

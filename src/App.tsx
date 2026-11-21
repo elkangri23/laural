@@ -3,6 +3,7 @@ import { SettingsDialog } from "./components/SettingsDialog";
 import { BackupRetentionControl } from "./components/BackupRetentionControl";
 import { AgentActivity } from "./components/AgentActivity";
 import { AccountSettings } from "./components/AccountSettings";
+import { AssistantMarkdown } from "./components/AssistantMarkdown";
 import { UpdateManager } from "./components/UpdateManager";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
@@ -789,7 +790,7 @@ function App() {
             </div> : <div className="message-thread">
               {chatMessages.map((message, index) => <article className={`chat-message ${message.role}`} key={message.id ?? `${index}-${message.role}`}>
                 <span className="message-avatar">{message.role === "user" ? "Tú" : <SparkIcon />}</span>
-                <div className="message-content">{message.content}</div>
+                <div className="message-content">{message.role === "assistant" ? <AssistantMarkdown content={message.content} /> : message.content}</div>
               </article>)}
               {agentPlan && <div className="agent-plan-card">
                 <div className="agent-plan-header"><span className="plan-icon-small"><AgentIcon /></span><strong>Plan del agente</strong><span>{agentPlan.actions.length} acciones</span></div>
