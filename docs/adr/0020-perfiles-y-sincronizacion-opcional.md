@@ -36,7 +36,7 @@ Laural ya mantiene perfiles y preferencias en el dispositivo y guarda claves de 
 - Los snapshots de recuperación visibles no caducan automáticamente. El usuario puede borrarlos; eliminar cuenta elimina las copias de nube. Por ADR-0024 no se mantienen copias fuera del VPS; la pérdida total del host puede borrar definitivamente los datos sincronizados.
 - La URL de endpoint puede revelar infraestructura privada y por eso no se sincroniza sin consentimiento expreso para ese perfil.
 - Los perfiles y reglas del agente permanecen locales para evitar transferir permisos de ejecución.
-- La exportación/importación local tiene una implementación inicial; cuentas y sincronización siguen pendientes. El contrato del snapshot v1 está en curso y aún no se construye desde los perfiles locales. Las fases y criterios están en el [plan de sincronización](../plans/sincronizacion-preferencias.md) y el [diseño formal](../designs/sincronizacion-preferencias-y-portabilidad.md).
+- La exportación/importación local y el contrato snapshot v1 tienen una implementación inicial. El servicio ya cuenta con API privada de snapshots y registro/verificación de correo, pero no tiene login ni cliente de sincronización y no está desplegado. Las fases y criterios están en el [plan de sincronización](../plans/sincronizacion-preferencias.md) y el [diseño formal](../designs/sincronizacion-preferencias-y-portabilidad.md).
 
 ## Evidencia
 

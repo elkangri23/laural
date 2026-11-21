@@ -29,3 +29,23 @@ jobs:
             coverage/
             src-tauri/target/llvm-cov/html/
           if-no-files-found: error
+  cobertura-servicio-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+        working-directory: server
+      - run: npm run build
+        working-directory: server
+      - run: npm run test:coverage
+        working-directory: server
+      - uses: actions/upload-artifact@v6
+        with:
+          name: cobertura-servicio-sync
+          path: server/coverage/
+          if-no-files-found: error

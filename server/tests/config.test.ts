@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readConfig } from "../src/config.js";
+import { readConfig, readEmailAuthConfig } from "../src/config.js";
 
 describe("configuración del servicio", () => {
   it("usa localhost y el puerto predeterminado", () => {
@@ -19,5 +19,22 @@ describe("configuración del servicio", () => {
     [{ DATABASE_URL: "postgres://db/laural", HOST: "bad/host" }, "HOST"],
   ])("rechaza configuración inválida %#", (environment) => {
     expect(() => readConfig(environment as NodeJS.ProcessEnv)).toThrow();
+  });
+
+  it("mantiene apagada la autenticación por correo de forma predeterminada", () => {
+    expect(readEmailAuthConfig({} as NodeJS.ProcessEnv)).toBeNull();
+  });
+
+  it("activa correo solo con clave, remitente sin controles y pepper de 32 bytes", () => {
+    expect(readEmailAuthConfig({
+      EMAIL_AUTH_ENABLED: "true", RESEND_API_KEY: "re_test", RESEND_FROM: "Laural <auth@example.test>", AUTH_PIN_PEPPER: "x".repeat(32),
+    } as NodeJS.ProcessEnv)).toEqual({ resendApiKey: "re_test", resendFrom: "Laural <auth@example.test>", pinPepper: "x".repeat(32) });
+    expect(() => readEmailAuthConfig({ EMAIL_AUTH_ENABLED: "true" } as NodeJS.ProcessEnv)).toThrow();
+    expect(() => readEmailAuthConfig({
+      EMAIL_AUTH_ENABLED: "true", RESEND_API_KEY: "key", RESEND_FROM: "bad\nfrom", AUTH_PIN_PEPPER: "x".repeat(32),
+    } as NodeJS.ProcessEnv)).toThrow();
+    expect(() => readEmailAuthConfig({
+      EMAIL_AUTH_ENABLED: "true", RESEND_API_KEY: "key", RESEND_FROM: "auth@example.test", AUTH_PIN_PEPPER: "short",
+    } as NodeJS.ProcessEnv)).toThrow();
   });
 });

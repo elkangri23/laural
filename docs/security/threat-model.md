@@ -80,6 +80,7 @@ La API privada inicial de snapshots existe localmente; el flujo de cuentas y el 
 | Acceso a snapshots | Bearer opaco de 32 bytes; solo se guarda/compara SHA-256; cada lectura/escritura verifica sesión y cuenta activa/verificada; transacción bloquea la cuenta antes de escribir. | No hay todavía emisión, almacenamiento de sesión de escritorio, límites de abuso ni PostgreSQL real en pruebas; no exponer públicamente. |
 | Datos aceptados | Schema v1 cerrado, AJV, máximo 256 KiB, IDs y endpoint validados; errores genéricos, sin logs de solicitud; JSONB contiene solo el allowlist. | El administrador del VPS puede leer estos metadatos; no hay E2EE. |
 | Escrituras concurrentes | `ETag`/`If-Match`, idempotency key por cuenta y escritura transaccional. | La limpieza/retención de idempotencias, rate limits y pruebas de carreras con PostgreSQL real están pendientes. |
+| Registro y PIN de correo | Argon2id para passwords; PIN de seis dígitos con HMAC keyed, expiración a cinco minutos, cinco intentos, consumo único y topes por cuenta; respuestas genéricas. Registro deshabilitado por defecto. | Faltan límites persistentes por IP/origen y prueba con PostgreSQL real. No exponer las rutas en Internet. La verificación no autentica ni crea sesión. |
 
 | Amenaza | Control requerido en el diseño | Riesgo y condición de salida |
 | --- | --- | --- |

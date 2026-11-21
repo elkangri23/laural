@@ -1,6 +1,6 @@
 # ADR-0025: Correo transaccional con Resend
 
-- **Estado:** Aceptada
+- **Estado:** Aceptada; primer adapter de verificación implementado
 - **Fecha:** 2026-11-21
 - **Decisor:** Antonio Moles
 

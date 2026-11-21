@@ -9,6 +9,61 @@ info:
 servers:
   - url: https://sync.laurafernandezenfermeria.com
 paths:
+  /v1/auth/register:
+    post:
+      summary: Crea una cuenta pendiente y solicita la verificación de correo
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [displayName, email, password]
+              properties:
+                displayName: { type: string, minLength: 1, maxLength: 80 }
+                email: { type: string, minLength: 6, maxLength: 320 }
+                password: { type: string, minLength: 12, maxLength: 128, writeOnly: true }
+      responses:
+        '202': { description: Solicitud aceptada; respuesta genérica para evitar enumeración de cuentas }
+        '400': { description: Solicitud inválida }
+  /v1/auth/verification/resend:
+    post:
+      summary: Solicita el reenvío del PIN de verificación
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email]
+              properties:
+                email: { type: string, minLength: 6, maxLength: 320 }
+      responses:
+        '202': { description: Solicitud aceptada de forma genérica; sujeto a límites por cuenta }
+        '400': { description: Solicitud inválida }
+  /v1/auth/verification/confirm:
+    post:
+      summary: Verifica el correo con un PIN de seis dígitos
+      description: El PIN no inicia sesión ni permite retirar factores de seguridad.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email, pin]
+              properties:
+                email: { type: string, minLength: 6, maxLength: 320 }
+                pin: { type: string, pattern: '^[0-9]{6}$', writeOnly: true }
+      responses:
+        '202': { description: Solicitud aceptada de forma genérica; no se emite sesión ni se revela si el PIN fue válido }
+        '400': { description: Solicitud mal formada }
   /health/live:
     get:
       summary: Comprueba que el proceso está activo

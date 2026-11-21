@@ -2,7 +2,9 @@
 
 ## Sin publicar
 
-- Añadido el primer servicio privado de snapshots: Fastify, schema v1 cerrado, límite de tamaño, revisión condicional, idempotencia transaccional en PostgreSQL, autenticación mediante hash de sesión y migración inicial. Aún no se puede publicar: faltan registro/inicio de sesión, correo, status público, rate limits y pruebas con PostgreSQL real.
+- Añadido el primer servicio privado de snapshots: Fastify, schema v1 cerrado, límite de tamaño, revisión condicional, idempotencia transaccional en PostgreSQL, autenticación mediante hash de sesión y migraciones. Aún no se puede publicar: faltan login/emisión de sesión, rate limits por origen, status público y pruebas con PostgreSQL real.
+- Añadido el primer flujo de registro/verificación por correo, desactivado por defecto: contraseñas Argon2id, PIN aleatorio de seis cifras con HMAC, cinco minutos, cinco intentos y límites de reenvío por cuenta. Resend se configura solo en el servidor; verificar correo no inicia sesión. Faltan rate limits por IP y el login externo antes de habilitarlo públicamente.
+- CI incorpora una tarea independiente de Linux para compilar el servicio de sincronización, ejecutar su suite de cobertura y publicar el informe como artefacto.
 - Iniciado el contrato v1 compartido para preferencias sincronizables con schema cerrado, fixture común y tipos Rust/TypeScript. Rechaza versiones/campos desconocidos, perfiles duplicados, endpoints no válidos y snapshots mayores de 256 KiB.
 - Guardado el tipo de proveedor y el consentimiento opcional por perfil para compartir el endpoint en una futura sincronización; queda desactivado por defecto y los perfiles anteriores conservan sus destinos.
 - Añadido el constructor nativo del snapshot v1: incluye tema, apariencia, actualización, proveedor activo y metadatos permitidos. Solo incorpora URLs de perfiles con consentimiento; no consulta ni serializa claves.

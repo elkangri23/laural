@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { PreferenceSnapshot, PreferenceStore, StoredSnapshot, WriteSnapshotResult } from "../src/contracts.js";
 import { createApp } from "../src/app.js";
+import { EmailAuthService } from "../src/email-auth.js";
 
 const snapshot: PreferenceSnapshot = {
   schemaVersion: 1,
@@ -33,7 +34,7 @@ class MemoryStore implements PreferenceStore {
 }
 
 const instances: Array<ReturnType<typeof createApp>> = [];
-function createTestApp(options: { store?: PreferenceStore; checkReadiness?: () => Promise<void> } = {}): ReturnType<typeof createApp> {
+function createTestApp(options: { store?: PreferenceStore; checkReadiness?: () => Promise<void>; emailAuth?: EmailAuthService } = {}): ReturnType<typeof createApp> {
   const store = options.store ?? new MemoryStore();
   const app = createApp({
     store,
@@ -42,6 +43,7 @@ function createTestApp(options: { store?: PreferenceStore; checkReadiness?: () =
       return match?.[1] ?? null;
     },
     checkReadiness: options.checkReadiness ?? (async () => undefined),
+    ...(options.emailAuth ? { emailAuth: options.emailAuth } : {}),
   });
   instances.push(app);
   return app;
@@ -52,6 +54,41 @@ afterEach(async () => {
 });
 
 describe("API de snapshots de preferencias", () => {
+  it("expone registro y verificación solo cuando email auth está configurado; el PIN no inicia sesión", async () => {
+    const disabled = createTestApp();
+    expect((await disabled.inject({ method: "POST", url: "/v1/auth/register", payload: {} })).statusCode).toBe(404);
+
+    let savedVerifier = "";
+    let sentPin = "";
+    const emailAuth = new EmailAuthService({
+      createUnverifiedAccount: async () => ({ id: "account-a" }),
+      createVerification: async (_email, verifier) => {
+        savedVerifier = verifier;
+        return { accountId: "account-a", displayName: "A", challengeId: "challenge-a" };
+      },
+      verifyEmail: async (_email, verifier) => verifier === savedVerifier,
+    }, {
+      sendVerification: async ({ pin }) => { sentPin = pin; },
+    }, "a-server-pepper-with-enough-entropy-for-this-test");
+    const app = createTestApp({ emailAuth });
+    const registration = await app.inject({
+      method: "POST", url: "/v1/auth/register",
+      payload: { displayName: "A", email: "a@example.test", password: "a long password 2026" },
+    });
+    expect(registration.statusCode).toBe(202);
+    expect(registration.json()).toEqual({ status: "accepted" });
+    expect(registration.body).not.toContain(sentPin);
+
+    const wrongPinValue = sentPin === "000000" ? "000001" : "000000";
+    const wrongPin = await app.inject({ method: "POST", url: "/v1/auth/verification/confirm", payload: { email: "a@example.test", pin: wrongPinValue } });
+    expect(wrongPin.statusCode).toBe(202);
+    expect(wrongPin.json()).toEqual({ status: "accepted" });
+    const verified = await app.inject({ method: "POST", url: "/v1/auth/verification/confirm", payload: { email: "a@example.test", pin: sentPin } });
+    expect(verified.statusCode).toBe(202);
+    expect(verified.json()).toEqual({ status: "accepted" });
+    expect(verified.headers.authorization).toBeUndefined();
+  });
+
   it("requiere autenticación y no devuelve datos de otra cuenta", async () => {
     const app = createTestApp();
     const unauthorized = await app.inject({ method: "GET", url: "/v1/preferences/current" });

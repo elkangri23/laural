@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import Fastify, { type FastifyInstance } from "fastify";
 import { Ajv2020 } from "ajv/dist/2020.js";
 import type { PreferenceSnapshot, PreferenceStore, ReadinessCheck, Authenticate } from "./contracts.js";
+import type { EmailAuthService } from "./email-auth.js";
 import snapshotSchema from "../../shared/preference-snapshot-v1.schema.json" with { type: "json" };
 
 const BODY_LIMIT = 256 * 1024;
@@ -12,7 +13,12 @@ export type AppDependencies = {
   store: PreferenceStore;
   authenticate: Authenticate;
   checkReadiness: ReadinessCheck;
+  emailAuth?: EmailAuthService;
 };
+
+type RegistrationBody = { displayName: string; email: string; password: string };
+type EmailPinBody = { email: string; pin: string };
+type EmailBody = { email: string };
 
 export function createApp(dependencies: AppDependencies): FastifyInstance {
   const app = Fastify({ logger: false, bodyLimit: BODY_LIMIT });
@@ -35,6 +41,57 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
       return reply.code(503).send({ status: "unavailable" });
     }
   });
+
+  const emailAuth = dependencies.emailAuth;
+  if (emailAuth) {
+    app.post<{ Body: RegistrationBody }>("/v1/auth/register", {
+      schema: {
+        body: {
+          type: "object", additionalProperties: false,
+          required: ["displayName", "email", "password"],
+          properties: {
+            displayName: { type: "string", minLength: 1, maxLength: 80 },
+            email: { type: "string", minLength: 6, maxLength: 320 },
+            password: { type: "string", minLength: 12, maxLength: 128 },
+          },
+        },
+      },
+    }, async (request, reply) => {
+      const result = await emailAuth.register(request.body);
+      if (result === "invalid_request") return reply.code(400).send({ error: "invalid_request" });
+      return reply.code(202).send({ status: "accepted" });
+    });
+
+    app.post<{ Body: EmailBody }>("/v1/auth/verification/resend", {
+      schema: {
+        body: {
+          type: "object", additionalProperties: false,
+          required: ["email"], properties: { email: { type: "string", minLength: 6, maxLength: 320 } },
+        },
+      },
+    }, async (request, reply) => {
+      const result = await emailAuth.resendVerification(request.body.email);
+      if (result === "invalid_request") return reply.code(400).send({ error: "invalid_request" });
+      return reply.code(202).send({ status: "accepted" });
+    });
+
+    app.post<{ Body: EmailPinBody }>("/v1/auth/verification/confirm", {
+      schema: {
+        body: {
+          type: "object", additionalProperties: false,
+          required: ["email", "pin"],
+          properties: {
+            email: { type: "string", minLength: 6, maxLength: 320 },
+            pin: { type: "string", pattern: "^[0-9]{6}$" },
+          },
+        },
+      },
+    }, async (request, reply) => {
+      await emailAuth.verify(request.body.email, request.body.pin);
+      // The same response for every well-formed request prevents email enumeration.
+      return reply.code(202).send({ status: "accepted" });
+    });
+  }
 
   app.get("/v1/preferences/current", async (request, reply) => {
     const accountId = await dependencies.authenticate(request.headers.authorization);
@@ -72,6 +129,9 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof Error && "statusCode" in error && (error as Error & { statusCode?: number }).statusCode === 413) {
       return reply.code(413).send({ error: "payload_too_large" });
+    }
+    if (error instanceof Error && "statusCode" in error && (error as Error & { statusCode?: number }).statusCode === 400) {
+      return reply.code(400).send({ error: "invalid_request" });
     }
     return reply.code(500).send({ error: "internal_error" });
   });

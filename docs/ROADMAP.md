@@ -89,9 +89,10 @@ Añadidas regresiones que simulan el fallo al escribir una credencial y comprueb
 
 - API Fastify local para health y snapshots privados; schema compartido cerrado, límite 256 KiB, autenticación de sesiones existentes, aislamiento por cuenta, revisiones `ETag`/`If-Match`, idempotencia, validación de endpoints y migración PostgreSQL inicial. Cobertura del servicio: 100 % líneas y 96,62 % ramas en 25 pruebas con dobles de prueba.
 - Publicar API Fastify/PostgreSQL bajo `https://sync.laurafernandezenfermeria.com` solo después de completar autenticación, límites de abuso y pruebas PostgreSQL reales.
-- Implementar email/contraseña, Google, passkeys, TOTP, PIN de correo no-MFA, revocación de sesiones y borrado de cuenta. Enviar correo transaccional con Resend; configurar el dominio y remitente verificados y guardar una API key restringida como secreto del VPS.
+- Implementado parcialmente: registro de email/nombre/contraseña con Argon2id, PIN de verificación vía adapter Resend, expiración de 5 minutos, máximo de cinco intentos, reenvío limitado por cuenta y respuestas genéricas. Desactivado por defecto; no emite sesión. Suite backend: 45 pruebas, 97,44 % líneas / 92,34 % ramas con dobles de PostgreSQL y Resend.
+- Implementar login por navegador y código loopback de un solo uso, Google, passkeys, TOTP, PIN de recuperación, revocación de sesiones y borrado. Configurar dominio/remitente verificados y API key restringida como secreto del VPS.
 - Servir `/status` estáticamente en el mismo VPS; mostrar disponibilidad, incidentes y mantenimiento sin contenido privado.
-- Pendiente probar migraciones/aislamiento en PostgreSQL real, retención de idempotencia, recuperación, publicación de avisos y operación del servicio. La API aún no es un servicio desplegable para usuarios: no hay flujo que cree ni emita sesiones.
+- Pendiente probar migraciones/aislamiento/PIN/rate limits en PostgreSQL real, retención de códigos e idempotencia, recuperación, publicación de avisos y operación del servicio. La API aún no es desplegable para usuarios: el flujo de cuenta no crea ni emite sesiones y faltan límites por origen/IP.
 
 ## M10 — Cliente y sincronización (pendiente)
 

@@ -4,6 +4,12 @@ export type ServiceConfig = {
   port: number;
 };
 
+export type EmailAuthConfig = {
+  resendApiKey: string;
+  resendFrom: string;
+  pinPepper: string;
+};
+
 export function readConfig(environment: NodeJS.ProcessEnv): ServiceConfig {
   const databaseUrl = environment.DATABASE_URL?.trim();
   const host = environment.HOST?.trim() || "127.0.0.1";
@@ -21,4 +27,17 @@ export function readConfig(environment: NodeJS.ProcessEnv): ServiceConfig {
   }
 
   return { databaseUrl, host, port };
+}
+
+export function readEmailAuthConfig(environment: NodeJS.ProcessEnv): EmailAuthConfig | null {
+  if (environment.EMAIL_AUTH_ENABLED?.trim().toLowerCase() !== "true") return null;
+
+  const resendApiKey = environment.RESEND_API_KEY?.trim();
+  const resendFrom = environment.RESEND_FROM?.trim();
+  const pinPepper = environment.AUTH_PIN_PEPPER?.trim();
+  if (!resendApiKey || resendApiKey.length > 256) throw new Error("RESEND_API_KEY no es válido.");
+  if (!resendFrom || resendFrom.length > 254 || /[\r\n]/.test(resendFrom)) throw new Error("RESEND_FROM no es válido.");
+  if (!pinPepper || Buffer.byteLength(pinPepper, "utf8") < 32) throw new Error("AUTH_PIN_PEPPER debe tener al menos 32 bytes.");
+
+  return { resendApiKey, resendFrom, pinPepper };
 }
