@@ -280,6 +280,10 @@ svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width:
 .icon-button:hover, .toolbar-icon:hover, .quiet-icon:hover { color: var(--palette-e8e9ed, #e8e9ed); background: var(--palette-ffffff0a, #ffffff0a); }
 .icon-button svg { width: 17px; height: 17px; }
 .sidebar-menu { margin-left: auto; }
+.app-menu-wrap { position: relative; margin-left: auto; }
+.app-menu { position: absolute; z-index: 18; top: calc(100% + 7px); right: 0; width: 220px; padding: 6px; border: 1px solid var(--line); border-radius: 8px; color: var(--text); background: var(--surface-raised); box-shadow: 0 16px 40px #0007; }
+.app-menu > button { display: block; width: 100%; padding: 8px; border: 0; border-radius: 5px; color: var(--text); background: transparent; text-align: left; font-size: 11px; cursor: pointer; }
+.app-menu > button:hover, .app-menu > button:focus-visible { outline: 0; background: color-mix(in srgb, var(--theme-accent) 12%, var(--surface)); }
 .workspace-picker { height: 49px; display: flex; align-items: center; gap: 9px; width: 100%; padding: 6px 7px; background: var(--palette-1d1e24, #1d1e24); border: 1px solid var(--palette-292a32, #292a32); border-radius: 9px; cursor: pointer; text-align: left; }
 .workspace-picker-wrap { position: relative; }
 .workspace-picker[aria-expanded="true"] { border-color: color-mix(in srgb, var(--theme-accent) 55%, var(--line)); }

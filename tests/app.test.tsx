@@ -95,6 +95,22 @@ test("recupera y guarda el tema y el modo desde Configuración", async () => {
   expect(document.documentElement.dataset.mode).toBe("dark");
 });
 
+test("el menú general abre acciones y se cierra con Escape", async () => {
+  await act(async () => root!.render(<App />));
+
+  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Abrir menú"]')!.click());
+  expect(host.querySelector('[role="menu"][aria-label="Menú de Laural"]')).not.toBeNull();
+
+  await act(async () => buttonIncluding("Configurar proveedor de IA").click());
+  expect(host.querySelector(".provider-dialog h2")?.textContent).toBe("Conecta tu proveedor");
+  expect(host.querySelector('[role="menu"][aria-label="Menú de Laural"]')).toBeNull();
+
+  await act(async () => host.querySelector<HTMLButtonElement>('.provider-dialog [aria-label="Cerrar"]')!.click());
+  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Abrir menú"]')!.click());
+  await act(async () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+  expect(host.querySelector('[role="menu"][aria-label="Menú de Laural"]')).toBeNull();
+});
+
 test("usar una receta activa el modo Agente y prepara el compositor sin enviarlo", async () => {
   await act(async () => root!.render(<App />));
   await act(async () => buttonIncluding("Agente").click());

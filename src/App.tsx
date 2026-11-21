@@ -58,6 +58,7 @@ function App() {
   const [terminalClearRequest, setTerminalClearRequest] = useState({ sequence: 0, terminalId: "" });
   const [terminalActionNotice, setTerminalActionNotice] = useState("");
   const [terminalMoreOpen, setTerminalMoreOpen] = useState(false);
+  const [appMenuOpen, setAppMenuOpen] = useState(false);
   const [commandHistory, setCommandHistory] = useState<CommandHistoryEntry[]>([]);
   const [blocksOpen, setBlocksOpen] = useState(false);
   const [assistantVisible, setAssistantVisible] = useState(() => localStorage.getItem("laural.assistant-visible.v1") !== "false");
@@ -128,6 +129,7 @@ function App() {
   const workspaceMenuRef = useRef<HTMLDivElement>(null);
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const terminalMoreRef = useRef<HTMLDivElement>(null);
+  const appMenuRef = useRef<HTMLDivElement>(null);
   const appearanceSyncReadyRef = useRef(false);
 
   const syncSavedPreferences = useCallback(async () => {
@@ -425,6 +427,22 @@ function App() {
       window.removeEventListener("keydown", closeOnEscape);
     };
   }, [terminalMoreOpen]);
+
+  useEffect(() => {
+    if (!appMenuOpen) return;
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (event.target instanceof Node && !appMenuRef.current?.contains(event.target)) setAppMenuOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setAppMenuOpen(false);
+    };
+    document.addEventListener("mousedown", closeOnOutsideClick);
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("mousedown", closeOnOutsideClick);
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [appMenuOpen]);
 
   function addTerminal(shell: Shell, cwd: string | null = projectPath) {
     const count = tabs.filter((tab) => tab.shell === shell).length + 1;
@@ -844,7 +862,17 @@ function App() {
         <div className="brand-row">
           <div className="brand-mark" aria-hidden="true"><span /><span /></div>
           <span className="brand-name">Laural</span>
-          <button className="icon-button sidebar-menu" aria-label="Abrir menú"><DotsIcon /></button>
+          <div className="app-menu-wrap" ref={appMenuRef}>
+            <button className="icon-button sidebar-menu" aria-label="Abrir menú" aria-expanded={appMenuOpen} aria-haspopup="menu" aria-controls="app-menu" onClick={() => setAppMenuOpen((open) => !open)}><DotsIcon /></button>
+            {appMenuOpen && <div className="app-menu" id="app-menu" role="menu" aria-label="Menú de Laural">
+              <button role="menuitem" onClick={() => { setAppMenuOpen(false); addTerminal("powershell"); }}>Nueva terminal</button>
+              <button role="menuitem" onClick={() => { setAppMenuOpen(false); void openProject(); }}>Abrir carpeta de proyecto</button>
+              <button role="menuitem" onClick={() => { setAppMenuOpen(false); setCommandPaletteView("all"); setCommandPaletteOpen(true); }}>Buscar acciones e historial</button>
+              <button role="menuitem" onClick={() => { setAppMenuOpen(false); setProviderDialogOpen(true); }}>Configurar proveedor de IA</button>
+              <button role="menuitem" onClick={() => { setAppMenuOpen(false); setSettingsOpen(true); }}>Configuración</button>
+              <button role="menuitem" onClick={() => { setAppMenuOpen(false); setHelpOpen(true); }}>Ayuda</button>
+            </div>}
+          </div>
         </div>
         <div className="workspace-picker-wrap" ref={workspaceMenuRef}>
           <button className="workspace-picker" aria-expanded={workspaceMenuOpen} aria-haspopup="menu" aria-controls="workspace-menu" onClick={() => setWorkspaceMenuOpen((open) => !open)}>
