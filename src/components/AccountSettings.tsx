@@ -114,6 +114,22 @@ export function AccountSettings({ onClose, preferences, onImported, onSyncSettle
     }
   }
 
+  async function revokeOtherSessions() {
+    if (!window.confirm("Se cerrarán las demás sesiones de esta cuenta. Este equipo seguirá conectado. Los otros dispositivos tendrán que iniciar sesión de nuevo.")) return;
+    setBusy(true);
+    try {
+      const revoked = await invoke<number>("revoke_other_account_sessions");
+      await loadAccountSessions();
+      setSessionsMessage(revoked === 1
+        ? "Se revocó 1 sesión. Este equipo sigue conectado."
+        : `Se revocaron ${revoked} sesiones. Este equipo sigue conectado.`);
+    } catch {
+      setSessionsMessage("No se pudieron revocar las demás sesiones. Comprueba la conexión e inténtalo de nuevo.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function removeLocalSession() {
     setBusy(true);
     try {
@@ -253,6 +269,7 @@ export function AccountSettings({ onClose, preferences, onImported, onSyncSettle
               <h4 id="account-sessions-title">Sesiones activas</h4>
               <button className="secondary-button" onClick={() => void loadAccountSessions()} disabled={busy}>Actualizar</button>
             </div>
+            <button className="secondary-button" onClick={() => void revokeOtherSessions()} disabled={busy}>Revocar las demás sesiones</button>
             {sessionsMessage && <p className="dialog-copy" role="status" aria-live="polite">{sessionsMessage}</p>}
             {sessions.length > 0 && <ul className="account-session-list">
               {sessions.map((session) => <li key={session.id}>

@@ -23,7 +23,7 @@ const SESSION_ACCOUNT: &str = "account-session";
 const CALLBACK_PATH: &str = "/callback";
 const MAX_CALLBACK_BYTES: usize = 8 * 1024;
 const LOGIN_TIMEOUT: Duration = Duration::from_secs(180);
-const LOGOUT_TIMEOUT: Duration = Duration::from_secs(8);
+const ACCOUNT_API_TIMEOUT: Duration = Duration::from_secs(8);
 const AUTH_EVENT: &str = "account-auth-status";
 static LOGIN_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
 
@@ -71,6 +71,12 @@ pub struct AccountSession {
 #[serde(deny_unknown_fields)]
 struct AccountSessionsResponse {
     sessions: Vec<AccountSession>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RevokedSessionsResponse {
+    revoked: u32,
 }
 
 #[tauri::command]
@@ -169,11 +175,30 @@ pub async fn revoke_account_session(session_id: String) -> Result<bool, String> 
     Ok(response.status() == reqwest::StatusCode::NO_CONTENT)
 }
 
+#[tauri::command]
+pub async fn revoke_other_account_sessions() -> Result<u32, String> {
+    let token = session_token()?;
+    let response = account_api_client()?
+        .post(format!("{SYNC_ORIGIN}/v1/auth/sessions/revoke-others"))
+        .bearer_auth(token.as_str())
+        .send()
+        .await
+        .map_err(|_| "No se pudieron revocar las demás sesiones.".to_string())?;
+    if !response.status().is_success() {
+        return Err("No se pudieron revocar las demás sesiones.".into());
+    }
+    response
+        .json::<RevokedSessionsResponse>()
+        .await
+        .map(|body| body.revoked)
+        .map_err(|_| "La respuesta de revocación no tiene un formato válido.".into())
+}
+
 fn account_api_client() -> Result<Client, String> {
     Client::builder()
         .https_only(true)
         .redirect(Policy::none())
-        .timeout(LOGOUT_TIMEOUT)
+        .timeout(ACCOUNT_API_TIMEOUT)
         .build()
         .map_err(|_| "No se pudo preparar la conexión segura al servicio de cuenta.".to_string())
 }

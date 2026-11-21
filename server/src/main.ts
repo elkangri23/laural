@@ -1,6 +1,6 @@
 import pg from "pg";
 import { createApp } from "./app.js";
-import { createAccountSessionLister, createAccountSessionRevoker, createSessionAuthenticator, createSessionRevoker } from "./auth.js";
+import { createAccountSessionLister, createAccountSessionRevoker, createOtherSessionsRevoker, createSessionAuthenticator, createSessionRevoker } from "./auth.js";
 import { readConfig, readEmailAuthConfig } from "./config.js";
 import { EmailAuthService } from "./email-auth.js";
 import { PostgresEmailAuthStore } from "./postgres-email-auth-store.js";
@@ -29,6 +29,7 @@ const app = createApp({
   revokeSession: createSessionRevoker(pool),
   listAccountSessions: createAccountSessionLister(pool),
   revokeAccountSession: createAccountSessionRevoker(pool),
+  revokeOtherSessions: createOtherSessionsRevoker(pool),
   checkReadiness: async () => { await pool.query("SELECT 1"); },
   requestRateLimiter: new PostgresRequestRateLimiter(pool, config.rateLimitPepper),
   ...(emailAuth ? { emailAuth } : {}),

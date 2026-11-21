@@ -38,7 +38,7 @@ class MemoryStore implements PreferenceStore {
 }
 
 const instances: Array<ReturnType<typeof createApp>> = [];
-function createTestApp(options: { store?: PreferenceStore; checkReadiness?: () => Promise<void>; emailAuth?: EmailAuthService; nativeAuth?: NativeAuthService; requestRateLimiter?: RequestRateLimiter; revokeSession?: (accountId: string, authorization: string | undefined) => Promise<boolean>; listAccountSessions?: (accountId: string, authorization: string | undefined) => Promise<{ id: string; createdAt: string; expiresAt: string; current: boolean }[]>; revokeAccountSession?: (accountId: string, authorization: string | undefined, sessionId: string) => Promise<boolean> } = {}): ReturnType<typeof createApp> {
+function createTestApp(options: { store?: PreferenceStore; checkReadiness?: () => Promise<void>; emailAuth?: EmailAuthService; nativeAuth?: NativeAuthService; requestRateLimiter?: RequestRateLimiter; revokeSession?: (accountId: string, authorization: string | undefined) => Promise<boolean>; listAccountSessions?: (accountId: string, authorization: string | undefined) => Promise<{ id: string; createdAt: string; expiresAt: string; current: boolean }[]>; revokeAccountSession?: (accountId: string, authorization: string | undefined, sessionId: string) => Promise<boolean>; revokeOtherSessions?: (accountId: string, authorization: string | undefined) => Promise<number> } = {}): ReturnType<typeof createApp> {
   const store = options.store ?? new MemoryStore();
   const requestRateLimiter = options.requestRateLimiter ?? new TestRateLimiter();
   const app = createApp({
@@ -50,6 +50,7 @@ function createTestApp(options: { store?: PreferenceStore; checkReadiness?: () =
     revokeSession: options.revokeSession ?? (async () => true),
     listAccountSessions: options.listAccountSessions ?? (async () => []),
     revokeAccountSession: options.revokeAccountSession ?? (async () => true),
+    revokeOtherSessions: options.revokeOtherSessions ?? (async () => 0),
     checkReadiness: options.checkReadiness ?? (async () => undefined),
     requestRateLimiter,
     ...(options.emailAuth ? { emailAuth: options.emailAuth } : {}),
@@ -103,6 +104,17 @@ describe("API de snapshots de preferencias", () => {
     expect((await app.inject({ method: "DELETE", url: "/v1/auth/sessions/not-a-uuid", headers })).statusCode).toBe(400);
     expect((await app.inject({ method: "DELETE", url: "/v1/auth/sessions/d5363ea7-f6cb-4cca-8e03-85aa33089e7a", headers })).statusCode).toBe(204);
     expect(revokeAccountSession).toHaveBeenCalledWith("a", "Bearer account-a", "d5363ea7-f6cb-4cca-8e03-85aa33089e7a");
+  });
+
+  it("revoca todas las demás sesiones conservando la autenticada", async () => {
+    const revokeOtherSessions = vi.fn(async () => 3);
+    const app = createTestApp({ revokeOtherSessions });
+    const headers = { authorization: "Bearer account-a" };
+    expect((await app.inject({ method: "POST", url: "/v1/auth/sessions/revoke-others" })).statusCode).toBe(401);
+    const response = await app.inject({ method: "POST", url: "/v1/auth/sessions/revoke-others", headers });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ revoked: 3 });
+    expect(revokeOtherSessions).toHaveBeenCalledWith("a", "Bearer account-a");
   });
 
   it("limita las lecturas de preferencias por IP y devuelve Retry-After", async () => {

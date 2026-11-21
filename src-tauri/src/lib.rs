@@ -482,6 +482,7 @@ pub fn run() {
             account::clear_account_session,
             account::list_account_sessions,
             account::revoke_account_session,
+            account::revoke_other_account_sessions,
             sync::read_remote_preferences,
             sync::write_remote_preferences,
             sync::confirm_remote_preferences,

@@ -3,6 +3,7 @@
 ## Sin publicar
 
 - Añadida gestión de sesiones de cuenta: consulta limitada a 100 sesiones con fechas y marca «Este equipo», y revocación individual de otras sesiones con confirmación. No se guardan ni muestran IP, ubicación, tokens o huellas de dispositivo; se cubre la API con PostgreSQL real en CI.
+- Añadida una acción confirmada para revocar todas las demás sesiones, incluida cualquier sesión fuera de las 100 mostradas; el token de este equipo se valida de nuevo dentro de la operación SQL y se mantiene activo.
 - Añadida limpieza transaccional al iniciar el servicio y cada hora: PINs de más de 15 minutos, flows/códigos PKCE de más de 24 horas, sesiones revocadas o vencidas e idempotencias de más de 30 días. Las pruebas PostgreSQL comprueban que borra lo antiguo y conserva los registros recientes.
 - Los tests de interfaz ahora esperan la resolución real de los módulos lazy antes de interactuar con sus botones, evitando depender de un retardo fijo y corrigiendo falsos fallos en Windows CI.
 - Añadida revocación remota de la sesión actual al cerrar cuenta: endpoint autenticado con limitador, invalidación por hash en PostgreSQL y cliente Tauri que borra siempre Credential Manager aunque no haya conexión. La interfaz distingue revocación confirmada de cierre solo local.

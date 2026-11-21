@@ -1,6 +1,6 @@
 # Servicio de sincronización de Laural
 
-Backend TypeScript con Fastify y PostgreSQL para snapshots permitidos de preferencias. Incluye API privada, registro/verificación por correo, login web por contraseña con PKCE, revocación de la sesión actual, consulta/revocación de otras sesiones, migraciones, autorización por sesión y control de revisión. La integración nativa de login/cierre de sesión está conectada en Tauri. Caddy sirve la página pública `/status` y un documento editable solo por SSH, fuera del proceso Fastify para que siga disponible si la API se cae. **No incluye login Google, passkeys, TOTP, recuperación ni operación endurecida; no debe publicarse todavía en Internet.**
+Backend TypeScript con Fastify y PostgreSQL para snapshots permitidos de preferencias. Incluye API privada, registro/verificación por correo, login web por contraseña con PKCE, revocación de sesiones propias, migraciones, autorización por sesión y control de revisión. La app permite consultar las 100 sesiones activas más recientes, revocar una sesión ajena o revocarlas todas sin cerrar la actual. La integración nativa usa HTTPS y Credential Manager. Caddy sirve la página pública `/status` y un documento editable solo por SSH, fuera del proceso Fastify para que siga disponible si la API se cae. **No incluye login Google, passkeys, TOTP, recuperación ni operación endurecida; no debe publicarse todavía en Internet.**
 
 ## Requisitos
 

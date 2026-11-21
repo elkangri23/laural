@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { QueryResultRow } from "pg";
-import type { Authenticate, ListAccountSessions, RevokeAccountSession, RevokeSession } from "./contracts.js";
+import type { Authenticate, ListAccountSessions, RevokeAccountSession, RevokeOtherSessions, RevokeSession } from "./contracts.js";
 
 type Queryable = {
   query<T extends QueryResultRow = QueryResultRow>(
@@ -49,6 +49,13 @@ export function createSessionRevoker(database: Queryable): RevokeSession {
           AND s.expires_at > now()
           AND a.email_verified_at IS NOT NULL
           AND a.deleted_at IS NULL
+          AND EXISTS (
+            SELECT 1 FROM account_sessions AS current_session
+             WHERE current_session.account_id = $1
+               AND current_session.token_hash = $2
+               AND current_session.revoked_at IS NULL
+               AND current_session.expires_at > now()
+          )
         RETURNING s.id`,
       [accountId, tokenHash],
     );
@@ -100,10 +107,47 @@ export function createAccountSessionRevoker(database: Queryable): RevokeAccountS
           AND target.expires_at > now()
           AND a.email_verified_at IS NOT NULL
           AND a.deleted_at IS NULL
+          AND EXISTS (
+            SELECT 1 FROM account_sessions AS current_session
+             WHERE current_session.account_id = $1
+               AND current_session.token_hash = $2
+               AND current_session.revoked_at IS NULL
+               AND current_session.expires_at > now()
+          )
         RETURNING target.id`,
       [accountId, tokenHash, sessionId],
     );
     return result.rows.length === 1;
+  };
+}
+
+export function createOtherSessionsRevoker(database: Queryable): RevokeOtherSessions {
+  return async (accountId, authorization) => {
+    const token = sessionTokenFromHeader(authorization);
+    if (!token) return 0;
+    const tokenHash = createHash("sha256").update(token).digest("hex");
+    const result = await database.query(
+      `UPDATE account_sessions AS target
+          SET revoked_at = now()
+         FROM accounts AS a
+        WHERE target.account_id = $1
+          AND target.account_id = a.id
+          AND target.token_hash <> $2
+          AND target.revoked_at IS NULL
+          AND target.expires_at > now()
+          AND a.email_verified_at IS NOT NULL
+          AND a.deleted_at IS NULL
+          AND EXISTS (
+            SELECT 1 FROM account_sessions AS current_session
+             WHERE current_session.account_id = $1
+               AND current_session.token_hash = $2
+               AND current_session.revoked_at IS NULL
+               AND current_session.expires_at > now()
+          )
+        RETURNING target.id`,
+      [accountId, tokenHash],
+    );
+    return result.rows.length;
   };
 }
 

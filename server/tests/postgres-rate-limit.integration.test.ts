@@ -2,7 +2,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import pg, { type Pool } from "pg";
 import { createApp } from "../src/app.js";
-import { createAccountSessionLister, createAccountSessionRevoker, createSessionAuthenticator, createSessionRevoker } from "../src/auth.js";
+import { createAccountSessionLister, createAccountSessionRevoker, createOtherSessionsRevoker, createSessionAuthenticator, createSessionRevoker } from "../src/auth.js";
 import { EmailAuthService } from "../src/email-auth.js";
 import { applyMigrations, MIGRATION_FILES } from "../src/migration-runner.js";
 import { NativeAuthService } from "../src/native-auth.js";
@@ -205,6 +205,7 @@ describePostgres("integración real de PostgreSQL para rate limits", () => {
       revokeSession: createSessionRevoker(isolatedPool),
       listAccountSessions: createAccountSessionLister(isolatedPool),
       revokeAccountSession: createAccountSessionRevoker(isolatedPool),
+      revokeOtherSessions: createOtherSessionsRevoker(isolatedPool),
       checkReadiness: async () => { await isolatedPool.query("SELECT 1"); },
       requestRateLimiter: new PostgresRequestRateLimiter(isolatedPool, "integracion-rate-limit-pepper-32-bytes-minimo"),
       emailAuth,
@@ -287,6 +288,23 @@ describePostgres("integración real de PostgreSQL para rate limits", () => {
       const otherRevoked = await app.inject({ method: "DELETE", url: `/v1/auth/sessions/${otherSession?.id}`, headers: { authorization: `Bearer ${session.sessionToken}` } });
       expect(otherRevoked.statusCode).toBe(204);
       expect((await app.inject({ method: "GET", url: "/v1/preferences/current", headers: { authorization: `Bearer ${otherToken}` } })).statusCode).toBe(401);
+      expect((await app.inject({ method: "GET", url: "/v1/preferences/current", headers: { authorization: `Bearer ${session.sessionToken}` } })).statusCode).toBe(200);
+
+      const extraTokens = [randomBytes(32).toString("base64url"), randomBytes(32).toString("base64url")];
+      const extraHashes = extraTokens.map((token) => createHash("sha256").update(token).digest("hex"));
+      await isolatedPool.query(
+        `INSERT INTO account_sessions (account_id, token_hash, expires_at)
+         SELECT account_sessions.account_id, tokens.token_hash, now() + interval '30 days'
+           FROM account_sessions CROSS JOIN unnest($2::text[]) AS tokens(token_hash)
+          WHERE account_sessions.token_hash = $1`,
+        [createHash("sha256").update(session.sessionToken).digest("hex"), extraHashes],
+      );
+      const revokedOthers = await app.inject({ method: "POST", url: "/v1/auth/sessions/revoke-others", headers: { authorization: `Bearer ${session.sessionToken}` } });
+      expect(revokedOthers.statusCode).toBe(200);
+      expect(revokedOthers.json()).toEqual({ revoked: 2 });
+      for (const token of extraTokens) {
+        expect((await app.inject({ method: "GET", url: "/v1/preferences/current", headers: { authorization: `Bearer ${token}` } })).statusCode).toBe(401);
+      }
       expect((await app.inject({ method: "GET", url: "/v1/preferences/current", headers: { authorization: `Bearer ${session.sessionToken}` } })).statusCode).toBe(200);
 
       const initial = await app.inject({

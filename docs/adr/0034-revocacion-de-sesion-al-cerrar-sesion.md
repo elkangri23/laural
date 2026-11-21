@@ -21,7 +21,7 @@ La sesión de cuenta dura hasta 30 días y su token se conserva en Windows Crede
 - El cierre de sesión invalida el token actual cuando hay conexión; otras sesiones del usuario siguen activas.
 - Un atacante con el bearer puede cerrar esa sesión, lo cual equivale a tener ya el acceso de la cuenta. La operación no permite revocar otras sesiones.
 - La pérdida de conexión puede dejar una sesión remota válida hasta 30 días. No presentar el caso offline como revocación confirmada.
-- Antes de habilitar cuentas en producción hay que verificar el endpoint detrás de Caddy/VPS. La revocación de otros dispositivos y el cierre/borrado total de cuenta quedan fuera de esta decisión.
+- Antes de habilitar cuentas en producción hay que verificar el endpoint detrás de Caddy/VPS. La revocación de otras sesiones se define en [ADR-0036](0036-gestion-de-sesiones-de-cuenta.md); el cierre/borrado total de cuenta queda fuera de esta decisión.
 
 ## Evidencia
 

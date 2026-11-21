@@ -76,6 +76,22 @@ test("muestra sesiones activas y pide confirmación para revocar otra", async ()
   expect(host.textContent).not.toContain("Otro inicio de sesión");
 });
 
+test("revoca las demás sesiones sin desconectar este equipo", async () => {
+  mocks.invoke.mockImplementation(async (command: string) => {
+    if (command === "account_session_status") return true;
+    if (command === "list_account_sessions") return [{ id: "d5363ea7-f6cb-4cca-8e03-85aa33089e7b", createdAt: "2026-11-21T10:00:00.000Z", expiresAt: "2026-12-21T10:00:00.000Z", current: true }];
+    if (command === "revoke_other_account_sessions") return 4;
+    return undefined;
+  });
+  vi.stubGlobal("confirm", vi.fn(() => true));
+  await act(async () => root.render(renderAccountSettings()));
+  const revokeAll = [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Revocar las demás sesiones");
+  await act(async () => revokeAll?.click());
+  expect(mocks.invoke).toHaveBeenCalledWith("revoke_other_account_sessions");
+  expect(host.textContent).toContain("Se revocaron 4 sesiones");
+  expect(host.textContent).toContain("Este equipo sigue conectado");
+});
+
 test("presenta errores de navegador y del almacén local", async () => {
   mocks.invoke.mockImplementation(async (command: string) => {
     if (command === "account_session_status") return false;

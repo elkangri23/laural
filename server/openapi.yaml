@@ -241,6 +241,25 @@ paths:
         '401': { description: Sesión actual no válida }
         '404': { description: Sesión inexistente, no activa, propia o de otra cuenta }
         '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/auth/sessions/revoke-others:
+    post:
+      summary: Revoca todas las sesiones activas salvo la actual
+      description: Operación idempotente autenticada. No afecta a la sesión bearer presentada.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Número de sesiones revocadas
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [revoked]
+                properties:
+                  revoked: { type: integer, minimum: 0 }
+        '401': { description: Sesión actual no válida }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /v1/auth/register:
     post:
       summary: Crea una cuenta pendiente y solicita la verificación de correo

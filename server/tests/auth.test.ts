@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
-import { createAccountSessionLister, createAccountSessionRevoker, createSessionAuthenticator, createSessionRevoker } from "../src/auth.js";
+import { createAccountSessionLister, createAccountSessionRevoker, createOtherSessionsRevoker, createSessionAuthenticator, createSessionRevoker } from "../src/auth.js";
 
 describe("autenticación de sesiones", () => {
   it("rechaza cabeceras ausentes o tokens con formato inválido antes de consultar", async () => {
@@ -59,5 +59,17 @@ describe("autenticación de sesiones", () => {
     expect(await revoke("acct-1", `Bearer ${token}`, "session-other")).toBe(true);
     expect(await revoke("acct-1", `Bearer ${token}`, "session-current")).toBe(false);
     expect(await revoke("acct-2", "Bearer invalid", "session-other")).toBe(false);
+  });
+
+  it("revoca todas las sesiones activas excepto el token actual", async () => {
+    const token = "F".repeat(43);
+    const query = vi.fn(async () => ({ rows: [{ id: "session-old" }, { id: "session-tablet" }] }));
+    const revoke = createOtherSessionsRevoker({ query });
+    expect(await revoke("acct-1", `Bearer ${token}`)).toBe(2);
+    expect(query.mock.calls[0]?.[1]).toEqual(["acct-1", createHash("sha256").update(token).digest("hex")]);
+    expect(query.mock.calls[0]?.[0]).toContain("target.token_hash <> $2");
+    expect(query.mock.calls[0]?.[0]).toContain("target.expires_at > now()");
+    expect(await revoke("acct-1", "Bearer invalid")).toBe(0);
+    expect(query).toHaveBeenCalledTimes(1);
   });
 });

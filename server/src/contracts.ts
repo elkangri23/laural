@@ -27,4 +27,5 @@ export type RevokeSession = (accountId: string, authorization: string | undefine
 export type AccountSession = { id: string; createdAt: string; expiresAt: string; current: boolean };
 export type ListAccountSessions = (accountId: string, authorization: string | undefined) => Promise<AccountSession[]>;
 export type RevokeAccountSession = (accountId: string, authorization: string | undefined, sessionId: string) => Promise<boolean>;
+export type RevokeOtherSessions = (accountId: string, authorization: string | undefined) => Promise<number>;
 export type ReadinessCheck = () => Promise<void>;

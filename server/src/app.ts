@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import Fastify, { type FastifyInstance } from "fastify";
 import formbody from "@fastify/formbody";
 import { Ajv2020 } from "ajv/dist/2020.js";
-import type { PreferenceSnapshot, PreferenceStore, ReadinessCheck, Authenticate, ListAccountSessions, RevokeAccountSession, RevokeSession } from "./contracts.js";
+import type { PreferenceSnapshot, PreferenceStore, ReadinessCheck, Authenticate, ListAccountSessions, RevokeAccountSession, RevokeOtherSessions, RevokeSession } from "./contracts.js";
 import type { EmailAuthService } from "./email-auth.js";
 import { NativeAuthService, validateNativeFlowParameters } from "./native-auth.js";
 import type { RequestRateLimiter } from "./request-rate-limit.js";
@@ -19,6 +19,7 @@ export type AppDependencies = {
   revokeSession: RevokeSession;
   listAccountSessions: ListAccountSessions;
   revokeAccountSession: RevokeAccountSession;
+  revokeOtherSessions: RevokeOtherSessions;
   checkReadiness: ReadinessCheck;
   emailAuth?: EmailAuthService;
   nativeAuth?: NativeAuthService;
@@ -89,6 +90,14 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
       return reply.code(404).send({ error: "not_found" });
     }
     return reply.code(204).send();
+  });
+
+  app.post("/v1/auth/sessions/revoke-others", { preHandler: limited(rateLimit, "session-revoke-others", 5, 60) }, async (request, reply) => {
+    const authorization = request.headers.authorization;
+    const accountId = await dependencies.authenticate(authorization);
+    if (!accountId) return reply.code(401).send({ error: "unauthorized" });
+    const revoked = await dependencies.revokeOtherSessions(accountId, authorization);
+    return reply.send({ revoked });
   });
 
   if (emailAuth && nativeAuth) {
