@@ -79,7 +79,7 @@ Estado al 21 de noviembre de 2026. «Implementado» describe código presente; �
 
 El flujo de exportar/importar `.laural` ya está integrado en Configuración. Incluye vista previa, fusión o reemplazo, validación de formato y URLs, exclusión de claves por defecto, cifrado Argon2id + AES-256-GCM cuando se eligen claves, copia previa local y rollback de credenciales ante fallos del almacén. La importación no guarda claves en el WebView.
 
-Pendiente antes de dar M8 por cerrado: pruebas de integración con fallos reales de Credential Manager y escritura de `providers.json`, ensayo manual de exportación/importación en Windows limpio, comprobación de recuperación de copias y alcanzar la cobertura acordada para el módulo. La sincronización de cuenta sigue siendo una fase posterior.
+Añadidas regresiones que simulan el fallo al escribir una credencial y comprueban tanto el rollback satisfactorio como el mensaje/localización de copia cuando el rollback también falla. Pendiente antes de dar M8 por cerrado: pruebas de integración con fallos reales de Credential Manager y escritura de `providers.json`, ensayo manual de exportación/importación en Windows limpio, comprobación de recuperación de copias y obtener cobertura Rust específica. En el entorno actual `cargo-llvm-cov` ejecuta los tests pero no produce datos de cobertura válidos. La sincronización de cuenta sigue siendo una fase posterior.
 
 - Exportar/importar sin cuenta ni conexión al servicio, con schema versionado, vista previa, fusión/reemplazo y backup previo.
 - Exportar claves solo con consentimiento, contraseña obligatoria y cifrado autenticado; importarlas directamente en Credential Manager y revertir fallos sin aplicar parcialmente.

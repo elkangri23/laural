@@ -833,16 +833,51 @@ fn backup_path(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(directory.join(format!("configuracion-{timestamp}.laural")))
 }
 
-fn restore_credentials(previous: &[(String, Option<zeroize::Zeroizing<String>>)]) -> bool {
+fn restore_credentials_with(
+    previous: &[(String, Option<zeroize::Zeroizing<String>>)],
+    mut write: impl FnMut(&str, &str) -> Result<(), String>,
+    mut delete: impl FnMut(&str) -> Result<(), String>,
+) -> bool {
     let mut restored = true;
     for (provider_id, old_key) in previous.iter().rev() {
         let result = match old_key {
-            Some(key) => write_api_key(provider_id, key),
-            None => delete_api_key(provider_id),
+            Some(key) => write(provider_id, key),
+            None => delete(provider_id),
         };
         restored &= result.is_ok();
     }
     restored
+}
+
+fn apply_credentials_with(
+    updates: &HashMap<String, Option<zeroize::Zeroizing<String>>>,
+    previous: &HashMap<String, Option<zeroize::Zeroizing<String>>>,
+    backup_path: &str,
+    mut write: impl FnMut(&str, &str) -> Result<(), String>,
+    mut delete: impl FnMut(&str) -> Result<(), String>,
+) -> Result<(), String> {
+    let mut applied = Vec::new();
+    for (provider_id, new_key) in updates {
+        applied.push((
+            provider_id.clone(),
+            previous.get(provider_id).cloned().flatten(),
+        ));
+        let result = match new_key {
+            Some(key) => write(provider_id, key),
+            None => delete(provider_id),
+        };
+        if result.is_err() {
+            let restored = restore_credentials_with(&applied, &mut write, &mut delete);
+            return Err(if restored {
+                "No se pudo actualizar el almacén de claves; la configuración anterior se ha restaurado.".into()
+            } else {
+                format!(
+                    "Falló el cambio de claves y no se pudo completar el rollback. La copia recuperable está en {backup_path}."
+                )
+            });
+        }
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -962,30 +997,26 @@ fn import_configuration_inner(
     let backup_string = backup.to_string_lossy().into_owned();
     write_transfer_file(&backup_string, &backup_bytes)?;
 
-    let mut applied_credentials = Vec::new();
-    for (provider_id, new_key) in &key_updates {
-        applied_credentials.push((
-            provider_id.clone(),
-            previous_credentials.get(provider_id).cloned().flatten(),
-        ));
-        let result = match new_key {
-            Some(key) => write_api_key(provider_id, key),
-            None => delete_api_key(provider_id),
-        };
-        if result.is_err() {
-            let restored = restore_credentials(&applied_credentials);
-            return Err(if restored {
-                "No se pudo actualizar el almacén de claves; la configuración anterior se ha restaurado.".into()
-            } else {
-                format!(
-                    "Falló el cambio de claves y no se pudo completar el rollback. La copia recuperable está en {backup_string}."
-                )
-            });
-        }
-    }
+    apply_credentials_with(
+        &key_updates,
+        &previous_credentials,
+        &backup_string,
+        write_api_key,
+        delete_api_key,
+    )?;
 
     if let Err(error) = write_provider_store(&app, &new_store) {
-        let restored = restore_credentials(&applied_credentials);
+        let applied_credentials: Vec<_> = key_updates
+            .keys()
+            .map(|provider_id| {
+                (
+                    provider_id.clone(),
+                    previous_credentials.get(provider_id).cloned().flatten(),
+                )
+            })
+            .collect();
+        let restored =
+            restore_credentials_with(&applied_credentials, write_api_key, delete_api_key);
         return Err(if restored {
             error
         } else {
@@ -1997,6 +2028,70 @@ mod tests {
         );
         assert!(validate_transfer_path("settings.json").is_err());
         assert!(read_transfer_file("missing.laural").is_err());
+    }
+
+    #[test]
+    fn rollback_de_clave_restablece_valor_si_falla_la_escritura() {
+        let store = std::cell::RefCell::new(HashMap::from([(
+            "perfil".to_string(),
+            "clave-anterior".to_string(),
+        )]));
+        let updates = HashMap::from([(
+            "perfil".to_string(),
+            Some(zeroize::Zeroizing::new("clave-nueva".to_string())),
+        )]);
+        let previous = HashMap::from([(
+            "perfil".to_string(),
+            Some(zeroize::Zeroizing::new("clave-anterior".to_string())),
+        )]);
+
+        let result = apply_credentials_with(
+            &updates,
+            &previous,
+            "copia.laural",
+            |id, value| {
+                if value == "clave-nueva" {
+                    return Err("fallo simulado".into());
+                }
+                store.borrow_mut().insert(id.to_string(), value.to_string());
+                Ok(())
+            },
+            |id| {
+                store.borrow_mut().remove(id);
+                Ok(())
+            },
+        );
+
+        assert!(
+            result
+                .unwrap_err()
+                .contains("configuración anterior se ha restaurado")
+        );
+        assert_eq!(store.borrow().get("perfil").unwrap(), "clave-anterior");
+    }
+
+    #[test]
+    fn rollback_incompleto_indica_la_copia_recuperable() {
+        let updates = HashMap::from([(
+            "perfil".to_string(),
+            Some(zeroize::Zeroizing::new("clave-nueva".to_string())),
+        )]);
+        let previous = HashMap::from([(
+            "perfil".to_string(),
+            Some(zeroize::Zeroizing::new("clave-anterior".to_string())),
+        )]);
+
+        let result = apply_credentials_with(
+            &updates,
+            &previous,
+            "C:\\Laural\\transfer-backups\\copia.laural",
+            |_id, _value| Err("fallo simulado".into()),
+            |_id| Ok(()),
+        );
+
+        let error = result.unwrap_err();
+        assert!(error.contains("no se pudo completar el rollback"));
+        assert!(error.contains("copia.laural"));
     }
 
     #[test]
