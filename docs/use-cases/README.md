@@ -21,7 +21,7 @@ Los casos describen el comportamiento esperado del producto. Los estados disting
 | UC-18 | Transferir claves en archivo cifrado | Usuario | Implementación inicial; pruebas de rollback pendientes |
 | UC-19 | Activar cuenta y escoger snapshot inicial | Usuario | Login Tauri y elección manual inicial disponibles; VPS pendiente |
 | UC-20 | Sincronizar cambios y resolver conflicto | Usuario | Cliente manual/automático inicial; VPS y reconexión real pendientes |
-| UC-21 | Recuperar acceso tras perder factores | Usuario/administrador | Diseño aprobado; runbook pendiente |
+| UC-21 | Recuperar acceso tras perder factores | Usuario/administrador | Runbook documentado; MFA y recuperación no implementadas |
 | UC-22 | Consultar estado público del servicio | Visitante | Página y contrato iniciales; despliegue y operación pendientes |
 | UC-23 | Consultar rama, cambios y diff Git | Desarrollador | Implementación inicial de solo lectura |
 | UC-24 | Preparar una tarea repetible con una receta del agente | Desarrollador | Implementación inicial; se guarda localmente |

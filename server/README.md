@@ -78,4 +78,4 @@ Consulta el contrato en [OpenAPI](openapi.yaml), el [diseño aprobado](../docs/d
 
 ## Límites pendientes antes de producción
 
-Faltan validar límites detrás de Caddy en el VPS, probar autenticación y flujos con la base del servicio, desplegar TLS, monitorear, acordar el proceso de incidentes, configurar Resend y recuperación de cuenta, y completar la revisión de lanzamiento. La página pública de status está en el código pero aún no se ha desplegado. Los snapshots no están cifrados de extremo a extremo: el operador del VPS puede leer las preferencias permitidas.
+Faltan validar límites detrás de Caddy en el VPS, probar autenticación y flujos con la base del servicio, desplegar TLS, monitorear, acordar el proceso de incidentes, configurar Resend e implementar/ensayar MFA y recuperación conforme al [runbook](../docs/runbooks/recuperacion-cuenta.md), y completar la revisión de lanzamiento. La página pública de status está en el código pero aún no se ha desplegado. Los snapshots no están cifrados de extremo a extremo: el operador del VPS puede leer las preferencias permitidas.

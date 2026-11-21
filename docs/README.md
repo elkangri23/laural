@@ -25,6 +25,7 @@ Este índice reúne las decisiones y requisitos de la etapa inicial. El código 
 - [Privacidad y datos](security/privacy.md)
 - [Modelo de amenazas](security/threat-model.md)
 - [Informe de auditoría de seguridad](security/audit-report.md)
+- [Runbooks operativos](runbooks/README.md)
 - [Política de seguridad](../SECURITY.md)
 
 ## Guías de uso y mantenimiento

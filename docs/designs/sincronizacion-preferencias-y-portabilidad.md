@@ -58,7 +58,7 @@ The feature must preserve local-only use and manual transfer as complete options
 * The client enforces the acknowledgment before automatic snapshot construction/network sync as well as before manual comparison, upload, or cloud application. Signing in alone does not acknowledge the risk or trigger sync.
 * Laural remains local-first: sync is optional, local settings continue working, and users should retain their devices or use manual export/import when implemented. Cloud sync must not be presented as the only copy of a user's configuration.
 
-### Lost-factor account recovery (recommended runbook)
+### Lost-factor account recovery (approved runbook; implementation pending)
 
 * When a user enrolls MFA, generate single-use recovery codes, show them once, store only verifiers on the service, and require the user to confirm they saved them.
 * The six-digit email PIN proves control of the mailbox only. It may open a support case but never grants a session or removes MFA by itself.
@@ -66,7 +66,7 @@ The feature must preserve local-only use and manual transfer as complete options
 * If no independent proof remains, do not bypass MFA based on personal details, provider names, or configuration trivia. Explain that the account cannot be safely recovered and let the user create a new account. This avoids making the support process weaker than sign-in; OWASP notes that recovery is an alternate authentication path and that MFA bypass/reset can be exploited.
 * On approval, revoke every session, remove only the lost factors, require the user to set up a new factor at next sign-in, and retain a minimal decision audit. No public endpoint or public admin panel can perform this action.
 
-The no-off-site-copy decision is accepted. The recovery-code feature, administrator procedure and disclosures still need implementation and verification before public account sync. The runbook recommendation follows [OWASP MFA guidance](https://cheatsheetseries.owasp.org/cheatsheets/Multifactor_Authentication_Cheat_Sheet.html), which recommends single-use recovery codes and warns that MFA reset paths can be exploited.
+The no-off-site-copy decision is accepted. The [account recovery runbook](../runbooks/recuperacion-cuenta.md) now records the approved mailbox PIN, independent pre-existing proof, administrator decision, session revocation, notice, and minimal audit requirements. MFA, recovery-code handling, the privileged VPS operation, and operational rehearsal still need implementation and verification before public account sync. The policy follows [OWASP MFA guidance](https://cheatsheetseries.owasp.org/cheatsheets/Multifactor_Authentication_Cheat_Sheet.html), which recommends single-use recovery codes and warns that MFA reset paths can be exploited.
 
 --------------------------------------------------------------------------------
 
@@ -324,7 +324,7 @@ Unless noted otherwise, paths in this table are relative to the repository root.
 | `docs/adr/0023-servicio-de-sincronizacion.md` (create) | Record Fastify/PostgreSQL, API origin, revision protocol, backup/deletion boundary and administrator recovery decisions. |
 | `docs/plans/concepts_brief.md`, `docs/plans/sincronizacion-preferencias.md`, `docs/ROADMAP.md`, `docs/BACKLOG.md`, `docs/PRODUCT_BRIEF.md`, `docs/architecture/overview.md` (modify) | Keep feature scope, architecture, milestones and backlog aligned with delivery. |
 | `docs/configuracion.md`, `docs/instalacion.md`, `docs/security/privacy.md`, `docs/security/threat-model.md`, `docs/security/README.md`, `SUPPORT.md` (modify) | Explain setup, account-free transfer, sync exclusions, service-readable data, recovery, deletion, public status limitations, threats and operator procedures. |
-| `docs/security/account-recovery-runbook.md` (create) | Give the administrator the manual evidence-review, decision, notification, session-revocation and audit steps; mailbox PIN alone is insufficient. |
+| `docs/runbooks/recuperacion-cuenta.md` (created) | Gives the administrator the manual evidence-review, decision, notification, session-revocation and audit steps; mailbox PIN alone is insufficient. |
 | `docs/use-cases/README.md`, `docs/requirements/README.md` (modify), `docs/use-cases/sincronizacion-preferencias.md` (create) | Document and index local transfer, first login, conflict, outage, factor loss, revocation and deletion journeys. |
 | `README.md`, `docs/README.md`, `CHANGELOG.md` (modify) | Publish project setup, feature navigation, user-visible changes and release notes. |
 
@@ -348,7 +348,7 @@ Unless noted otherwise, paths in this table are relative to the repository root.
 ### Release blockers to resolve
 
 * Document whether a same-VPS database copy will be configured and its retention/deletion behavior. It does not protect against total VPS loss; no off-site copy is allowed by the accepted decision.
-* Approve the administrator recovery runbook's evidence checklist and notification timing before enabling requests.
+* Implement and rehearse the approved administrator recovery checklist and security notification before enabling requests.
 
 
 

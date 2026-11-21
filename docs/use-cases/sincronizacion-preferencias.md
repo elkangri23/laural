@@ -1,6 +1,6 @@
 # Casos de uso: portabilidad y sincronización
 
-- **Estado:** UC-17/18 tienen una implementación inicial; login Tauri y cliente manual/automático de sincronización están implementados. Pendientes pruebas de reconexión, sondeo real y VPS. Revocación y recuperación siguen pendientes; UC-22 tiene sitio y contrato local estático, con operación VPS pendiente.
+- **Estado:** UC-17/18 tienen una implementación inicial; login Tauri, revocación de sesiones y cliente manual/automático están implementados. Pendientes pruebas de reconexión, sondeo real y VPS. UC-21 tiene runbook documentado, pero MFA/recuperación no están implementadas; UC-22 tiene sitio y contrato local estático, con operación VPS pendiente.
 - **Especificación:** [plan de sincronización](../plans/sincronizacion-preferencias.md).
 - **Diseño técnico:** [diseño formal](../designs/sincronizacion-preferencias-y-portabilidad.md).
 

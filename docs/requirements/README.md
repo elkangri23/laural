@@ -31,7 +31,7 @@ Los requisitos distinguen el alcance acordado del estado actual del prototipo. �
 | FR-23 | Exportar/importar preferencias y, opcionalmente, claves de proveedor entre equipos sin cuenta. | Diseño aprobado; pendiente. Las claves solo podrán exportarse cifradas con contraseña obligatoria; sincronización nunca las incluye |
 | FR-24 | Proteger la cuenta de sincronización con email/contraseña, Google, passkeys y TOTP; usar PIN de correo solo para verificación/recuperación y enviar el correo transaccional con Resend desde el backend. | Diseño aprobado; pendiente implementación, dominio/remitente verificados y secreto Resend en el VPS |
 | FR-25 | Mostrar disponibilidad, incidentes, acciones en curso y mantenimiento en una página pública sin autenticación. | Diseño aprobado; pendiente implementación en el mismo VPS |
-| FR-26 | Permitir que el administrador revise manualmente una solicitud tras perder todos los factores; el PIN no retira MFA. | Diseño aprobado; pendiente runbook y controles antes de activar |
+| FR-26 | Permitir que el administrador revise manualmente una solicitud tras perder todos los factores; el PIN no retira MFA. | Runbook documentado; MFA, códigos de recuperación, acción privilegiada y ensayo pendientes |
 
 ## No funcionales
 

@@ -34,7 +34,7 @@ ADR-0020 decide el alcance funcional: una transferencia local sin cuenta y sincr
 - Los endpoints personalizados requieren consentimiento por perfil y pueden revelar nombres de host privados al operador.
 - Los conflictos no se fusionan por campo y requieren elección humana con copia recuperable previa.
 - Los snapshots de recuperación visibles no caducan automáticamente. No se configurarán copias de desastre fuera del VPS, según ADR-0024. La pérdida total del host puede destruir datos de cuenta y snapshots; la app debe comunicar esta limitación antes de habilitar sync. La existencia de una copia de PostgreSQL dentro del VPS sigue sin decidirse y no protege ante la pérdida del host.
-- La propuesta de recuperación genera códigos de un solo uso al activar MFA; el administrador solo retira factores con PIN de correo y una prueba independiente preexistente, revoca sesiones y notifica. Si no hay prueba independiente, no se retiran factores. Falta implementar y ensayar el runbook antes de habilitar el flujo.
+- La recuperación generará códigos de un solo uso al activar MFA; el administrador solo retira factores con PIN de correo y prueba independiente preexistente, revoca sesiones y notifica. Si no hay prueba independiente, no se retiran factores. El [runbook](../runbooks/recuperacion-cuenta.md) está documentado; faltan implementar factores/códigos, el mecanismo administrativo local al VPS y ensayar el proceso antes de habilitarlo.
 - El diseño aprobado no afirma que el backend o la UI estén implementados.
 
 ## Evidencia
