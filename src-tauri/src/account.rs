@@ -23,6 +23,7 @@ const SESSION_ACCOUNT: &str = "account-session";
 const CALLBACK_PATH: &str = "/callback";
 const MAX_CALLBACK_BYTES: usize = 8 * 1024;
 const LOGIN_TIMEOUT: Duration = Duration::from_secs(180);
+const LOGOUT_TIMEOUT: Duration = Duration::from_secs(8);
 const AUTH_EVENT: &str = "account-auth-status";
 static LOGIN_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
 
@@ -105,12 +106,44 @@ pub fn start_account_login(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn clear_account_session() -> Result<(), String> {
+pub async fn clear_account_session() -> Result<bool, String> {
+    let token = read_session()?;
+    let remotely_revoked = match token.as_deref() {
+        Some(token) => revoke_remote_session(token).await,
+        None => false,
+    };
     let entry = session_entry()?;
     match entry.delete_credential() {
-        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+        Ok(()) | Err(keyring::Error::NoEntry) => Ok(remotely_revoked),
         Err(_) => Err("No se pudo borrar la sesión del almacén seguro de Windows.".into()),
     }
+}
+
+async fn revoke_remote_session(token: &str) -> bool {
+    let Ok(client) = Client::builder()
+        .https_only(true)
+        .redirect(Policy::none())
+        .timeout(LOGOUT_TIMEOUT)
+        .build()
+    else {
+        return false;
+    };
+    let Ok(response) = client
+        .post(format!("{SYNC_ORIGIN}/v1/auth/session/revoke"))
+        .bearer_auth(token)
+        .send()
+        .await
+    else {
+        return false;
+    };
+    remote_revocation_confirmed(response.status())
+}
+
+fn remote_revocation_confirmed(status: reqwest::StatusCode) -> bool {
+    matches!(
+        status,
+        reqwest::StatusCode::NO_CONTENT | reqwest::StatusCode::UNAUTHORIZED
+    )
 }
 
 fn run_callback(
@@ -434,5 +467,16 @@ mod tests {
         let token = random_token().unwrap();
         assert!(valid_token(&token));
         assert!(!valid_token("bad token"));
+    }
+
+    #[test]
+    fn clasifica_resultados_de_revocacion_sin_tratar_fallos_como_confirmados() {
+        assert!(remote_revocation_confirmed(reqwest::StatusCode::NO_CONTENT));
+        assert!(remote_revocation_confirmed(
+            reqwest::StatusCode::UNAUTHORIZED
+        ));
+        assert!(!remote_revocation_confirmed(
+            reqwest::StatusCode::SERVICE_UNAVAILABLE
+        ));
     }
 }

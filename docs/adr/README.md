@@ -37,6 +37,7 @@ Los ADR registran por qué se eligió una opción y qué costes trae. Un ADR ace
 | [0031](0031-recetas-locales-del-agente.md) | Recetas locales como instrucciones revisables para el agente | Aceptada; versión inicial disponible |
 | [0032](0032-pagina-publica-de-estado.md) | Estado público servido en el mismo VPS y actualizado por SSH | Aceptada; implementación inicial, despliegue pendiente |
 | [0033](0033-limites-persistentes-por-ip.md) | Límites atómicos por IP/ruta en PostgreSQL con huella HMAC | Aceptada; código y migración listos, validación VPS pendiente |
+| [0034](0034-revocacion-de-sesion-al-cerrar-sesion.md) | Revocar la sesión actual al cerrar sesión, con limpieza local aun sin red | Aceptada; API y cliente implementados, VPS pendiente |
 
 ## Crear un ADR
 

@@ -18,7 +18,7 @@
 
 ## Consecuencias
 
-- La sesión nunca cruza IPC al WebView y puede revocarse localmente eliminando la credencial guardada (la revocación remota queda pendiente).
+- La sesión nunca cruza IPC al WebView. Al cerrar sesión, el cliente intenta revocarla remotamente y elimina la credencial local incluso si el servidor no responde; la UI comunica el resultado.
 - Una elección reemplaza el snapshot completo. No existe fusión por campo ni política de última escritura gana.
 - Los IDs de credenciales que dejan de estar en perfiles pueden quedar como credenciales huérfanas en el almacén seguro; esta entrega no las borra ni las sincroniza.
 - El cliente requiere que el contrato del API siga respondiendo el snapshot y revisión documentados. El despliegue del VPS y las pruebas reales de reconexión todavía no se han realizado.

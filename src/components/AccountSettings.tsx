@@ -82,9 +82,12 @@ export function AccountSettings({ onClose, preferences, onImported, onSyncSettle
   async function removeLocalSession() {
     setBusy(true);
     try {
-      await invoke("clear_account_session");
+      const remotelyRevoked = await invoke<boolean>("clear_account_session");
       setConnected(false);
-      setMessage("Se quitó la sesión guardada en este equipo. El servidor puede aceptarla hasta que caduque; la revocación remota está pendiente.");
+      window.dispatchEvent(new Event("laural:account-disconnected"));
+      setMessage(remotelyRevoked
+        ? "Sesión cerrada en este equipo; el servidor confirmó que ya no es válida."
+        : "Sesión quitada de este equipo. No se pudo confirmar la revocación remota; el servidor podría aceptarla hasta su vencimiento.");
     } catch {
       setMessage("No se pudo quitar la sesión del almacén seguro de Windows.");
     } finally {
@@ -213,7 +216,7 @@ export function AccountSettings({ onClose, preferences, onImported, onSyncSettle
         </>
         : <button className="primary-button" onClick={() => void beginLogin()} disabled={busy || !listenerReady || !sessionReady}>{busy ? "Esperando en el navegador…" : "Iniciar sesión"}</button>}
       {connected && <p className="dialog-copy account-note">Solo se sincronizan las preferencias permitidas y los perfiles de proveedor. Las claves API permanecen en el almacén seguro de este equipo. Los endpoints personalizados solo se incluyen si activaste compartirlos en cada perfil.</p>}
-      {connected && <p className="dialog-copy account-note">Al quitar la cuenta aquí, el servidor puede mantener la sesión válida hasta 30 días; la revocación remota se añadirá en otra etapa.</p>}
+      {connected && <p className="dialog-copy account-note">Al quitar la cuenta, Laural intenta revocar la sesión del servidor y borra siempre la credencial de este equipo. Si no hay conexión, la sesión remota puede seguir válida hasta su vencimiento.</p>}
     </section>
   </SettingsDialog>;
 }

@@ -1,6 +1,6 @@
 # ADR-0028: Login nativo mediante navegador y PKCE
 
-- **Estado:** Aceptada; integración inicial de servidor y cliente implementada, validación con VPS pendiente
+- **Estado:** Aceptada; login PKCE y revocación de la sesión actual implementados, validación con VPS pendiente
 - **Fecha:** 2026-11-21
 - **Decisores:** Antonio Moles
 
@@ -21,10 +21,11 @@ El login de Laural debe mantener las contraseñas fuera del WebView y devolver l
 ## Consecuencias
 
 - La contraseña nunca atraviesa la WebView ni aparece en la redirect URI. El callback y almacenamiento seguro ya están conectados en Tauri, pero falta una prueba de integración contra un servicio desplegado y habilitado.
-- Quitar la cuenta actualmente borra solo el token local; no invalida la sesión remota, que puede seguir activa hasta 30 días. Añadir revocación remota antes de presentar esta acción como cierre completo de sesión.
+- Quitar la cuenta intenta revocar la sesión bearer actual por HTTPS y después elimina siempre el token local. El servidor solo marca la sesión identificada por el hash del token y su cuenta; no afecta a otros dispositivos. Si no se confirma la respuesta de revocación, la UI avisa y la sesión remota puede seguir válida hasta su vencimiento (30 días).
+- `POST /v1/auth/session/revoke` autentica la sesión antes de revocarla, requiere la cuenta activa/verificada y tiene límite persistente de diez solicitudes por minuto. Repetir la petición con un token ya revocado devuelve `401` sin revelar si la sesión existió.
 - Login por Google, passkeys, TOTP y recuperación se implementan aparte; el flujo email actual no retira MFA.
 - Los límites persistentes por IP/ruta están implementados y se prueban en PostgreSQL temporal de CI. Falta validar la IP real detrás de Caddy y mitigar abuso coordinado. No habilitar ni publicar estas rutas todavía.
-- Los códigos/flows vencidos y sesiones requieren limpieza/retención operativa; CI prueba migraciones y rate limit con PostgreSQL real, pero aún faltan pruebas de carrera para los flujos de cuenta.
+- Los códigos/flows vencidos y sesiones requieren limpieza/retención operativa; CI prueba login y revocación con PostgreSQL real temporal, pero falta validar carreras/carga en el VPS y gestionar sesiones de otros dispositivos.
 
 ## Evidencia
 

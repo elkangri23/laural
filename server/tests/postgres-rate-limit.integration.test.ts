@@ -2,7 +2,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import pg, { type Pool } from "pg";
 import { createApp } from "../src/app.js";
-import { createSessionAuthenticator } from "../src/auth.js";
+import { createSessionAuthenticator, createSessionRevoker } from "../src/auth.js";
 import { EmailAuthService } from "../src/email-auth.js";
 import { applyMigrations, MIGRATION_FILES } from "../src/migration-runner.js";
 import { NativeAuthService } from "../src/native-auth.js";
@@ -79,6 +79,7 @@ describePostgres("integración real de PostgreSQL para rate limits", () => {
     const app = createApp({
       store: new PostgresPreferenceStore(isolatedPool),
       authenticate: async (header) => header === "Bearer first" ? firstAccount : header === "Bearer second" ? secondAccount : null,
+      revokeSession: async () => false,
       checkReadiness: async () => { await isolatedPool.query("SELECT 1"); },
       requestRateLimiter: new PostgresRequestRateLimiter(isolatedPool, "integracion-rate-limit-pepper-32-bytes-minimo"),
     });
@@ -144,6 +145,7 @@ describePostgres("integración real de PostgreSQL para rate limits", () => {
     const app = createApp({
       store: new PostgresPreferenceStore(isolatedPool),
       authenticate: createSessionAuthenticator(isolatedPool),
+      revokeSession: createSessionRevoker(isolatedPool),
       checkReadiness: async () => { await isolatedPool.query("SELECT 1"); },
       requestRateLimiter: new PostgresRequestRateLimiter(isolatedPool, "integracion-rate-limit-pepper-32-bytes-minimo"),
       emailAuth,
@@ -227,6 +229,22 @@ describePostgres("integración real de PostgreSQL para rate limits", () => {
       });
       expect(saved.statusCode).toBe(200);
       expect(saved.json()).toEqual({ snapshot, revision: 1 });
+
+      const revoked = await app.inject({
+        method: "POST", url: "/v1/auth/session/revoke",
+        headers: { authorization: `Bearer ${session.sessionToken}` },
+      });
+      expect(revoked.statusCode).toBe(204);
+      const deniedAfterRevoke = await app.inject({
+        method: "GET", url: "/v1/preferences/current",
+        headers: { authorization: `Bearer ${session.sessionToken}` },
+      });
+      expect(deniedAfterRevoke.statusCode).toBe(401);
+      const revokedRecord = await isolatedPool.query<{ revoked_at: Date | null }>(
+        "SELECT revoked_at FROM account_sessions WHERE token_hash = $1",
+        [createHash("sha256").update(session.sessionToken).digest("hex")],
+      );
+      expect(revokedRecord.rows[0]?.revoked_at).toBeTruthy();
 
       const reusedCode = await app.inject({
         method: "POST", url: "/v1/auth/native/exchange",

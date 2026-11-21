@@ -91,14 +91,26 @@ test("informa si no se puede escuchar el resultado del login", async () => {
   expect(host.textContent).toContain("No se pudo escuchar el resultado");
 });
 
-test("quita solo la sesión local y comunica la limitación", async () => {
+test("cierra sesión local e informa si no puede confirmar la revocación remota", async () => {
   mocks.invoke.mockImplementation(async (command: string) => command === "account_session_status");
   await act(async () => root.render(renderAccountSettings()));
   await act(async () => [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Quitar cuenta de este equipo")?.click());
 
   expect(mocks.invoke).toHaveBeenCalledWith("clear_account_session");
-  expect(host.textContent).toContain("la revocación remota está pendiente");
+  expect(host.textContent).toContain("No se pudo confirmar la revocación remota");
   expect([...host.querySelectorAll("button")].map((button) => button.textContent)).toContain("Iniciar sesión");
+});
+
+test("confirma el cierre remoto cuando el servidor revoca la sesión", async () => {
+  mocks.invoke.mockImplementation(async (command: string) => command === "account_session_status" ? true : command === "clear_account_session");
+  const disconnected = vi.fn();
+  window.addEventListener("laural:account-disconnected", disconnected);
+  await act(async () => root.render(renderAccountSettings()));
+  await act(async () => [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Quitar cuenta de este equipo")?.click());
+
+  expect(host.textContent).toContain("el servidor confirmó que ya no es válida");
+  expect(disconnected).toHaveBeenCalledOnce();
+  window.removeEventListener("laural:account-disconnected", disconnected);
 });
 
 test("compara el snapshot y ofrece elección sin revelar los cambios", async () => {

@@ -2,6 +2,7 @@
 
 ## Sin publicar
 
+- Añadida revocación remota de la sesión actual al cerrar cuenta: endpoint autenticado con limitador, invalidación por hash en PostgreSQL y cliente Tauri que borra siempre Credential Manager aunque no haya conexión. La interfaz distingue revocación confirmada de cierre solo local.
 - Ampliada la integración PostgreSQL para cubrir registro con Argon2id, verificación de PIN sin inicio de sesión, login nativo PKCE, creación de sesión por hash y uso posterior de sync; el correo se captura en un mailer de prueba y no sale del proceso. El job PostgreSQL de CI pasó.
 - La integración PostgreSQL ahora atraviesa Fastify y el almacén real de snapshots: verifica aislamiento por cuenta, lectura/escritura, `ETag`/conflicto, idempotencia y rechazo de campos no permitidos. CI ejecuta esta prueba junto con las migraciones y el rate limit; la integración de login/verificación y el VPS aún quedan pendientes.
 - Añadida prueba de integración PostgreSQL aislada: aplica migraciones v1–v4, verifica el rate limit atómico en concurrencia y ejecuta en CI con una base efímera. Para correrla localmente, `server` requiere `TEST_DATABASE_URL`.
@@ -38,7 +39,7 @@
 - Añadido el flujo de registro/verificación por correo, desactivado por defecto: contraseñas Argon2id, PIN aleatorio de seis cifras con HMAC, cinco minutos, cinco intentos y límites de reenvío por cuenta. Resend se configura solo en el servidor; verificar correo no inicia sesión.
 - CI incorpora una tarea independiente de Linux para compilar el servicio de sincronización, ejecutar su suite de cobertura y publicar el informe como artefacto.
 - Añadida página propia de login en español con contraseña en navegador externo, cookie HttpOnly/CSRF, redirect loopback exacto y canje PKCE de un solo uso. La app abre el navegador, valida `state`, canjea por HTTPS y guarda el token de 30 días solo en Credential Manager; PostgreSQL conserva el hash. Rutas de cuenta desactivadas por defecto.
-- Añadido en Configuración el acceso a cuenta: callback IPv4 loopback efímero, comprobación de state en tiempo constante, canje PKCE sin seguir redirecciones y estado de sesión sin exponer el token al frontend. La retirada actual elimina la credencial local; la revocación remota sigue pendiente.
+- Añadido en Configuración el acceso a cuenta: callback IPv4 loopback efímero, comprobación de state en tiempo constante, canje PKCE sin seguir redirecciones y estado de sesión sin exponer el token al frontend. El cierre de sesión ya intenta revocar el token actual y siempre elimina la credencial local.
 - Iniciado el contrato v1 compartido para preferencias sincronizables con schema cerrado, fixture común y tipos Rust/TypeScript. Rechaza versiones/campos desconocidos, perfiles duplicados, endpoints no válidos y snapshots mayores de 256 KiB.
 - Guardado el tipo de proveedor y el consentimiento opcional por perfil para compartir el endpoint en una futura sincronización; queda desactivado por defecto y los perfiles anteriores conservan sus destinos.
 - Añadido el constructor nativo del snapshot v1: incluye tema, apariencia, actualización, proveedor activo y metadatos permitidos. Solo incorpora URLs de perfiles con consentimiento; no consulta ni serializa claves.

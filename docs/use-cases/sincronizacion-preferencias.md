@@ -32,7 +32,7 @@
 
 **Flujo:** desde Configuración → Cuenta y sincronización, Laural abre el navegador externo. Tras autenticarse, el navegador redirige al listener local de un solo uso; Rust valida `state`, canjea el código con PKCE y guarda el token en Credential Manager. El panel no recibe el token.
 
-**Aceptación:** redirect limitado a loopback, código de un solo uso, `state` validado, canje HTTPS y PKCE; token ausente del WebView y guardado en Credential Manager. Quitar la cuenta elimina solo el token local; hasta que exista revocación remota, el servidor puede aceptar la sesión hasta su caducidad. Ningún secreto de proveedor se envía.
+**Aceptación:** redirect limitado a loopback, código de un solo uso, `state` validado, canje HTTPS y PKCE; token ausente del WebView y guardado en Credential Manager. Al quitar la cuenta, Laural intenta revocar la sesión actual y borra siempre el token local; si no obtiene confirmación, avisa que la sesión remota podría seguir válida hasta caducar. Ningún secreto de proveedor se envía.
 
 ## UC-20 — Sincronizar, desconectarse y resolver conflicto
 

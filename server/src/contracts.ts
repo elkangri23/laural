@@ -23,4 +23,5 @@ export interface PreferenceStore {
 }
 
 export type Authenticate = (authorization: string | undefined) => Promise<string | null>;
+export type RevokeSession = (accountId: string, authorization: string | undefined) => Promise<boolean>;
 export type ReadinessCheck = () => Promise<void>;

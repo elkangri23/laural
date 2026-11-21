@@ -185,6 +185,16 @@ paths:
                 required: [sessionToken, expiresAt]
         '400': { description: Código inválido, caducado o ya consumido }
         '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/auth/session/revoke:
+    post:
+      summary: Revoca la sesión bearer del equipo actual
+      description: Marca como revocada solo la sesión presentada; las demás sesiones del usuario no cambian.
+      security:
+        - bearerAuth: []
+      responses:
+        '204': { description: Sesión revocada }
+        '401': { description: Sesión no válida, expirada o ya revocada }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /v1/auth/register:
     post:
       summary: Crea una cuenta pendiente y solicita la verificación de correo

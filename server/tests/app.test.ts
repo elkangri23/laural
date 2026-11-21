@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import argon2 from "argon2";
 import { createHash } from "node:crypto";
 import type { PreferenceSnapshot, PreferenceStore, StoredSnapshot, WriteSnapshotResult } from "../src/contracts.js";
@@ -38,7 +38,7 @@ class MemoryStore implements PreferenceStore {
 }
 
 const instances: Array<ReturnType<typeof createApp>> = [];
-function createTestApp(options: { store?: PreferenceStore; checkReadiness?: () => Promise<void>; emailAuth?: EmailAuthService; nativeAuth?: NativeAuthService; requestRateLimiter?: RequestRateLimiter } = {}): ReturnType<typeof createApp> {
+function createTestApp(options: { store?: PreferenceStore; checkReadiness?: () => Promise<void>; emailAuth?: EmailAuthService; nativeAuth?: NativeAuthService; requestRateLimiter?: RequestRateLimiter; revokeSession?: (accountId: string, authorization: string | undefined) => Promise<boolean> } = {}): ReturnType<typeof createApp> {
   const store = options.store ?? new MemoryStore();
   const requestRateLimiter = options.requestRateLimiter ?? new TestRateLimiter();
   const app = createApp({
@@ -47,6 +47,7 @@ function createTestApp(options: { store?: PreferenceStore; checkReadiness?: () =
       const match = authorization?.match(/^Bearer account-([a-z0-9]+)$/);
       return match?.[1] ?? null;
     },
+    revokeSession: options.revokeSession ?? (async () => true),
     checkReadiness: options.checkReadiness ?? (async () => undefined),
     requestRateLimiter,
     ...(options.emailAuth ? { emailAuth: options.emailAuth } : {}),
@@ -72,6 +73,21 @@ afterEach(async () => {
 });
 
 describe("API de snapshots de preferencias", () => {
+  it("revoca solo la sesión autenticada y confirma el cierre", async () => {
+    const revokeSession = vi.fn(async () => true);
+    const app = createTestApp({ revokeSession });
+    expect((await app.inject({ method: "POST", url: "/v1/auth/session/revoke" })).statusCode).toBe(401);
+    expect(revokeSession).not.toHaveBeenCalled();
+
+    const response = await app.inject({
+      method: "POST", url: "/v1/auth/session/revoke",
+      headers: { authorization: "Bearer account-a" },
+    });
+    expect(response.statusCode).toBe(204);
+    expect(response.body).toBe("");
+    expect(revokeSession).toHaveBeenCalledWith("a", "Bearer account-a");
+  });
+
   it("limita las lecturas de preferencias por IP y devuelve Retry-After", async () => {
     const app = createTestApp();
     const request = { method: "GET" as const, url: "/v1/preferences/current", headers: { authorization: "Bearer account-a" } };

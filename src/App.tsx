@@ -211,12 +211,17 @@ function App() {
     const interval = window.setInterval(() => schedulePreferenceSync(0), 3 * 60 * 60 * 1000);
     const updateModeChanged = () => schedulePreferenceSync();
     const accountConnected = () => schedulePreferenceSync(0);
+    const accountDisconnected = () => {
+      if (syncTimerRef.current !== null) window.clearTimeout(syncTimerRef.current);
+      syncTimerRef.current = null;
+    };
     const networkRestored = () => schedulePreferenceSync(0);
     const appResumed = () => {
       if (document.visibilityState === "visible") schedulePreferenceSync(0);
     };
     window.addEventListener("laural:update-mode-changed", updateModeChanged);
     window.addEventListener("laural:account-connected", accountConnected);
+    window.addEventListener("laural:account-disconnected", accountDisconnected);
     window.addEventListener("online", networkRestored);
     window.addEventListener("focus", networkRestored);
     document.addEventListener("visibilitychange", appResumed);
@@ -225,6 +230,7 @@ function App() {
       window.clearInterval(interval);
       window.removeEventListener("laural:update-mode-changed", updateModeChanged);
       window.removeEventListener("laural:account-connected", accountConnected);
+      window.removeEventListener("laural:account-disconnected", accountDisconnected);
       window.removeEventListener("online", networkRestored);
       window.removeEventListener("focus", networkRestored);
       document.removeEventListener("visibilitychange", appResumed);
