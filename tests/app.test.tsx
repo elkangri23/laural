@@ -56,12 +56,14 @@ beforeEach(() => {
   mocks.terminalPaneRenderCount = 0;
   mocks.terminalRequests.length = 0;
   host = document.createElement("div");
+  document.body.append(host);
   root = createRoot(host);
 });
 
 afterEach(async () => {
   await act(async () => root?.unmount());
   root = undefined;
+  host.remove();
   vi.unstubAllGlobals();
 });
 
@@ -95,11 +97,20 @@ test("recupera y guarda el tema y el modo desde Configuración", async () => {
   expect(document.documentElement.dataset.mode).toBe("dark");
 });
 
-test("el menú general abre acciones y se cierra con Escape", async () => {
+test("el menú general gestiona el foco, las flechas y Escape", async () => {
   await act(async () => root!.render(<App />));
 
   await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Abrir menú"]')!.click());
   expect(host.querySelector('[role="menu"][aria-label="Menú de Laural"]')).not.toBeNull();
+  const menuItems = [...host.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].slice(0, 6);
+  expect(document.activeElement).toBe(menuItems[0]);
+
+  await act(async () => menuItems[0].dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })));
+  expect(document.activeElement).toBe(menuItems[1]);
+  await act(async () => menuItems[1].dispatchEvent(new KeyboardEvent("keydown", { key: "End", bubbles: true })));
+  expect(document.activeElement).toBe(menuItems[5]);
+  await act(async () => menuItems[5].dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true })));
+  expect(document.activeElement).toBe(menuItems[0]);
 
   await act(async () => buttonIncluding("Configurar proveedor de IA").click());
   expect(host.querySelector(".provider-dialog h2")?.textContent).toBe("Conecta tu proveedor");
@@ -109,6 +120,7 @@ test("el menú general abre acciones y se cierra con Escape", async () => {
   await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Abrir menú"]')!.click());
   await act(async () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
   expect(host.querySelector('[role="menu"][aria-label="Menú de Laural"]')).toBeNull();
+  expect(document.activeElement).toBe(host.querySelector('[aria-label="Abrir menú"]'));
 });
 
 test("usar una receta activa el modo Agente y prepara el compositor sin enviarlo", async () => {

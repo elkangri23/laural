@@ -130,6 +130,7 @@ function App() {
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const terminalMoreRef = useRef<HTMLDivElement>(null);
   const appMenuRef = useRef<HTMLDivElement>(null);
+  const appMenuButtonRef = useRef<HTMLButtonElement>(null);
   const appearanceSyncReadyRef = useRef(false);
 
   const syncSavedPreferences = useCallback(async () => {
@@ -434,7 +435,10 @@ function App() {
       if (event.target instanceof Node && !appMenuRef.current?.contains(event.target)) setAppMenuOpen(false);
     };
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setAppMenuOpen(false);
+      if (event.key === "Escape") {
+        setAppMenuOpen(false);
+        appMenuButtonRef.current?.focus();
+      }
     };
     document.addEventListener("mousedown", closeOnOutsideClick);
     window.addEventListener("keydown", closeOnEscape);
@@ -443,6 +447,24 @@ function App() {
       window.removeEventListener("keydown", closeOnEscape);
     };
   }, [appMenuOpen]);
+
+  useEffect(() => {
+    if (appMenuOpen) appMenuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
+  }, [appMenuOpen]);
+
+  function navigateAppMenu(event: React.KeyboardEvent<HTMLDivElement>) {
+    if (!(["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key))) return;
+    const items = [...(appMenuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [])];
+    if (items.length === 0) return;
+    event.preventDefault();
+    const currentIndex = items.indexOf(document.activeElement as HTMLButtonElement);
+    const nextIndex = event.key === "Home"
+      ? 0
+      : event.key === "End"
+        ? items.length - 1
+        : (currentIndex + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
+    items[nextIndex].focus();
+  }
 
   function addTerminal(shell: Shell, cwd: string | null = projectPath) {
     const count = tabs.filter((tab) => tab.shell === shell).length + 1;
@@ -863,8 +885,8 @@ function App() {
           <div className="brand-mark" aria-hidden="true"><span /><span /></div>
           <span className="brand-name">Laural</span>
           <div className="app-menu-wrap" ref={appMenuRef}>
-            <button className="icon-button sidebar-menu" aria-label="Abrir menú" aria-expanded={appMenuOpen} aria-haspopup="menu" aria-controls="app-menu" onClick={() => setAppMenuOpen((open) => !open)}><DotsIcon /></button>
-            {appMenuOpen && <div className="app-menu" id="app-menu" role="menu" aria-label="Menú de Laural">
+            <button ref={appMenuButtonRef} className="icon-button sidebar-menu" aria-label="Abrir menú" aria-expanded={appMenuOpen} aria-haspopup="menu" aria-controls="app-menu" onClick={() => setAppMenuOpen((open) => !open)}><DotsIcon /></button>
+            {appMenuOpen && <div className="app-menu" id="app-menu" role="menu" aria-label="Menú de Laural" onKeyDown={navigateAppMenu}>
               <button role="menuitem" onClick={() => { setAppMenuOpen(false); addTerminal("powershell"); }}>Nueva terminal</button>
               <button role="menuitem" onClick={() => { setAppMenuOpen(false); void openProject(); }}>Abrir carpeta de proyecto</button>
               <button role="menuitem" onClick={() => { setAppMenuOpen(false); setCommandPaletteView("all"); setCommandPaletteOpen(true); }}>Buscar acciones e historial</button>

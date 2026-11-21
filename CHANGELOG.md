@@ -2,6 +2,7 @@
 
 ## Sin publicar
 
+- El menú general lleva el foco a la primera opción y permite recorrer las acciones con flechas, Inicio y Fin; Escape cierra y devuelve el foco al botón.
 - El menú general junto al nombre de Laural ofrece accesos a terminal, proyecto, búsqueda, proveedor, configuración y ayuda; se cierra al pulsar Escape o fuera del menú.
 - El menú Más opciones de terminal ofrece accesos rápidos a Git, bloques, asistente, proveedor, copiar selección y limpiar.
 - El diálogo de recetas mantiene el foco dentro, permite cerrarlo con Escape y enfoca el formulario al crear o editar.
