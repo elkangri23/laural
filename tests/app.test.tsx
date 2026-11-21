@@ -44,7 +44,19 @@ function buttonIncluding(text: string): HTMLButtonElement {
 }
 
 async function waitForLazyUi(): Promise<void> {
-  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 15)); });
+  await act(async () => {
+    await Promise.all([
+      import("../src/components/AccountSettings"),
+      import("../src/components/AgentActivity"),
+      import("../src/components/AssistantMarkdown"),
+      import("../src/components/BackupRetentionControl"),
+      import("../src/components/CommandPalette"),
+      import("../src/components/ConfigurationTransfer"),
+      import("../src/components/GitPanel"),
+      import("../src/components/TaskRecipes"),
+      import("../src/components/TerminalPane"),
+    ]);
+  });
 }
 
 beforeEach(() => {

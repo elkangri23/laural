@@ -2,6 +2,7 @@
 
 ## Sin publicar
 
+- Los tests de interfaz ahora esperan la resolución real de los módulos lazy antes de interactuar con sus botones, evitando depender de un retardo fijo y corrigiendo falsos fallos en Windows CI.
 - Añadida revocación remota de la sesión actual al cerrar cuenta: endpoint autenticado con limitador, invalidación por hash en PostgreSQL y cliente Tauri que borra siempre Credential Manager aunque no haya conexión. La interfaz distingue revocación confirmada de cierre solo local.
 - Ampliada la integración PostgreSQL para cubrir registro con Argon2id, verificación de PIN sin inicio de sesión, login nativo PKCE, creación de sesión por hash y uso posterior de sync; el correo se captura en un mailer de prueba y no sale del proceso. El job PostgreSQL de CI pasó.
 - La integración PostgreSQL ahora atraviesa Fastify y el almacén real de snapshots: verifica aislamiento por cuenta, lectura/escritura, `ETag`/conflicto, idempotencia y rechazo de campos no permitidos. CI ejecuta esta prueba junto con las migraciones y el rate limit; la integración de login/verificación y el VPS aún quedan pendientes.
