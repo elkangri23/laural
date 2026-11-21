@@ -1,6 +1,6 @@
 # Especificación: perfiles, portabilidad y sincronización
 
-- **Estado:** F1 en implementación inicial; F2 implementado salvo validación automática de schema común; F3 cuenta/API local parciales; F4 cliente de sincronización manual inicial implementado. Faltan auto-sync, periodicidad, cola offline y validación contra VPS. Factores adicionales, recuperación, revocación, status y despliegue siguen pendientes.
+- **Estado:** F1 en implementación inicial; F2 implementado salvo validación automática de schema común; F3 cuenta/API local parciales; F4 cliente manual y auto-sync inicial implementados. Pendientes pruebas de reconexión, reanudación y VPS real. Factores adicionales, recuperación, revocación, status y despliegue siguen pendientes.
 - **Fecha:** 2026-11-21.
 - **Alcance:** Windows primero; perfiles locales, exportar/importar y sincronización opcional de preferencias.
 - **Diseño formal:** [sincronización de preferencias y portabilidad](../designs/sincronizacion-preferencias-y-portabilidad.md).
@@ -8,7 +8,7 @@
 
 ## Estado actual
 
-La app ofrece exportar/importar `.laural` local, y la primera fase del cliente de sync está integrada en Configuración. La persona puede consultar, comparar sin detalle de diferencias, elegir equipo/nube o subir el primer snapshot. Rust hace las llamadas HTTPS con la sesión guardada en Credential Manager y crea un backup local sin claves antes de aplicar la nube. El token no se entrega al WebView. El servicio no está publicado/habilitado. Quitar una cuenta solo borra el token local; revocación remota pendiente.
+La app ofrece exportar/importar `.laural` local, y el cliente sync manual/automático está integrado. La persona puede consultar, comparar sin detalle de diferencias, elegir equipo/nube o subir el primer snapshot. Tras acordar la línea base, Laural intenta sincronizar al cambiar preferencias/perfiles, al abrir/iniciar sesión y cada tres horas. Mantiene en disco snapshots allowlist local/nube, revisión y marca pendiente; esta separación evita que la falta de consentimiento local para compartir un endpoint aceptado desde la nube lo borre ante otro cambio normal. Sin conexión conserva cambios locales y reintenta; si la nube avanzó, no sobreescribe y solicita elección. Rust usa la sesión en Credential Manager y crea una copia local sin claves antes de aplicar nube. El token no llega al WebView. El servicio no está publicado; validación VPS pendiente. Quitar cuenta solo borra el token local; revocación remota pendiente.
 
 ## Decisiones funcionales aprobadas
 
@@ -42,7 +42,7 @@ La app ofrece exportar/importar `.laural` local, y la primera fase del cliente d
 1. **Transferencia sin cuenta:** exportar/importar funciona sin servicio. La app valida el archivo y muestra una vista previa antes de aplicar cambios.
 2. **Exportación con claves:** requiere consentimiento y contraseña; el archivo alterado, corrupto, excesivo o con contraseña incorrecta no modifica la configuración.
 3. **Primer acceso a la nube:** si no hay snapshot, Laural pregunta antes de la primera carga. Si hay dos snapshots diferentes, ofrece conservar el local o el de nube y advierte cuál será reemplazado.
-4. **Cambios en línea y fuera de línea:** el flujo inicial manual conserva elección explícita; auto-sync al guardar y estado pendiente duradero/visible siguen pendientes.
+4. **Cambios en línea y fuera de línea:** tras acordar líneas base local/nube, cambios guardados intentan sincronizar. Un error de red conserva una marca pendiente local y se reintenta al abrir y cada tres horas; una revisión remota avanzada detiene la escritura y muestra elección. Un endpoint aceptado desde nube se conserva si el equipo no consintió volver a compartirlo; apagar un consentimiento local existente lo elimina del próximo snapshot.
 5. **Conflicto concurrente:** el cliente usa revisiones condicionales e idempotencia. Si la revisión remota avanzó, detiene escrituras y pide elegir un snapshot completo; nunca sobrescribe sin aviso.
 6. **Seguridad de cuenta:** la autorización se comprueba por cuenta en cada lectura/escritura. Una cuenta no puede leer ni modificar otra. El PIN vence, no se reutiliza y nunca sustituye MFA.
 7. **Estado público:** cualquier visitante puede ver disponibilidad general, estado de sincronización/correo, incidentes, acciones en curso y mantenimientos. La página no publica datos de usuarios, logs, IPs, secretos ni detalles internos.
@@ -52,7 +52,7 @@ La app ofrece exportar/importar `.laural` local, y la primera fase del cliente d
 1. **F1 — Portabilidad local:** implementación inicial en el escritorio. Restan pruebas de integración de fallos del almacén, ensayo de restauración en Windows y objetivo de cobertura específica.
 2. **F2 — Contrato y adaptador local:** implementados schema cerrado v1, fixture, tipos Rust/TypeScript, validación con tope de 256 KiB y comando nativo para construir el snapshot desde preferencias y perfiles. El endpoint se incluye solo si su consentimiento por perfil está guardado. Pendiente validar automáticamente el JSON Schema canónico en Rust y TypeScript.
 3. **F3 — Servicio y cuenta:** API Fastify, migraciones, registro/verificación por PIN, página web de email/contraseña, flujo loopback/PKCE y emisión de sesión opaca están implementados localmente tras bandera apagada. La app Tauri ya abre el navegador, valida state, canjea por HTTPS y almacena la sesión. Faltan validar con el VPS, revocación remota, Google, passkeys, TOTP, recuperación, rate limits por IP, PostgreSQL real y publicación.
-4. **F4 — Sincronización:** cliente Rust con token nativo, **Sincronizar ahora**, comparación, conflicto con elección completa, `If-Match`, idempotencia y copia local previa implementados inicialmente. Pendientes auto-sync, cola offline durable, comprobación al reanudar y cada tres horas con Laural abierta.
+4. **F4 — Sincronización:** cliente Rust con token nativo, botón manual, comparación/elección, auto-sync inicial, estado pendiente durable, revisión al abrir y cada tres horas, `If-Match`, idempotencia y copia local previa implementados. Pendientes pruebas de reconexión, suspensión/reanudación y VPS real.
 5. **F5 — Estado y operación:** página `/status`, avisos de mantenimiento/incidentes desde operación protegida, procedimientos de recuperación y despliegue TLS.
 
 El [backlog](../BACKLOG.md) contiene criterios de cierre por tarea; la [hoja de ruta](../ROADMAP.md) ordena las entregas. La suite del servicio obtiene 96,45 % de líneas y 91,75 % de ramas en 62 pruebas, con PostgreSQL y Resend simulados; faltan pruebas de integración reales y pruebas manuales de Windows. Los módulos restantes de autenticación, cifrado y recuperación deberán cumplir al menos 85 % en líneas y ramas antes de habilitarse.

@@ -399,10 +399,13 @@ pub fn get_preference_snapshot(
 pub async fn apply_remote_preference_snapshot(
     app: AppHandle,
     snapshot: PreferenceSnapshot,
+    revision: u64,
     current_preferences: TransferPreferences,
 ) -> Result<TransferImportResult, String> {
+    let _guard = crate::sync::lock_sync().await;
+    crate::sync::verify_remote_snapshot(&snapshot, revision).await?;
     tauri::async_runtime::spawn_blocking(move || {
-        apply_remote_preference_snapshot_inner(app, snapshot, current_preferences)
+        apply_remote_preference_snapshot_inner(app, snapshot, revision, current_preferences)
     })
     .await
     .map_err(|_| "No se pudo aplicar la configuración de la nube.".to_string())?
@@ -411,11 +414,12 @@ pub async fn apply_remote_preference_snapshot(
 fn apply_remote_preference_snapshot_inner(
     app: AppHandle,
     snapshot: PreferenceSnapshot,
+    revision: u64,
     current_preferences: TransferPreferences,
 ) -> Result<TransferImportResult, String> {
     snapshot::encode(&snapshot)?;
     let old_store = read_provider_store(&app)?;
-    let incoming = remote_transfer_data(snapshot, &old_store)?;
+    let incoming = remote_transfer_data(snapshot.clone(), &old_store)?;
     for provider in &incoming.providers {
         validate_base_url(&provider.base_url)?;
     }
@@ -428,6 +432,15 @@ fn apply_remote_preference_snapshot_inner(
     let backup_string = backup.to_string_lossy().into_owned();
     write_transfer_file(&backup_string, &backup_bytes)?;
     write_provider_store(&app, &new_store)?;
+    let local_snapshot = build_preference_snapshot(
+        new_store.clone(),
+        SnapshotPreferences {
+            theme_id: incoming.preferences.theme_id.clone(),
+            appearance: incoming.preferences.appearance.clone(),
+            update_mode: incoming.preferences.update_mode.clone(),
+        },
+    )?;
+    crate::sync::record_sync_baseline(&app, local_snapshot, snapshot, revision)?;
 
     Ok(TransferImportResult {
         preferences: incoming.preferences.clone(),

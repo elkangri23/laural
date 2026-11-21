@@ -14,7 +14,7 @@ type Snapshot = {
 type Remote = { snapshot: Snapshot | null; revision: number };
 type ImportResult = { preferences: Preferences; activeProvider: { id: string; providerKind: string; name: string; baseUrl: string; model: string; hasApiKey: boolean; shareCustomEndpoint: boolean } | null; providers: { id: string; providerKind: string; name: string; baseUrl: string; model: string; hasApiKey: boolean; shareCustomEndpoint: boolean }[]; backupPath: string; backupEncrypted: boolean; backupContainsApiKeys: boolean };
 
-export function AccountSettings({ onClose, preferences, onImported }: { onClose: () => void; preferences: Preferences; onImported: (result: ImportResult) => void }) {
+export function AccountSettings({ onClose, preferences, onImported, onSyncSettled }: { onClose: () => void; preferences: Preferences; onImported: (result: ImportResult) => void; onSyncSettled: () => void }) {
   const [connected, setConnected] = useState(false);
   const [busy, setBusy] = useState(false);
   const [listenerReady, setListenerReady] = useState(false);
@@ -30,7 +30,10 @@ export function AccountSettings({ onClose, preferences, onImported }: { onClose:
     void listen<AuthStatus>("account-auth-status", ({ payload }) => {
       if (disposed) return;
       setBusy(payload.status === "waiting");
-      if (payload.status === "signed_in") setConnected(true);
+      if (payload.status === "signed_in") {
+        setConnected(true);
+        window.dispatchEvent(new Event("laural:account-connected"));
+      }
       setMessage(payload.message);
     }).then((stopListening) => {
       if (disposed) stopListening();
@@ -108,7 +111,16 @@ export function AccountSettings({ onClose, preferences, onImported }: { onClose:
       setRemote(cloud);
       setHasConflict(Boolean(cloud.snapshot && !snapshotsMatch(local, cloud.snapshot)));
       if (!cloud.snapshot) setMessage("La nube aún no tiene una configuración sincronizada. Puedes subir la de este equipo.");
-      else if (snapshotsMatch(local, cloud.snapshot)) setMessage("La configuración local y la nube coinciden.");
+      else if (snapshotsMatch(local, cloud.snapshot)) {
+        const confirmed = await invoke<boolean>("confirm_remote_preferences", { snapshot: local, revision: cloud.revision });
+        if (!confirmed) {
+          setRemote(null);
+          setMessage("La nube cambió durante la comparación. Vuelve a sincronizar para elegir con el estado actualizado.");
+          return;
+        }
+        onSyncSettled();
+        setMessage("La configuración local y la nube coinciden.");
+      }
       else setMessage("La configuración local y la nube no coincide. ¿Cuál quieres conservar?");
     } catch (error) {
       setMessage(typeof error === "string" ? error : "No se pudo consultar la sincronización.");
@@ -130,6 +142,7 @@ export function AccountSettings({ onClose, preferences, onImported }: { onClose:
       } else {
         setRemote({ snapshot: local, revision: result.revision ?? (remote?.revision ?? 0) + 1 });
         setHasConflict(false);
+        onSyncSettled();
         setMessage("La configuración de este equipo ya está sincronizada.");
       }
     } catch (error) {
@@ -146,10 +159,12 @@ export function AccountSettings({ onClose, preferences, onImported }: { onClose:
     try {
       const result = await invoke<ImportResult & { backupPath: string }>("apply_remote_preference_snapshot", {
         snapshot: remote.snapshot,
+        revision: remote.revision,
         currentPreferences: snapshotPreferences(),
       });
       onImported(result);
       setHasConflict(false);
+      onSyncSettled();
       setMessage(`Configuración aplicada. Copia local guardada en: ${result.backupPath}`);
     } catch (error) {
       setMessage(typeof error === "string" ? error : "No se pudo aplicar la configuración de la nube.");

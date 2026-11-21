@@ -2,7 +2,7 @@
 
 Abre **Configuración** en la barra lateral. Los ajustes pertenecen al equipo actual.
 
-La versión actual incluye **Importar y exportar configuración** sin cuenta y una primera fase manual de **Cuenta y sincronización**. Con una sesión válida, puedes consultar la nube, comparar snapshots sin mostrar diferencias por campo, subir la configuración local si la nube está vacía o elegir cuál conservar si no coinciden. Aplicar la nube crea antes una copia local `.laural` sin claves. El servicio todavía no está desplegado; el auto-sync, los cambios offline y la comprobación cada tres horas están pendientes. Consulta el [plan y su estado](plans/sincronizacion-preferencias.md) y el [diseño](designs/sincronizacion-preferencias-y-portabilidad.md).
+La versión actual incluye **Importar y exportar configuración** sin cuenta y **Cuenta y sincronización**. Con una sesión válida, puedes comparar snapshots sin mostrar diferencias, subir la configuración local inicial o elegir cuál conservar. Tras acordar la línea base, Laural sincroniza automáticamente preferencias y perfiles, reintenta cambios offline y comprueba cada tres horas. Si la nube avanzó por otro equipo, pide una elección antes de escribir. Aplicar la nube crea primero una copia local `.laural` sin claves. El servicio todavía no está desplegado; faltan ensayos contra VPS y reconexión real. Consulta el [plan y su estado](plans/sincronizacion-preferencias.md) y el [diseño](designs/sincronizacion-preferencias-y-portabilidad.md).
 
 | Sección | Opciones y efecto |
 | --- | --- |

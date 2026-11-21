@@ -915,6 +915,9 @@ svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width:
 .account-settings .form-message { margin: 12px 0; line-height: 1.5; }
 .account-settings .account-note { margin: 18px 0 0; font-size: 12px; }
 .account-sync-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.sync-notice { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 7px; margin: 8px 0; padding: 8px; border: 1px solid var(--line); border-radius: 8px; color: var(--muted); background: var(--surface-raised); font-size: 10px; line-height: 1.4; }
+.sync-notice button { border: 0; padding: 2px; color: var(--theme-accent-muted); background: transparent; font-size: 10px; cursor: pointer; }
+.sync-notice .sync-notice-close { color: var(--muted); font-size: 15px; }
 .transfer-settings { display: grid; gap: 12px; max-height: min(78vh, 760px); overflow: auto; }
 .transfer-settings .eyebrow { margin: 0; color: var(--theme-accent); font-size: 10px; letter-spacing: .1em; }
 .transfer-settings h3 { margin: 0; color: var(--text); font-size: 17px; font-weight: 650; }

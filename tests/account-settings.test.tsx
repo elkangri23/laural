@@ -20,7 +20,7 @@ vi.mock("../src/components/SettingsDialog", () => ({
 let host: HTMLDivElement;
 let root: Root;
 const preferences = { themeId: "laurel", appearance: "dark" as const, updateMode: "manual" as const };
-const renderAccountSettings = (onImported = vi.fn()) => <AccountSettings onClose={vi.fn()} preferences={preferences} onImported={onImported} />;
+const renderAccountSettings = (onImported = vi.fn()) => <AccountSettings onClose={vi.fn()} preferences={preferences} onImported={onImported} onSyncSettled={vi.fn()} />;
 
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);

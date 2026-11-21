@@ -65,6 +65,7 @@ function App() {
   const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
   const [updateSettingsOpen, setUpdateSettingsOpen] = useState(false);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
+  const [syncNotice, setSyncNotice] = useState("");
   const [themeId, setThemeId] = useState(() => localStorage.getItem("laural.theme") ?? "laurel");
   const [appearance, setAppearance] = useState<AppearanceMode>(() => localStorage.getItem("laural.appearance") === "light" ? "light" : "dark");
   const [provider, setProvider] = useState<Provider | null>(null);
@@ -107,6 +108,43 @@ function App() {
   const agentStopRequestedRef = useRef(false);
   const activeAgentTerminalRef = useRef<string | null>(null);
   const commandCompletionRef = useRef<Record<string, { resolve: (exitCode: number | null) => void; timer: ReturnType<typeof setTimeout> }>>({});
+  const syncTimerRef = useRef<number | null>(null);
+  const appearanceSyncReadyRef = useRef(false);
+
+  const syncSavedPreferences = useCallback(async () => {
+    try {
+      const preferences = {
+        themeId: localStorage.getItem("laural.theme") ?? themeId,
+        appearance: localStorage.getItem("laural.appearance") === "light" ? "light" : "dark",
+        updateMode: localStorage.getItem("laural.update-mode.v1") === "automatic" ? "automatic" : "manual",
+      };
+      const snapshot = await invoke<{
+        schemaVersion: number;
+        preferences: typeof preferences;
+        activeProviderId: string | null;
+        providers: { id: string; kind: string; name: string; model: string; customEndpoint?: string }[];
+      }>("get_preference_snapshot", { preferences });
+      const result = await invoke<{ status: "synced" | "pending" | "needsChoice" | "conflict" | "signedOut" }>("sync_local_preferences", { snapshot });
+      if (result.status === "synced" || result.status === "signedOut") setSyncNotice("");
+      else if (result.status === "pending") setSyncNotice("Cambios locales guardados. Se intentará sincronizar cuando el servicio vuelva a estar disponible.");
+      else if (result.status === "conflict") setSyncNotice("La configuración de este equipo y la nube han cambiado. Elige cuál conservar en Cuenta y sincronización.");
+      else setSyncNotice("Revisa Cuenta y sincronización para elegir qué configuración conservar.");
+    } catch {
+      setSyncNotice("No se pudo comprobar la sincronización. Revisa Cuenta y sincronización.");
+    }
+  }, [themeId]);
+
+  const schedulePreferenceSync = useCallback((delayMs = 700) => {
+    if (syncTimerRef.current !== null) window.clearTimeout(syncTimerRef.current);
+    syncTimerRef.current = window.setTimeout(() => {
+      syncTimerRef.current = null;
+      void syncSavedPreferences();
+    }, delayMs);
+  }, [syncSavedPreferences]);
+
+  function clearSyncNotice() {
+    setSyncNotice("");
+  }
 
   useEffect(() => {
     try {
@@ -114,6 +152,33 @@ function App() {
       localStorage.setItem("laural.chat.v1", JSON.stringify(bounded));
     } catch { /* Storage may be unavailable or full; chat can still continue in memory. */ }
   }, [chatMessages]);
+
+  useEffect(() => {
+    void invoke<{ pending: boolean }>("get_preference_sync_status").then((status) => {
+      if (status.pending) setSyncNotice("Hay cambios locales pendientes de sincronizar; Laural los volverá a intentar.");
+    }).catch(() => undefined);
+    const startup = window.setTimeout(() => schedulePreferenceSync(0), 1_500);
+    const interval = window.setInterval(() => schedulePreferenceSync(0), 3 * 60 * 60 * 1000);
+    const updateModeChanged = () => schedulePreferenceSync();
+    const accountConnected = () => schedulePreferenceSync(0);
+    window.addEventListener("laural:update-mode-changed", updateModeChanged);
+    window.addEventListener("laural:account-connected", accountConnected);
+    return () => {
+      window.clearTimeout(startup);
+      window.clearInterval(interval);
+      window.removeEventListener("laural:update-mode-changed", updateModeChanged);
+      window.removeEventListener("laural:account-connected", accountConnected);
+      if (syncTimerRef.current !== null) window.clearTimeout(syncTimerRef.current);
+    };
+  }, [schedulePreferenceSync]);
+
+  useEffect(() => {
+    if (!appearanceSyncReadyRef.current) {
+      appearanceSyncReadyRef.current = true;
+      return;
+    }
+    schedulePreferenceSync();
+  }, [themeId, appearance, schedulePreferenceSync]);
 
   useEffect(() => {
     function handlePaletteShortcut(event: KeyboardEvent) {
@@ -650,6 +715,7 @@ function App() {
       setApiKey("");
       setProviderNotice("Proveedor guardado en este equipo.");
       setProviderDialogOpen(false);
+      schedulePreferenceSync();
     } catch (error) {
       setProviderError(String(error));
     } finally {
@@ -665,6 +731,7 @@ function App() {
       loadProviderIntoForm(saved);
       setApiKey("");
       setProviderNotice("Proveedor activo actualizado.");
+      schedulePreferenceSync();
     } catch (error) {
       setProviderError(String(error));
     } finally {
@@ -715,6 +782,7 @@ function App() {
             <button className="plan-arrow" onClick={() => setProviderDialogOpen(true)} aria-label="Configurar proveedor"><ChevronIcon /></button>
           </div>
           <button className="appearance-entry" onClick={() => setSettingsOpen(true)}><PaletteIcon /><span>Configuración</span><span className="appearance-entry-meta">{appearance === "dark" ? "Oscuro" : "Claro"}</span></button>
+          {syncNotice && <div className="sync-notice" role="status"><span>{syncNotice}</span><button onClick={() => setAccountSettingsOpen(true)}>Revisar</button><button className="sync-notice-close" onClick={clearSyncNotice} aria-label="Cerrar aviso de sincronización">×</button></div>}
           <UpdateManager settingsOpen={updateSettingsOpen} onSettingsOpen={() => setUpdateSettingsOpen(true)} onSettingsClose={() => setUpdateSettingsOpen(false)} />
           <button className="profile-row"><span className="profile-avatar">AM</span><span className="profile-name">Perfil local</span><DotsIcon /></button>
         </div>
@@ -923,6 +991,7 @@ function App() {
           updateMode: localStorage.getItem("laural.update-mode.v1") === "automatic" ? "automatic" : "manual",
         }}
         onImported={applyImportedConfiguration}
+        onSyncSettled={clearSyncNotice}
         onClose={() => setAccountSettingsOpen(false)}
       />}
       {appearanceOpen && <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setAppearanceOpen(false); }}>

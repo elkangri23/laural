@@ -98,9 +98,10 @@ Añadidas regresiones que simulan el fallo al escribir una credencial y comprueb
 
 - Implementados en Configuración: **Sincronizar ahora**, lectura/comparación inicial, elección de snapshot completo sin mostrar diferencias, y carga explícita de la configuración local cuando la nube está vacía.
 - El cliente Rust consulta y escribe la API por HTTPS usando la sesión de Credential Manager; emplea `ETag`, `If-Match`, clave de idempotencia y detección de conflicto. El token no llega al WebView.
+- Añadidos auto-sync después de guardar tema, apariencia, modo de actualización, proveedor o selección activa; revisión al abrir/iniciar sesión y cada tres horas. Un archivo local atómico conserva snapshots allowlist local/nube, revisión y marca de pendiente. Si el servicio no responde, conserva el pendiente y reintenta; si avanzó otra revisión, detiene la escritura y solicita elección. Un endpoint compartido aceptado desde la nube no provoca una falsa diferencia ni se borra al guardar otra preferencia si este equipo aún no consintió volver a compartirlo.
 - Aplicar la nube crea primero un `.laural` recuperable sin API keys; sustituye los perfiles de forma atómica. Las claves locales quedan en Credential Manager y los IDs se remapean si cambia el destino para no reutilizar una clave contra otro endpoint.
 - La nube solo recibe el allowlist aprobado; endpoint personalizado sujeto a consentimiento. Al descargar un endpoint compartido, la app desactiva el consentimiento local para volver a compartirlo.
-- Pendiente: auto-sync tras guardar, revisión cada tres horas mientras Laural está abierta, cola offline durable/visible, puesta al día al reabrir, y prueba real con el VPS habilitado.
+- Pendiente: probar reconexión/suspensión, probar contra el VPS habilitado y validar visualmente los estados en Windows.
 - Excluir siempre claves, chats, terminal/historial, proyectos/rutas y política del agente.
 
 ## M11 — Preparación para producción (pendiente)

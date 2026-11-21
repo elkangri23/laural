@@ -32,6 +32,7 @@ export function UpdateManager({ settingsOpen, onSettingsOpen, onSettingsClose }:
   const chooseMode = useCallback((next: UpdateMode) => {
     localStorage.setItem(PREFERENCE_KEY, next);
     setMode(next);
+    window.dispatchEvent(new Event("laural:update-mode-changed"));
   }, []);
 
   const installAvailable = useCallback(async (update: Update) => {

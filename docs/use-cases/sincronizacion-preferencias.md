@@ -1,6 +1,6 @@
 # Casos de uso: portabilidad y sincronización
 
-- **Estado:** UC-17/18 tienen una implementación inicial; login Tauri y primera fase de cliente de sincronización están implementados. Falta auto-sync, cola offline, sondeo periódico y validación contra VPS. Revocación, recuperación y status público siguen pendientes.
+- **Estado:** UC-17/18 tienen una implementación inicial; login Tauri y cliente manual/automático de sincronización están implementados. Pendientes pruebas de reconexión, sondeo real y VPS. Revocación, recuperación y status público siguen pendientes.
 - **Especificación:** [plan de sincronización](../plans/sincronizacion-preferencias.md).
 - **Diseño técnico:** [diseño formal](../designs/sincronizacion-preferencias-y-portabilidad.md).
 
@@ -38,9 +38,9 @@
 
 **Actor:** usuario con sync habilitado en uno o más dispositivos.
 
-**Flujo implementado parcialmente:** la persona pulsa **Sincronizar ahora**. Laural lee ambos snapshots; si coinciden lo confirma, si la nube está vacía ofrece subir el local, y si difieren permite usar este equipo o la nube sin exponer un diff. Al aplicar nube Rust crea una copia local `.laural` sin claves antes de sustituir perfiles. Las escrituras condicionales detectan cambios concurrentes y devuelven a la comparación.
+**Flujo implementado inicialmente:** la persona pulsa **Sincronizar ahora** para la primera carga/comparación. Tras fijar una línea base, los cambios guardados intentan subir en segundo plano; Laural revisa al abrir/iniciar sesión y cada tres horas. El cliente persiste la línea base/revisión y un indicador pendiente. Sin conexión conserva cambios locales y reintenta; si la revisión remota avanzó, detiene la escritura y presenta la elección sin diff. Al aplicar nube Rust vuelve a validar la revisión y crea antes una copia `.laural` sin claves.
 
-**Pendiente:** sincronizar automáticamente al guardar, comprobar cada tres horas mientras Laural está abierta, almacenar/mostrar cambios pendientes offline y comprobar al reanudar.
+**Pendiente:** ensayar desconexión/reconexión, suspensión/reanudación, conflicto concurrente y despliegue real del VPS en Windows.
 
 **Aceptación:** escritura condicional e idempotente; no hay «última escritura gana» silenciosa; no se muestran diferencias por campo; la copia recuperable se crea antes de reemplazar; un schema futuro/corrupto no se trata como nube vacía.
 
