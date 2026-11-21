@@ -328,6 +328,13 @@ svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width:
 .plan-arrow { position: absolute; top: 9px; right: 7px; width: 22px; height: 22px; display: grid; place-items: center; border: 0; border-radius: 5px; color: var(--palette-747680, #747680); background: transparent; cursor: pointer; }
 .plan-arrow svg { width: 13px; height: 13px; }
 .profile-row { height: 38px; display: flex; align-items: center; gap: 9px; padding: 4px 6px; border: 0; border-radius: 7px; background: transparent; cursor: pointer; text-align: left; }
+.profile-menu-wrap { position: relative; }
+.profile-row[aria-expanded="true"], .profile-row:focus-visible { outline: 0; background: var(--palette-ffffff08, #ffffff08); }
+.profile-menu { position: absolute; z-index: 18; right: 0; bottom: calc(100% + 7px); width: min(260px, calc(100vw - 36px)); padding: 10px; border: 1px solid var(--line); border-radius: 9px; color: var(--text); background: var(--surface-raised); box-shadow: 0 16px 40px #0007; }
+.profile-menu-label { margin: 2px 5px 4px; color: var(--muted); font-size: 9px; font-weight: 700; letter-spacing: 1px; }
+.profile-menu-description { margin: 0 5px 8px; color: var(--muted); font-size: 10px; line-height: 1.45; }
+.profile-menu > button { display: block; width: 100%; padding: 8px; border: 0; border-radius: 6px; color: var(--text); background: transparent; text-align: left; font-size: 11px; cursor: pointer; }
+.profile-menu > button:hover, .profile-menu > button:focus-visible { outline: 0; background: color-mix(in srgb, var(--theme-accent) 12%, var(--surface)); }
 .profile-row:hover { background: var(--palette-ffffff08, #ffffff08); }
 .profile-avatar { width: 25px; height: 25px; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--palette-55574d, #55574d); background: var(--palette-34352e, #34352e); color: var(--palette-e1d4b1, #e1d4b1); font-size: 10px; font-weight: 700; }
 .profile-name { flex: 1; color: var(--palette-b5b6bd, #b5b6bd); font-size: 14px; }

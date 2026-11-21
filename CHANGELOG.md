@@ -2,6 +2,7 @@
 
 ## Sin publicar
 
+- El menú de los tres puntos del perfil local abre configuración, portabilidad y sincronización.
 - La paleta `Ctrl+K` incorpora accesos a proyectos, Git, recetas, ayuda y notificaciones.
 - El selector del espacio personal ahora muestra su estado local y accesos a proyectos y sincronización.
 - Conectados los botones de Ayuda y Notificaciones con sus paneles y acciones correspondientes.

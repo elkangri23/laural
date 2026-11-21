@@ -319,6 +319,21 @@ test("el selector de espacio abre acciones de proyecto y cuenta", async () => {
   expect(host.textContent).toContain("Cuenta y sincronización");
 });
 
+test("los tres puntos del perfil abren sus opciones de portabilidad y cuenta", async () => {
+  await act(async () => root!.render(<App />));
+  const profile = host.querySelector<HTMLButtonElement>(".profile-row")!;
+  await act(async () => profile.click());
+  expect(profile.getAttribute("aria-expanded")).toBe("true");
+  expect(host.querySelector('[role="menu"][aria-label="Opciones del perfil local"]')).not.toBeNull();
+  await act(async () => buttonIncluding("Importar y exportar configuración").click());
+  expect(host.querySelector("#transfer-title")?.textContent).toBe("Exportar e importar configuración");
+  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Cerrar configuración"]')!.click());
+
+  await act(async () => profile.click());
+  await act(async () => buttonIncluding("Cuenta y sincronización").click());
+  expect(host.querySelector("#account-settings-title")?.textContent).toBe("Cuenta y sincronización");
+});
+
 test("si el portapapeles no está disponible muestra el comando para copiarlo manualmente", async () => {
   Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: vi.fn().mockRejectedValue(new Error("denegado")) } });
   await act(async () => root!.render(<App />));

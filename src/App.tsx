@@ -70,6 +70,7 @@ function App() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
   const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
   const [updateSettingsOpen, setUpdateSettingsOpen] = useState(false);
@@ -119,6 +120,7 @@ function App() {
   const commandCompletionRef = useRef<Record<string, { resolve: (exitCode: number | null) => void; timer: ReturnType<typeof setTimeout> }>>({});
   const syncTimerRef = useRef<number | null>(null);
   const workspaceMenuRef = useRef<HTMLDivElement>(null);
+  const profileMenuRef = useRef<HTMLDivElement>(null);
   const appearanceSyncReadyRef = useRef(false);
 
   const syncSavedPreferences = useCallback(async () => {
@@ -369,6 +371,22 @@ function App() {
       window.removeEventListener("keydown", closeOnEscape);
     };
   }, [workspaceMenuOpen]);
+
+  useEffect(() => {
+    if (!profileMenuOpen) return;
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (event.target instanceof Node && !profileMenuRef.current?.contains(event.target)) setProfileMenuOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setProfileMenuOpen(false);
+    };
+    document.addEventListener("mousedown", closeOnOutsideClick);
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("mousedown", closeOnOutsideClick);
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [profileMenuOpen]);
 
   function addTerminal(shell: Shell, cwd: string | null = projectPath) {
     const count = tabs.filter((tab) => tab.shell === shell).length + 1;
@@ -824,7 +842,16 @@ function App() {
           <button className="appearance-entry" onClick={() => setSettingsOpen(true)}><PaletteIcon /><span>Configuración</span><span className="appearance-entry-meta">{appearance === "dark" ? "Oscuro" : "Claro"}</span></button>
           {syncNotice && <div className="sync-notice" role="status"><span>{syncNotice}</span><button onClick={() => setAccountSettingsOpen(true)}>Revisar</button><button className="sync-notice-close" onClick={clearSyncNotice} aria-label="Cerrar aviso de sincronización">×</button></div>}
           <UpdateManager settingsOpen={updateSettingsOpen} onSettingsOpen={() => setUpdateSettingsOpen(true)} onSettingsClose={() => setUpdateSettingsOpen(false)} />
-          <button className="profile-row"><span className="profile-avatar">AM</span><span className="profile-name">Perfil local</span><DotsIcon /></button>
+          <div className="profile-menu-wrap" ref={profileMenuRef}>
+            <button className="profile-row" aria-expanded={profileMenuOpen} aria-haspopup="menu" aria-controls="profile-menu" onClick={() => setProfileMenuOpen((open) => !open)}><span className="profile-avatar">AM</span><span className="profile-name">Perfil local</span><DotsIcon /></button>
+            {profileMenuOpen && <div className="profile-menu" id="profile-menu" role="menu" aria-label="Opciones del perfil local">
+              <p className="profile-menu-label">PERFIL LOCAL</p>
+              <p className="profile-menu-description">Preferencias y proveedores guardados en este equipo.</p>
+              <button role="menuitem" onClick={() => { setProfileMenuOpen(false); setSettingsOpen(true); }}>Configuración</button>
+              <button role="menuitem" onClick={() => { setProfileMenuOpen(false); setTransferOpen(true); }}>Importar y exportar configuración</button>
+              <button role="menuitem" onClick={() => { setProfileMenuOpen(false); setAccountSettingsOpen(true); }}>Cuenta y sincronización</button>
+            </div>}
+          </div>
         </div>
       </aside>
 
