@@ -379,6 +379,10 @@ svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width:
 .toolbar-icon.active { color: var(--theme-accent); background: color-mix(in srgb, var(--theme-accent) 7.1%, transparent); }
 .toolbar-icon svg { width: 15px; height: 15px; }
 .git-toolbar-button { border: 1px solid var(--palette-303139, #303139); }
+.toolbar-more-wrap { position: relative; }
+.toolbar-more-menu { position: absolute; z-index: 16; top: calc(100% + 7px); right: 0; width: 205px; padding: 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-raised); box-shadow: 0 16px 40px #0007; }
+.toolbar-more-menu > button { display: block; width: 100%; padding: 8px; border: 0; border-radius: 5px; color: var(--text); background: transparent; text-align: left; font-size: 11px; cursor: pointer; }
+.toolbar-more-menu > button:hover, .toolbar-more-menu > button:focus-visible { outline: 0; background: color-mix(in srgb, var(--theme-accent) 12%, var(--surface)); }
 
 .workspace-body { min-height: 0; flex: 1; display: grid; grid-template-columns: minmax(380px, 1fr) 335px; }
 .workspace-body.assistant-hidden { grid-template-columns: minmax(0, 1fr); }

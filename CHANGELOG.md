@@ -2,6 +2,7 @@
 
 ## Sin publicar
 
+- El menú Más opciones de terminal ofrece accesos rápidos a Git, bloques, asistente, proveedor, copiar selección y limpiar.
 - El diálogo de recetas mantiene el foco dentro, permite cerrarlo con Escape y enfoca el formulario al crear o editar.
 - Añadida una regresión que verifica la persistencia de recetas propias al cerrar y volver a abrir el panel.
 - Los controles de terminal permiten copiar la selección actual y limpiar la pantalla sin ejecutar comandos adicionales.

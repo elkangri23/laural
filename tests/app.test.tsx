@@ -377,6 +377,21 @@ test("los controles Copiar y Limpiar envían la acción a la pestaña activa", a
   expect(lastRequest()).toEqual(expect.objectContaining({ clearSequence: 1, clearTarget: lastRequest()?.terminalId }));
 });
 
+test("Más opciones abre accesos rápidos a la terminal y se cierra tras elegir", async () => {
+  await act(async () => root!.render(<App />));
+  const more = host.querySelector<HTMLButtonElement>('[aria-label="Más opciones"]')!;
+  await act(async () => more.click());
+  expect(host.querySelector('[role="menu"][aria-label="Más opciones de terminal"]')).not.toBeNull();
+  await act(async () => buttonIncluding("Mostrar bloques").click());
+  expect(host.querySelector(".command-blocks-panel")).not.toBeNull();
+  expect(more.getAttribute("aria-expanded")).toBe("false");
+
+  await act(async () => more.click());
+  await act(async () => buttonIncluding("Ocultar asistente IA").click());
+  expect(host.querySelector(".assistant-panel")).toBeNull();
+  expect(host.querySelector('[role="menu"][aria-label="Más opciones de terminal"]')).toBeNull();
+});
+
 test("los tres puntos del perfil abren sus opciones de portabilidad y cuenta", async () => {
   await act(async () => root!.render(<App />));
   const profile = host.querySelector<HTMLButtonElement>(".profile-row")!;

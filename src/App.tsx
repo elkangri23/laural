@@ -57,6 +57,7 @@ function App() {
   const [terminalCopyRequest, setTerminalCopyRequest] = useState({ sequence: 0, terminalId: "" });
   const [terminalClearRequest, setTerminalClearRequest] = useState({ sequence: 0, terminalId: "" });
   const [terminalActionNotice, setTerminalActionNotice] = useState("");
+  const [terminalMoreOpen, setTerminalMoreOpen] = useState(false);
   const [commandHistory, setCommandHistory] = useState<CommandHistoryEntry[]>([]);
   const [blocksOpen, setBlocksOpen] = useState(false);
   const [assistantVisible, setAssistantVisible] = useState(() => localStorage.getItem("laural.assistant-visible.v1") !== "false");
@@ -126,6 +127,7 @@ function App() {
   const syncTimerRef = useRef<number | null>(null);
   const workspaceMenuRef = useRef<HTMLDivElement>(null);
   const profileMenuRef = useRef<HTMLDivElement>(null);
+  const terminalMoreRef = useRef<HTMLDivElement>(null);
   const appearanceSyncReadyRef = useRef(false);
 
   const syncSavedPreferences = useCallback(async () => {
@@ -161,6 +163,16 @@ function App() {
 
   function clearSyncNotice() {
     setSyncNotice("");
+  }
+
+  function requestTerminalCopy() {
+    setTerminalActionNotice("");
+    setTerminalCopyRequest((request) => ({ sequence: request.sequence + 1, terminalId: activeTabId }));
+  }
+
+  function requestTerminalClear() {
+    setTerminalActionNotice("");
+    setTerminalClearRequest((request) => ({ sequence: request.sequence + 1, terminalId: activeTabId }));
   }
 
   useEffect(() => {
@@ -397,6 +409,22 @@ function App() {
       window.removeEventListener("keydown", closeOnEscape);
     };
   }, [profileMenuOpen]);
+
+  useEffect(() => {
+    if (!terminalMoreOpen) return;
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (event.target instanceof Node && !terminalMoreRef.current?.contains(event.target)) setTerminalMoreOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setTerminalMoreOpen(false);
+    };
+    document.addEventListener("mousedown", closeOnOutsideClick);
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("mousedown", closeOnOutsideClick);
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [terminalMoreOpen]);
 
   function addTerminal(shell: Shell, cwd: string | null = projectPath) {
     const count = tabs.filter((tab) => tab.shell === shell).length + 1;
@@ -891,7 +919,17 @@ function App() {
             <button className="toolbar-icon git-toolbar-button" aria-label="Abrir panel Git" title="Panel Git de solo lectura" onClick={() => setGitPanelOpen(true)}><BranchIcon /></button>
             <button className={`toolbar-icon ${splitTabId ? "active" : ""}`} aria-label={splitTabId ? `División ${splitOrientation === "vertical" ? "vertical" : "horizontal"}; cambiar o cerrar` : "Dividir panel"} title={splitTabId ? `${splitOrientation === "vertical" ? "Vertical" : "Horizontal"} · clic para cambiar/cerrar` : "Dividir terminal"} onClick={toggleSplit}><SplitIcon /></button>
             <button className={`toolbar-icon assistant-toggle ${assistantVisible ? "active" : ""}`} aria-label={assistantVisible ? "Ocultar asistente IA" : "Mostrar asistente IA"} aria-pressed={assistantVisible} title={assistantVisible ? "Ocultar asistente IA" : "Mostrar asistente IA"} onClick={() => setAssistantVisible((visible) => !visible)}><PanelRightIcon /></button>
-            <button className="toolbar-icon" aria-label="Más opciones"><DotsIcon /></button>
+            <div className="toolbar-more-wrap" ref={terminalMoreRef}>
+              <button className="toolbar-icon" aria-label="Más opciones" aria-expanded={terminalMoreOpen} aria-haspopup="menu" aria-controls="terminal-more-menu" onClick={() => setTerminalMoreOpen((open) => !open)}><DotsIcon /></button>
+              {terminalMoreOpen && <div className="toolbar-more-menu" id="terminal-more-menu" role="menu" aria-label="Más opciones de terminal">
+                <button role="menuitem" onClick={() => { setTerminalMoreOpen(false); setGitPanelOpen(true); }}>Abrir panel Git</button>
+                <button role="menuitem" onClick={() => { setTerminalMoreOpen(false); setBlocksOpen((open) => !open); }}>{blocksOpen ? "Ocultar bloques" : "Mostrar bloques"}</button>
+                <button role="menuitem" onClick={() => { setTerminalMoreOpen(false); setAssistantVisible((visible) => !visible); }}>{assistantVisible ? "Ocultar asistente IA" : "Mostrar asistente IA"}</button>
+                <button role="menuitem" onClick={() => { setTerminalMoreOpen(false); setProviderDialogOpen(true); }}>Configurar proveedor</button>
+                <button role="menuitem" onClick={() => { setTerminalMoreOpen(false); requestTerminalCopy(); }}>Copiar selección</button>
+                <button role="menuitem" onClick={() => { setTerminalMoreOpen(false); requestTerminalClear(); }}>Limpiar terminal</button>
+              </div>}
+            </div>
           </div>
         </div>
 
@@ -899,7 +937,7 @@ function App() {
           <section className="terminal-area" aria-label="Terminal">
             <div className="terminal-heading">
               <div><div className="terminal-title-line"><span className="terminal-title-mark">⌁</span><h1>{activeTab?.title ?? "Terminal"}</h1><span className="connection-pill"><span /> Local</span></div><p className="terminal-path">{activeTab?.cwd ?? "Directorio de inicio"} <span>·</span> Windows</p></div>
-              <div className="terminal-heading-actions"><button className={`small-action ${blocksOpen ? "selected" : ""}`} onClick={() => setBlocksOpen((open) => !open)} aria-pressed={blocksOpen}>Bloques <span className="block-count">{visibleBlocks.length}</span></button><button className="small-action" title="Copiar el texto seleccionado en la terminal" onClick={() => { setTerminalActionNotice(""); setTerminalCopyRequest((request) => ({ sequence: request.sequence + 1, terminalId: activeTabId })); }}><CopyIcon /> Copiar selección</button><button className="small-action" title="Limpiar la pantalla de la terminal activa" onClick={() => { setTerminalActionNotice(""); setTerminalClearRequest((request) => ({ sequence: request.sequence + 1, terminalId: activeTabId })); }}><ClearIcon /> Limpiar</button>{terminalActionNotice && <span className="terminal-action-notice" role="status">{terminalActionNotice}</span>}</div>
+              <div className="terminal-heading-actions"><button className={`small-action ${blocksOpen ? "selected" : ""}`} onClick={() => setBlocksOpen((open) => !open)} aria-pressed={blocksOpen}>Bloques <span className="block-count">{visibleBlocks.length}</span></button><button className="small-action" title="Copiar el texto seleccionado en la terminal" onClick={requestTerminalCopy}><CopyIcon /> Copiar selección</button><button className="small-action" title="Limpiar la pantalla de la terminal activa" onClick={requestTerminalClear}><ClearIcon /> Limpiar</button>{terminalActionNotice && <span className="terminal-action-notice" role="status">{terminalActionNotice}</span>}</div>
             </div>
             <div className={`terminal-frame ${blocksOpen ? "with-blocks" : ""} ${splitTabId ? `is-split split-${splitOrientation}` : ""}`}>
               {tabs.map((tab) => <TerminalPane key={tab.id} terminalId={tab.id} active={tab.id === activeTabId} copyRequest={terminalCopyRequest} clearRequest={terminalClearRequest} onActionNotice={setTerminalActionNotice} onRestart={restartTab} shell={tab.shell} cwd={tab.cwd} visible={tab.id === activeTabId || tab.id === splitTabId} theme={activeTheme} appearance={appearance} onTextOutput={captureTerminalOutput} onCommandSubmit={startCommandBlock} onCommandFinish={finishCommandBlock} />)}
