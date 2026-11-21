@@ -87,12 +87,12 @@ Añadidas regresiones que simulan el fallo al escribir una credencial y comprueb
 
 ## M9 — Servicio, cuenta y status público (parcial)
 
-- API Fastify local para health y snapshots privados; schema compartido cerrado, límite 256 KiB, autenticación de sesiones existentes, aislamiento por cuenta, revisiones `ETag`/`If-Match`, idempotencia, validación de endpoints y migración PostgreSQL inicial. Cobertura del servicio: 100 % líneas y 96,62 % ramas en 25 pruebas con dobles de prueba.
+- API Fastify local para health y snapshots privados; schema compartido cerrado, límite 256 KiB, autenticación de sesiones, aislamiento por cuenta, revisiones `ETag`/`If-Match`, idempotencia, validación de endpoints y migraciones PostgreSQL. Suite total del servicio: 62 pruebas, 96,45 % líneas / 91,75 % ramas con dependencias simuladas.
 - Publicar API Fastify/PostgreSQL bajo `https://sync.laurafernandezenfermeria.com` solo después de completar autenticación, límites de abuso y pruebas PostgreSQL reales.
-- Implementado parcialmente: registro de email/nombre/contraseña con Argon2id, PIN de verificación vía adapter Resend, expiración de 5 minutos, máximo de cinco intentos, reenvío limitado por cuenta y respuestas genéricas. Desactivado por defecto; no emite sesión. Suite backend: 45 pruebas, 97,44 % líneas / 92,34 % ramas con dobles de PostgreSQL y Resend.
-- Implementar login por navegador y código loopback de un solo uso, Google, passkeys, TOTP, PIN de recuperación, revocación de sesiones y borrado. Configurar dominio/remitente verificados y API key restringida como secreto del VPS.
+- Implementado parcialmente: registro/verificación de email con Argon2id, PIN HMAC de 5 minutos, Resend y límites por cuenta; página propia de login en navegador, callback loopback restringido, state/PKCE S256, código de un uso (2 min) y sesión de 30 días persistida solo como hash. Desactivado por defecto. Suite backend: 62 pruebas, 96,45 % líneas / 91,75 % ramas con dobles de PostgreSQL y Resend.
+- Integrar en Tauri el listener de loopback, validar state, canjear por HTTPS desde Rust y guardar el token en Credential Manager. Después login Google, passkeys, TOTP, recuperación, revocación/dispositivos y borrado. Faltan límites por IP/origen, abuso distribuido, pruebas PostgreSQL reales y DNS/remitente/API key Resend del VPS.
 - Servir `/status` estáticamente en el mismo VPS; mostrar disponibilidad, incidentes y mantenimiento sin contenido privado.
-- Pendiente probar migraciones/aislamiento/PIN/rate limits en PostgreSQL real, retención de códigos e idempotencia, recuperación, publicación de avisos y operación del servicio. La API aún no es desplegable para usuarios: el flujo de cuenta no crea ni emite sesiones y faltan límites por origen/IP.
+- Pendiente probar migraciones/aislamiento/PIN/PKCE/rate limits en PostgreSQL real, retención de códigos/flows/idempotencia, recuperación, publicación de avisos y operación del servicio. No desplegar para usuarios hasta integrar y probar el cliente Tauri, límites por origen/IP, abuso y entrega Resend real.
 
 ## M10 — Cliente y sincronización (pendiente)
 

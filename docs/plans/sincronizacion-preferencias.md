@@ -1,6 +1,6 @@
 # Especificación: perfiles, portabilidad y sincronización
 
-- **Estado:** F1 en implementación inicial; F2 implementado salvo validación automática de schema común; F3 iniciado con API privada de snapshots y registro/verificación de correo. Login/emisión de sesión, recuperación, status, despliegue y cliente siguen pendientes.
+- **Estado:** F1 en implementación inicial; F2 implementado salvo validación automática de schema común; F3 iniciado con API privada de snapshots, registro/verificación y login web por PKCE. Integración del cliente Tauri, factores adicionales, recuperación, status y despliegue siguen pendientes.
 - **Fecha:** 2026-11-21.
 - **Alcance:** Windows primero; perfiles locales, exportar/importar y sincronización opcional de preferencias.
 - **Diseño formal:** [sincronización de preferencias y portabilidad](../designs/sincronizacion-preferencias-y-portabilidad.md).
@@ -8,7 +8,7 @@
 
 ## Estado actual
 
-La app de escritorio ofrece exportar/importar local desde Configuración: formato `.laural` versionado, vista previa, fusión/reemplazo, claves opcionales cifradas y copia previa. En F3 ya existe un primer servidor local para snapshots y registro/verificación por correo; aún no hay login ni emisión de sesiones, cliente de sync ni servicio publicado. Los perfiles viven en `providers.json`, la política del agente en `agent.json`, la apariencia y la preferencia de actualización en `localStorage`, y las claves de proveedores en Windows Credential Manager.
+La app de escritorio ofrece exportar/importar local desde Configuración: formato `.laural` versionado, vista previa, fusión/reemplazo, claves opcionales cifradas y copia previa. En F3 ya existe un servidor local para snapshots, registro/verificación y login web con canje PKCE; aún no hay integración Tauri que abra el navegador y guarde la sesión, cliente de sync ni servicio publicado. Los perfiles viven en `providers.json`, la política del agente en `agent.json`, la apariencia y la preferencia de actualización en `localStorage`, y las claves de proveedores en Windows Credential Manager.
 
 ## Decisiones funcionales aprobadas
 
@@ -51,11 +51,11 @@ La app de escritorio ofrece exportar/importar local desde Configuración: format
 
 1. **F1 — Portabilidad local:** implementación inicial en el escritorio. Restan pruebas de integración de fallos del almacén, ensayo de restauración en Windows y objetivo de cobertura específica.
 2. **F2 — Contrato y adaptador local:** implementados schema cerrado v1, fixture, tipos Rust/TypeScript, validación con tope de 256 KiB y comando nativo para construir el snapshot desde preferencias y perfiles. El endpoint se incluye solo si su consentimiento por perfil está guardado. Pendiente validar automáticamente el JSON Schema canónico en Rust y TypeScript.
-3. **F3 — Servicio y cuenta:** API Fastify de snapshots, migración inicial, auth middleware para sesiones existentes, revisiones condicionales e idempotencia están implementados localmente. El registro y verificación por PIN con Argon2id/Resend está implementado tras bandera apagada; login/código loopback, Google, passkeys, TOTP, PIN de recuperación, revocación, borrado, límites por IP, PostgreSQL real y publicación VPS siguen pendientes.
+3. **F3 — Servicio y cuenta:** API Fastify, migraciones, registro/verificación por PIN, página web de email/contraseña, flujo loopback/PKCE y emisión de sesión opaca están implementados localmente tras bandera apagada. Falta integrarlos en Rust/Tauri (listener y state, cliente HTTPS, Credential Manager), Google, passkeys, TOTP, recuperación, logout/dispositivos, borrado, rate limits por IP, PostgreSQL real y publicación VPS.
 4. **F4 — Sincronización:** cliente Rust, estado y cola offline, revisiones condicionales, conflictos, **Sincronizar ahora** y revisión cada 3 horas con Laural abierta.
 5. **F5 — Estado y operación:** página `/status`, avisos de mantenimiento/incidentes desde operación protegida, procedimientos de recuperación y despliegue TLS.
 
-El [backlog](../BACKLOG.md) contiene criterios de cierre por tarea; la [hoja de ruta](../ROADMAP.md) ordena las entregas. La suite del servicio obtiene 97,44 % de líneas y 92,34 % de ramas en 45 pruebas, con PostgreSQL y Resend simulados; faltan pruebas de integración reales y pruebas manuales de Windows. Los módulos restantes de autenticación, cifrado y recuperación deberán cumplir al menos 85 % en líneas y ramas antes de habilitarse.
+El [backlog](../BACKLOG.md) contiene criterios de cierre por tarea; la [hoja de ruta](../ROADMAP.md) ordena las entregas. La suite del servicio obtiene 96,45 % de líneas y 91,75 % de ramas en 62 pruebas, con PostgreSQL y Resend simulados; faltan pruebas de integración reales y pruebas manuales de Windows. Los módulos restantes de autenticación, cifrado y recuperación deberán cumplir al menos 85 % en líneas y ramas antes de habilitarse.
 
 ## Pendientes antes de producción
 

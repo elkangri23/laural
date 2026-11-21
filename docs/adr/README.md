@@ -26,11 +26,12 @@ Los ADR registran por qué se eligió una opción y qué costes trae. Un ADR ace
 | [0020](0020-perfiles-y-sincronizacion-opcional.md) | Perfil local, exportación/importación y sincronización opcional sin claves API en nube | Aceptada; portabilidad parcial, sync pendiente |
 | [0021](0021-paleta-e-historial-de-comandos.md) | Paleta de acciones y comandos recientes solo en sesión | Aceptada |
 | [0022](0022-cifrado-de-exportaciones-y-claves-locales.md) | Contraseña obligatoria para exportar claves y límites del Credential Manager | Aceptada; implementación inicial disponible |
-| [0023](0023-servicio-de-sincronizacion.md) | Fastify/PostgreSQL, API oficial, revisiones, auth nativa y estado público | Aceptada; API de snapshots parcial |
+| [0023](0023-servicio-de-sincronizacion.md) | Fastify/PostgreSQL, API oficial, revisiones, auth nativa y estado público | Aceptada; servicio parcial |
 | [0024](0024-sin-copias-fuera-del-vps.md) | No mantener copias de sincronización fuera del VPS | Aceptada; comunicar riesgo de pérdida total |
 | [0025](0025-correo-transaccional-con-resend.md) | Correo transaccional del servicio con Resend | Aceptada; primer adapter implementado, remitente/secretos por configurar |
-| [0026](0026-api-inicial-de-snapshots.md) | API privada de snapshots con revisión, idempotencia y schema compartido | Aceptada; login y despliegue pendientes |
+| [0026](0026-api-inicial-de-snapshots.md) | API privada de snapshots con revisión, idempotencia y schema compartido | Aceptada; integración Tauri y despliegue pendientes |
 | [0027](0027-registro-y-verificacion-de-correo.md) | Registro inicial y PIN de correo no autenticador mediante Resend | Aceptada; primera fase implementada |
+| [0028](0028-login-nativo-pkce.md) | Login por navegador externo, callback loopback y canje PKCE | Aceptada; servidor parcial, Tauri pendiente |
 
 ## Crear un ADR
 

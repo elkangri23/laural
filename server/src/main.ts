@@ -4,6 +4,8 @@ import { createSessionAuthenticator } from "./auth.js";
 import { readConfig, readEmailAuthConfig } from "./config.js";
 import { EmailAuthService } from "./email-auth.js";
 import { PostgresEmailAuthStore } from "./postgres-email-auth-store.js";
+import { NativeAuthService } from "./native-auth.js";
+import { PostgresNativeAuthStore } from "./postgres-native-auth-store.js";
 import { PostgresPreferenceStore } from "./postgres-store.js";
 import { ResendMailer } from "./resend-mailer.js";
 
@@ -18,11 +20,13 @@ const emailAuth = emailAuthConfig
     emailAuthConfig.pinPepper,
   )
   : undefined;
+const nativeAuth = emailAuthConfig ? new NativeAuthService(new PostgresNativeAuthStore(pool)) : undefined;
 const app = createApp({
   store: preferenceStore,
   authenticate: createSessionAuthenticator(pool),
   checkReadiness: async () => { await pool.query("SELECT 1"); },
   ...(emailAuth ? { emailAuth } : {}),
+  ...(nativeAuth ? { nativeAuth } : {}),
 });
 
 await app.listen({ host: config.host, port: config.port });

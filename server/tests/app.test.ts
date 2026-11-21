@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it } from "vitest";
+import argon2 from "argon2";
+import { createHash } from "node:crypto";
 import type { PreferenceSnapshot, PreferenceStore, StoredSnapshot, WriteSnapshotResult } from "../src/contracts.js";
 import { createApp } from "../src/app.js";
 import { EmailAuthService } from "../src/email-auth.js";
+import { NativeAuthService, type NativeAuthStore } from "../src/native-auth.js";
 
 const snapshot: PreferenceSnapshot = {
   schemaVersion: 1,
@@ -34,7 +37,7 @@ class MemoryStore implements PreferenceStore {
 }
 
 const instances: Array<ReturnType<typeof createApp>> = [];
-function createTestApp(options: { store?: PreferenceStore; checkReadiness?: () => Promise<void>; emailAuth?: EmailAuthService } = {}): ReturnType<typeof createApp> {
+function createTestApp(options: { store?: PreferenceStore; checkReadiness?: () => Promise<void>; emailAuth?: EmailAuthService; nativeAuth?: NativeAuthService } = {}): ReturnType<typeof createApp> {
   const store = options.store ?? new MemoryStore();
   const app = createApp({
     store,
@@ -44,6 +47,7 @@ function createTestApp(options: { store?: PreferenceStore; checkReadiness?: () =
     },
     checkReadiness: options.checkReadiness ?? (async () => undefined),
     ...(options.emailAuth ? { emailAuth: options.emailAuth } : {}),
+    ...(options.nativeAuth ? { nativeAuth: options.nativeAuth } : {}),
   });
   instances.push(app);
   return app;
@@ -87,6 +91,180 @@ describe("API de snapshots de preferencias", () => {
     expect(verified.statusCode).toBe(202);
     expect(verified.json()).toEqual({ status: "accepted" });
     expect(verified.headers.authorization).toBeUndefined();
+  });
+
+  it("sirve página propia sin scripts y restringe el inicio a callback loopback", async () => {
+    const disabled = createTestApp({ emailAuth: new EmailAuthService({
+      createUnverifiedAccount: async () => null,
+      createVerification: async () => null,
+      verifyEmail: async () => false,
+    }, { sendVerification: async () => undefined }, "a-pepper-long-enough-for-auth-page-test" ) });
+    expect((await disabled.inject({ method: "GET", url: "/auth/native" })).statusCode).toBe(404);
+
+    const nativeStore: NativeAuthStore = {
+      createFlow: async () => undefined,
+      isFlowActive: async () => true,
+      findLoginCandidate: async () => null,
+      failLogin: async () => undefined,
+      completeLogin: async () => null,
+      exchangeCode: async () => null,
+    };
+    const emailAuth = new EmailAuthService({
+      createUnverifiedAccount: async () => null,
+      createVerification: async () => null,
+      verifyEmail: async () => false,
+    }, { sendVerification: async () => undefined }, "a-pepper-long-enough-for-auth-page-test");
+    const app = createTestApp({ emailAuth, nativeAuth: new NativeAuthService(nativeStore) });
+    const query = new URLSearchParams({
+      redirect_uri: "http://127.0.0.1:49152/callback",
+      state: "s".repeat(43), code_challenge: "c".repeat(43), code_challenge_method: "S256",
+    });
+    const response = await app.inject({ method: "GET", url: `/auth/native?${query}` });
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-security-policy"]).toContain("form-action 'self'");
+    expect(response.headers["set-cookie"]).toContain("HttpOnly; SameSite=Strict");
+    expect(response.body).toContain("lang=\"es\"");
+    expect(response.body).toContain("name=\"password\"");
+    expect(response.body).not.toContain("<script");
+    const css = await app.inject({ method: "GET", url: "/auth.css" });
+    expect(css.headers["content-type"]).toContain("text/css");
+    expect(css.body).toContain("--accent");
+
+    const malicious = await app.inject({
+      method: "GET",
+      url: `/auth/native?${new URLSearchParams({ ...Object.fromEntries(query), redirect_uri: "https://attacker.test/callback" })}`,
+    });
+    expect(malicious.statusCode).toBe(400);
+
+    const malformedLogin = await app.inject({
+      method: "POST", url: "/auth/native/login",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      payload: new URLSearchParams({ csrf: "x".repeat(43), email: "user@example.test", password: "valid password 2026" }).toString(),
+    });
+    expect(malformedLogin.statusCode).toBe(400);
+    expect(malformedLogin.body).not.toContain("valid password 2026");
+    const invalidExchange = await app.inject({ method: "POST", url: "/v1/auth/native/exchange", payload: { code: "x".repeat(43), codeVerifier: "v".repeat(43) } });
+    expect(invalidExchange.statusCode).toBe(400);
+  });
+
+  it("valida la cookie y el CSRF en registro, reenvío y confirmación del navegador", async () => {
+    const verificationEmail = "user@example.test";
+    const accountStore = {
+      createUnverifiedAccount: async () => ({ id: "account-a" }),
+      createVerification: async () => ({ accountId: "account-a", displayName: "User", challengeId: "challenge-a" }),
+      verifyEmail: async () => true,
+    };
+    const mailer = { sendVerification: async () => undefined };
+    const emailAuth = new EmailAuthService(accountStore, mailer, "a-pepper-long-enough-for-browser-forms");
+    const nativeStore: NativeAuthStore = {
+      createFlow: async () => undefined,
+      isFlowActive: async (cookie, csrf) => cookie.length === 64 && csrf.length === 64,
+      findLoginCandidate: async () => null,
+      failLogin: async () => undefined,
+      completeLogin: async () => null,
+      exchangeCode: async () => null,
+    };
+    const app = createTestApp({ emailAuth, nativeAuth: new NativeAuthService(nativeStore) });
+    const startQuery = new URLSearchParams({
+      redirect_uri: "http://127.0.0.1:49152/callback", state: "s".repeat(43),
+      code_challenge: "c".repeat(43), code_challenge_method: "S256",
+    });
+    const start = await app.inject({ method: "GET", url: `/auth/native?${startQuery}` });
+    const cookie = String(start.headers["set-cookie"]).split(";")[0] ?? "";
+    const csrf = /name="csrf" value="([^"]+)"/.exec(start.body)?.[1] ?? "";
+
+    const invalidFlow = await app.inject({
+      method: "POST", url: "/auth/native/register",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      payload: new URLSearchParams({ csrf, displayName: "User", email: verificationEmail, password: "valid password 2026" }).toString(),
+    });
+    expect(invalidFlow.statusCode).toBe(400);
+
+    const registered = await app.inject({
+      method: "POST", url: "/auth/native/register",
+      headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+      payload: new URLSearchParams({ csrf, displayName: "User", email: verificationEmail, password: "valid password 2026" }).toString(),
+    });
+    expect(registered.statusCode).toBe(200);
+    expect(registered.body).toContain("Si los datos son válidos");
+
+    const resent = await app.inject({
+      method: "POST", url: "/auth/native/verification/resend",
+      headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+      payload: new URLSearchParams({ csrf, email: verificationEmail }).toString(),
+    });
+    expect(resent.statusCode).toBe(200);
+    expect(resent.body).toContain("Si la cuenta necesita verificación");
+
+    const confirmed = await app.inject({
+      method: "POST", url: "/auth/native/verification/confirm",
+      headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+      payload: new URLSearchParams({ csrf, email: verificationEmail, pin: "012345" }).toString(),
+    });
+    expect(confirmed.statusCode).toBe(200);
+    expect(confirmed.body).toContain("Si el PIN era correcto");
+  });
+
+  it("hace login en navegador y canjea PKCE sin entregar el token en la página", async () => {
+    const password = "password for Laural 2026";
+    const passwordHash = await argon2.hash(password);
+    let flowCookie = "";
+    let oneTimeCode = "";
+    let expectedChallenge = "";
+    const nativeStore: NativeAuthStore = {
+      createFlow: async () => undefined,
+      isFlowActive: async () => true,
+      findLoginCandidate: async () => ({
+        flowId: "flow-1", redirectUri: "http://127.0.0.1:49152/callback", state: "s".repeat(43),
+        codeChallenge: expectedChallenge, accountId: "account-a", passwordHash, emailVerified: true,
+      }),
+      failLogin: async () => undefined,
+      completeLogin: async ({ codeDigest }) => {
+        oneTimeCode = codeDigest;
+        return { redirectUri: "http://127.0.0.1:49152/callback", state: "s".repeat(43) };
+      },
+      exchangeCode: async (codeDigest, challenge) => {
+        expect(codeDigest).toBe(oneTimeCode);
+        expect(challenge).toBe(expectedChallenge);
+        return new Date("2026-12-01T00:00:00.000Z");
+      },
+    };
+    const emailAuth = new EmailAuthService({
+      createUnverifiedAccount: async () => null,
+      createVerification: async () => null,
+      verifyEmail: async () => false,
+    }, { sendVerification: async () => undefined }, "a-pepper-long-enough-for-login-route-test");
+    const app = createTestApp({ emailAuth, nativeAuth: new NativeAuthService(nativeStore) });
+    const verifier = "v".repeat(43);
+    expectedChallenge = createHash("sha256").update(verifier).digest("base64url");
+    const startQuery = new URLSearchParams({
+      redirect_uri: "http://127.0.0.1:49152/callback", state: "s".repeat(43),
+      code_challenge: expectedChallenge, code_challenge_method: "S256",
+    });
+    const start = await app.inject({ method: "GET", url: `/auth/native?${startQuery}` });
+    const cookie = String(start.headers["set-cookie"]);
+    flowCookie = cookie.split(";")[0] ?? "";
+    const csrf = /name="csrf" value="([^"]+)"/.exec(start.body)?.[1] ?? "";
+    const login = await app.inject({
+      method: "POST", url: "/auth/native/login",
+      headers: { cookie: flowCookie, "content-type": "application/x-www-form-urlencoded" },
+      payload: new URLSearchParams({ csrf, email: "user@example.test", password }).toString(),
+    });
+    expect(login.statusCode).toBe(303);
+    const callback = new URL(String(login.headers.location));
+    expect(callback.origin).toBe("http://127.0.0.1:49152");
+    expect(callback.searchParams.get("state")).toBe("s".repeat(43));
+    const code = callback.searchParams.get("code") ?? "";
+    expect(code).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(login.headers["set-cookie"]).toContain("Max-Age=0");
+
+    const exchange = await app.inject({
+      method: "POST", url: "/v1/auth/native/exchange",
+      payload: { code, codeVerifier: verifier },
+    });
+    expect(exchange.statusCode).toBe(200);
+    expect(exchange.json().sessionToken).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(exchange.body).not.toContain(password);
   });
 
   it("requiere autenticación y no devuelve datos de otra cuenta", async () => {

@@ -1,6 +1,6 @@
 # Casos de uso: portabilidad y sincronización
 
-- **Estado:** UC-17/18 tienen una implementación inicial en la app; la API de snapshots y el registro/verificación de correo están implementados localmente. Login del cliente, sincronización, recuperación de cuenta y status público siguen pendientes.
+- **Estado:** UC-17/18 tienen una implementación inicial en la app; API, registro/verificación y login web con PKCE están implementados localmente. Integración de login en Tauri, sincronización, recuperación de cuenta y status público siguen pendientes.
 - **Especificación:** [plan de sincronización](../plans/sincronizacion-preferencias.md).
 - **Diseño técnico:** [diseño formal](../designs/sincronizacion-preferencias-y-portabilidad.md).
 

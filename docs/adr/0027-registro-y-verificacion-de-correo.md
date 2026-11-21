@@ -19,9 +19,9 @@ F3 necesita permitir crear cuentas verificables y usar el proveedor Resend aprob
 
 ## Consecuencias
 
-- Email no puede iniciar sesión ni retirar MFA. Confirmar el correo no devuelve token ni crea una sesión.
+- El PIN de email no puede iniciar sesión ni retirar MFA. Confirmar el correo no devuelve token ni crea una sesión; el login email/contraseña por navegador y el canje PKCE se decidieron después en ADR-0028.
 - Una falla de entrega no revela el estado de cuenta; la persona puede solicitar un reenvío sujeto al límite por cuenta.
-- El registro no debe exponerse públicamente aún: faltan rate limits persistentes por IP/origen, protección anti-abuso distribuida, login de navegador/código loopback, pruebas PostgreSQL reales y operación del dominio/remitente Resend.
+- El registro no debe exponerse públicamente aún: faltan rate limits persistentes por IP/origen, protección anti-abuso distribuida, pruebas PostgreSQL reales y operación del dominio/remitente Resend.
 - Rotar el pepper invalida los PIN pendientes. Las tablas de PIN necesitan limpieza/retención operativa antes de abrir el registro.
 
 ## Evidencia

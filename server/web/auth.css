@@ -1,0 +1,58 @@
+:root {
+  color-scheme: light dark;
+  font-family: "Segoe UI Variable", "Segoe UI", sans-serif;
+  background: #101511;
+  color: #edf3ec;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  --surface: #19201b;
+  --surface-raised: #202a23;
+  --border: #344138;
+  --accent: #9bc66c;
+  --muted: #a9b6aa;
+}
+
+* { box-sizing: border-box; }
+body {
+  min-height: 100vh;
+  margin: 0;
+  display: grid;
+  place-items: center;
+  padding: 32px 18px;
+  background: radial-gradient(ellipse at 50% 0%, #26382a 0, #101511 58%);
+}
+.shell { width: min(100%, 540px); }
+.brand { display: flex; align-items: center; gap: 12px; margin: 0 0 22px 4px; }
+.mark {
+  width: 40px; height: 40px; display: grid; place-items: center;
+  border-radius: 13px; background: #9bc66c; color: #142014; font-weight: 800;
+}
+.brand-name { font-size: 19px; font-weight: 700; letter-spacing: .02em; }
+.brand-caption { color: var(--muted); font-size: 12px; margin-top: 2px; }
+main {
+  padding: clamp(24px, 6vw, 42px);
+  border: 1px solid var(--border); border-radius: 22px;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  box-shadow: 0 24px 80px #0006;
+}
+h1 { margin: 0; font-size: clamp(25px, 5vw, 32px); letter-spacing: -.035em; }
+.intro { margin: 10px 0 24px; color: var(--muted); line-height: 1.55; }
+.notice { min-height: 22px; margin: 0 0 15px; color: var(--accent); font-size: 14px; }
+form { display: grid; gap: 13px; }
+label { display: grid; gap: 7px; font-size: 13px; font-weight: 600; }
+input {
+  width: 100%; min-height: 44px; padding: 10px 12px;
+  border: 1px solid var(--border); border-radius: 10px;
+  background: #101511; color: #edf3ec; font: inherit; font-weight: 400;
+}
+input:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button {
+  min-height: 44px; padding: 10px 14px; border: 0; border-radius: 10px;
+  background: var(--accent); color: #142014; font: inherit; font-weight: 700; cursor: pointer;
+}
+button:hover { filter: brightness(1.06); }
+details { margin-top: 20px; padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-raised); }
+summary { color: #d9e6d6; font-weight: 650; cursor: pointer; }
+details form { margin-top: 16px; }
+.privacy { margin: 22px 0 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
+footer { margin: 15px 4px 0; color: var(--muted); font-size: 12px; text-align: center; }

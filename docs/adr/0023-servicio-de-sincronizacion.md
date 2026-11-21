@@ -1,6 +1,6 @@
 # ADR-0023: Arquitectura del servicio de preferencias
 
-- **Estado:** Aceptada
+- **Estado:** Aceptada; API de snapshots y primera fase de email/PKCE implementadas localmente
 - **Fecha:** 2026-11-21
 - **Decisores:** Antonio Moles
 

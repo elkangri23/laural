@@ -9,6 +9,138 @@ info:
 servers:
   - url: https://sync.laurafernandezenfermeria.com
 paths:
+  /auth/native:
+    get:
+      summary: Inicia un flujo PKCE y muestra el acceso web de Laural
+      security: []
+      parameters:
+        - in: query
+          name: redirect_uri
+          required: true
+          schema: { type: string, maxLength: 256 }
+          description: Se limita a http://127.0.0.1:<puerto>/callback sin query ni fragmentos.
+        - in: query
+          name: state
+          required: true
+          schema: { type: string, minLength: 43, maxLength: 128 }
+        - in: query
+          name: code_challenge
+          required: true
+          schema: { type: string, pattern: '^[A-Za-z0-9_-]{43}$' }
+        - in: query
+          name: code_challenge_method
+          required: true
+          schema: { const: S256 }
+      responses:
+        '200':
+          description: Página de login web protegida con cookie HttpOnly y token CSRF
+          headers:
+            Set-Cookie: { schema: { type: string } }
+          content:
+            text/html: { schema: { type: string } }
+        '400': { description: Parámetros inválidos o redirect fuera de loopback }
+  /auth/native/login:
+    post:
+      summary: Autentica email/contraseña desde el navegador externo
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [csrf, email, password]
+              properties:
+                csrf: { type: string, minLength: 43, maxLength: 43 }
+                email: { type: string, maxLength: 320 }
+                password: { type: string, minLength: 12, maxLength: 128, writeOnly: true }
+      responses:
+        '303': { description: Login válido; redirige solo al callback loopback con code y state }
+        '400': { description: Error genérico de credenciales o solicitud expirada }
+  /auth/native/register:
+    post:
+      summary: Formulario web para registrar una cuenta
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [csrf, displayName, email, password]
+              properties:
+                csrf: { type: string, minLength: 43, maxLength: 43 }
+                displayName: { type: string, maxLength: 80 }
+                email: { type: string, maxLength: 320 }
+                password: { type: string, minLength: 12, maxLength: 128, writeOnly: true }
+      responses:
+        '200': { description: Página web con respuesta genérica de registro }
+  /auth/native/verification/resend:
+    post:
+      summary: Formulario web para solicitar otro PIN de verificación
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [csrf, email]
+              properties:
+                csrf: { type: string, minLength: 43, maxLength: 43 }
+                email: { type: string, maxLength: 320 }
+      responses:
+        '200': { description: Respuesta web genérica sujeta a límites por cuenta }
+  /auth/native/verification/confirm:
+    post:
+      summary: Formulario web para confirmar PIN de correo
+      description: El PIN no inicia sesión ni retira factores de seguridad.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [csrf, email, pin]
+              properties:
+                csrf: { type: string, minLength: 43, maxLength: 43 }
+                email: { type: string, maxLength: 320 }
+                pin: { type: string, pattern: '^[0-9]{6}$', writeOnly: true }
+      responses:
+        '200': { description: Respuesta genérica; el PIN válido marca el correo verificado sin crear sesión }
+  /v1/auth/native/exchange:
+    post:
+      summary: Canjea el código loopback con PKCE y crea una sesión
+      description: Esta respuesta solo debe consumirse desde el cliente nativo; el token nunca va a la WebView.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [code, codeVerifier]
+              properties:
+                code: { type: string, pattern: '^[A-Za-z0-9_-]{43}$' }
+                codeVerifier: { type: string, minLength: 43, maxLength: 128, writeOnly: true }
+      responses:
+        '200':
+          description: Token opaco de sesión con expiración de 30 días
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sessionToken: { type: string, writeOnly: true }
+                  expiresAt: { type: string, format: date-time }
+                required: [sessionToken, expiresAt]
+        '400': { description: Código inválido, caducado o ya consumido }
   /v1/auth/register:
     post:
       summary: Crea una cuenta pendiente y solicita la verificación de correo
