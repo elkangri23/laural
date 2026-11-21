@@ -1,12 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import pg, { type Pool } from "pg";
+import { applyMigrations, MIGRATION_FILES } from "../src/migration-runner.js";
 import { PostgresRequestRateLimiter } from "../src/request-rate-limit.js";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const describePostgres = databaseUrl ? describe : describe.skip;
-const migrations = ["001_initial.sql", "002_email_verification.sql", "003_native_auth.sql", "004_request_rate_limits.sql"];
 const schema = `laural_it_${randomUUID().replaceAll("-", "")}`;
 
 describePostgres("integración real de PostgreSQL para rate limits", () => {
@@ -17,12 +16,12 @@ describePostgres("integración real de PostgreSQL para rate limits", () => {
     adminPool = new pg.Pool({ connectionString: databaseUrl });
     await adminPool.query(`CREATE SCHEMA "${schema}"`);
     isolatedPool = new pg.Pool({ connectionString: databaseUrl, options: `-c search_path=${schema}` });
-    await isolatedPool.query("CREATE TABLE schema_migrations (version text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())");
-
-    for (const migration of migrations) {
-      const sql = await readFile(new URL(`../migrations/${migration}`, import.meta.url), "utf8");
-      await isolatedPool.query(sql);
-      await isolatedPool.query("INSERT INTO schema_migrations (version) VALUES ($1)", [migration]);
+    const client = await isolatedPool.connect();
+    try {
+      await applyMigrations(client);
+      await applyMigrations(client);
+    } finally {
+      client.release();
     }
   });
 
@@ -35,6 +34,8 @@ describePostgres("integración real de PostgreSQL para rate limits", () => {
   });
 
   it("aplica las cuatro migraciones y comparte límites atómicos entre instancias", async () => {
+    const applied = await isolatedPool.query<{ version: string }>("SELECT version FROM schema_migrations ORDER BY version");
+    expect(applied.rows.map(({ version }) => version)).toEqual([...MIGRATION_FILES]);
     const firstInstance = new PostgresRequestRateLimiter(isolatedPool, "integracion-rate-limit-pepper-32-bytes-minimo");
     const secondInstance = new PostgresRequestRateLimiter(isolatedPool, "integracion-rate-limit-pepper-32-bytes-minimo");
     const attempts = await Promise.all(Array.from({ length: 12 }, (_, index) =>

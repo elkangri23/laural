@@ -15,7 +15,7 @@ El servicio expone endpoints de autenticación y snapshots que pueden consumir C
 - Restringir la confianza de Fastify en `X-Forwarded-For` a conexiones desde loopback, donde el Caddy aprobado reenvía tráfico.
 - Rechazar el exceso con HTTP 429 y `Retry-After`; si no se puede consultar el contador persistente, no procesar la operación.
 - Aplicar límites distintos a login/inicio de flujo, alta y verificación de correo, lectura y escritura de snapshots. Los límites de correo y de intentos por cuenta siguen aplicándose además de estos.
-- El despliegue de cuentas permanece bloqueado hasta validar IP reenviada, migración y comportamiento concurrente con Caddy/PostgreSQL reales.
+- CI ejecuta las cuatro migraciones y prueba concurrencia entre instancias en PostgreSQL real. El despliegue de cuentas permanece bloqueado hasta validar la IP reenviada y los umbrales detrás de Caddy en el VPS.
 
 ## Límites iniciales
 

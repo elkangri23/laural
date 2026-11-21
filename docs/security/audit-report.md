@@ -22,7 +22,7 @@
 | Media | El plan del agente podía aceptar rutas que la operación posterior rechazaría, incluidos nombres reservados de Windows o rutas con espacios externos | La vista previa del plan, la escritura, la restauración y las copias usan el mismo validador. Los espacios al inicio o final se rechazan sin normalizarlos. |
 | Baja | No había un modo local de revisar el resultado reciente de acciones del agente | Configuración muestra un historial limitado a 200 eventos/64 KiB que contiene únicamente tipo, resultado y hora, y permite borrarlo. Los fallos de registro no detienen las acciones. |
 | Alta | Las releases anteriores no tenían un instalador desde la app ni autenticación criptográfica de los paquetes de actualización | Integrado updater Tauri, HTTPS, clave pública fija, artefactos NSIS firmados y secreto privado en GitHub Actions. Falta validar el salto real entre versiones publicadas. |
-| Alta | Las rutas de autenticación y snapshots no tenían límites persistentes por IP/ruta | Añadido control atómico en PostgreSQL con huella HMAC de IP, respuesta `429`/`Retry-After` y proxy confiable limitado a loopback. Falta probar migración, IP real y comportamiento bajo carga con PostgreSQL/Caddy en el VPS. |
+| Alta | Las rutas de autenticación y snapshots no tenían límites persistentes por IP/ruta | Añadido control atómico en PostgreSQL con huella HMAC de IP, respuesta `429`/`Retry-After` y proxy confiable limitado a loopback. CI aplica las migraciones y prueba concurrencia con PostgreSQL real; falta verificar IP y carga detrás de Caddy en el VPS. |
 
 ## Dependencias
 
@@ -47,9 +47,9 @@
 
 La auditoría inicial ejecutó `git diff --check`, auditoría npm/Rust, pruebas frontend con cobertura, tests Rust, compilación Tauri y build frontend. No se probó el login contra un servicio habilitado ni contra PostgreSQL/Resend reales. La revisión estática no sustituye una prueba de penetración ni la validación manual del instalador/actualizador.
 
-Actualización del 21-11-2026: desde `server/`, `npm run test:coverage` pasa con 76 pruebas; 96,82 % de líneas y 92,08 % de ramas. `npm run build` pasa. El comportamiento del contador se probó con dobles; no se probó la migración ni el rate limit con PostgreSQL/Caddy reales.
+Actualización del 21-11-2026: desde `server/`, `npm run test:coverage` pasa localmente con 76 pruebas; 94,06 % de líneas y 91,50 % de ramas. Sin `TEST_DATABASE_URL`, Vitest omite una prueba de integración. `npm run build` pasa. El job de servicio en GitHub Actions aplicó las cuatro migraciones y pasó la prueba de rate limit/concurrencia con PostgreSQL real. Falta validar IP y carga detrás de Caddy en el VPS y probar las rutas completas de cuenta.
 
 - Interfaz (21-11-2026): 49 pruebas pasadas; cobertura global 66,96 % de líneas, 52,70 % de ramas, 60,87 % de sentencias y 55,68 % de funciones. El panel nuevo de cuenta tiene 100 % de líneas y 76,19 % de ramas.
 - Backend Rust (21-11-2026): 66 pruebas pasadas, 0 fallidas, 1 ignorada. `cargo llvm-cov` ejecuta la suite, pero MSVC no deja datos de cobertura y no genera informe (`no coverage data found`); no se declara porcentaje Rust para esta ejecución.
-- Servicio sync (21-11-2026): 76 pruebas, 96,82 % líneas y 92,08 % ramas con PostgreSQL/Resend simulados; la actualización atómica del rate limit se verifica con dobles, no con PostgreSQL real.
+- Servicio sync (21-11-2026): 76 pruebas locales, 94,06 % líneas y 91,50 % ramas. La migración y el limitador también pasan en una prueba aislada con PostgreSQL real en CI; falta integración real de auth/snapshots y Resend.
 - `npm audit --omit=dev`: 0 vulnerabilidades; `cargo check`, build frontend y formato Rust pasan. El build advierte que el chunk JavaScript principal supera 500 kB. La generación NSIS firmada se verificó el 20-11-2026; esta entrega no reconstruyó el instalador.

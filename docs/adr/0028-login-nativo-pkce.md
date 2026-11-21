@@ -23,8 +23,8 @@ El login de Laural debe mantener las contraseñas fuera del WebView y devolver l
 - La contraseña nunca atraviesa la WebView ni aparece en la redirect URI. El callback y almacenamiento seguro ya están conectados en Tauri, pero falta una prueba de integración contra un servicio desplegado y habilitado.
 - Quitar la cuenta actualmente borra solo el token local; no invalida la sesión remota, que puede seguir activa hasta 30 días. Añadir revocación remota antes de presentar esta acción como cierre completo de sesión.
 - Login por Google, passkeys, TOTP y recuperación se implementan aparte; el flujo email actual no retira MFA.
-- Faltan límites persistentes por IP/origen y mitigaciones de abuso distribuido. No habilitar ni publicar estas rutas todavía.
-- Los códigos/flows vencidos y sesiones requieren limpieza/retención operativa; falta integración de PostgreSQL real y pruebas de carrera.
+- Los límites persistentes por IP/ruta están implementados y se prueban en PostgreSQL temporal de CI. Falta validar la IP real detrás de Caddy y mitigar abuso coordinado. No habilitar ni publicar estas rutas todavía.
+- Los códigos/flows vencidos y sesiones requieren limpieza/retención operativa; CI prueba migraciones y rate limit con PostgreSQL real, pero aún faltan pruebas de carrera para los flujos de cuenta.
 
 ## Evidencia
 
