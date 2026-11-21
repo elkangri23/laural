@@ -109,6 +109,20 @@ test("no inicia sincronización automática sin aceptar el riesgo del VPS", asyn
   expect(mocks.invoke).not.toHaveBeenCalledWith("sync_local_preferences", expect.anything());
 });
 
+test("reanuda la comprobación pendiente al recuperar la red", async () => {
+  localStorage.setItem("laural.sync-risk-ack.v1", "true");
+  await act(async () => root!.render(<App />));
+  mocks.invoke.mockClear();
+
+  await act(async () => {
+    window.dispatchEvent(new Event("online"));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  });
+
+  expect(mocks.invoke).toHaveBeenCalledWith("get_preference_snapshot", expect.anything());
+  expect(mocks.invoke).toHaveBeenCalledWith("sync_local_preferences", expect.anything());
+});
+
 test("el menú general gestiona el foco, las flechas y Escape", async () => {
   await act(async () => root!.render(<App />));
 

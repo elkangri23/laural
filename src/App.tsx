@@ -211,13 +211,23 @@ function App() {
     const interval = window.setInterval(() => schedulePreferenceSync(0), 3 * 60 * 60 * 1000);
     const updateModeChanged = () => schedulePreferenceSync();
     const accountConnected = () => schedulePreferenceSync(0);
+    const networkRestored = () => schedulePreferenceSync(0);
+    const appResumed = () => {
+      if (document.visibilityState === "visible") schedulePreferenceSync(0);
+    };
     window.addEventListener("laural:update-mode-changed", updateModeChanged);
     window.addEventListener("laural:account-connected", accountConnected);
+    window.addEventListener("online", networkRestored);
+    window.addEventListener("focus", networkRestored);
+    document.addEventListener("visibilitychange", appResumed);
     return () => {
       window.clearTimeout(startup);
       window.clearInterval(interval);
       window.removeEventListener("laural:update-mode-changed", updateModeChanged);
       window.removeEventListener("laural:account-connected", accountConnected);
+      window.removeEventListener("online", networkRestored);
+      window.removeEventListener("focus", networkRestored);
+      document.removeEventListener("visibilitychange", appResumed);
       if (syncTimerRef.current !== null) window.clearTimeout(syncTimerRef.current);
     };
   }, [schedulePreferenceSync]);
