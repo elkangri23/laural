@@ -44,6 +44,7 @@ El modelo propone un JSON con resumen, comandos y archivos. Rust valida el forma
 - `providers.json`: perfiles sin secretos y perfil activo.
 - `agent.json`: modo y comandos exactos permitidos.
 - `localStorage`: tema, modo de apariencia e historial acotado de hasta 100 mensajes.
+- Memoria de UI: historial efímero de hasta 100 comandos para la paleta; no se conserva tras cerrar la app.
 - Windows Credential Manager: secretos por proveedor.
 - Archivos de proyecto: solo archivos explícitamente aprobados por la persona.
 - Bloques de comando: estado en memoria de la sesión, hasta 160 por aplicación.

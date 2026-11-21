@@ -24,6 +24,7 @@ Los ADR registran por qué se eligió una opción y qué costes trae. Un ADR ace
 | [0018](0018-registro-local-de-actividad-del-agente.md) | Historial local acotado con metadatos mínimos del agente | Aceptada |
 | [0019](0019-reemplazo-seguro-por-handle.md) | Reemplazo de archivos existentes con handles y colisión sin sobrescritura en Windows | Aceptada |
 | [0020](0020-perfiles-y-sincronizacion-opcional.md) | Perfil local, exportación/importación y sincronización opcional sin claves API en nube | Propuesta |
+| [0021](0021-paleta-e-historial-de-comandos.md) | Paleta de acciones y comandos recientes solo en sesión | Aceptada |
 
 ## Crear un ADR
 

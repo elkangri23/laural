@@ -190,3 +190,43 @@ test("agrupa fragmentos de salida y vacía el último lote al cerrar el bloque",
   expect(host.querySelector(".block-exit")?.textContent).toBe("Salida 0");
   expect(mocks.terminalPaneRenderCount).toBe(rendersAfterCommandStart);
 });
+
+test("abre la paleta con Ctrl+K y copia un comando de la sesión sin ejecutarlo", async () => {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+  await act(async () => root!.render(<App />));
+  await act(async () => host.querySelector<HTMLButtonElement>('[data-testid="begin-command"]')!.click());
+  await act(async () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true, bubbles: true })));
+
+  expect(host.querySelector('[role="dialog"][aria-labelledby="palette-title"]')).not.toBeNull();
+  expect(host.textContent).toContain("Solo en esta sesión");
+  await act(async () => buttonIncluding("git status").click());
+  expect(writeText).toHaveBeenCalledWith("git status");
+  expect(host.textContent).toContain("Comando copiado");
+  expect(mocks.invoke).not.toHaveBeenCalledWith("run_command", expect.anything());
+});
+
+test("la paleta permite ir a una pestaña y cerrar con Escape", async () => {
+  await act(async () => root!.render(<App />));
+  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Nueva terminal"]')!.click());
+  await act(async () => buttonIncluding("Command Prompt").click());
+  await act(async () => buttonIncluding("Buscar comandos y sesiones").click());
+  await act(async () => buttonIncluding("Ir a PowerShell").click());
+
+  expect(host.querySelector('[role="dialog"][aria-labelledby="palette-title"]')).toBeNull();
+  expect(host.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toContain("PowerShell");
+  await act(async () => host.querySelector<HTMLButtonElement>(".search-button")!.click());
+  await act(async () => host.querySelector(".command-palette")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+  expect(host.querySelector('[role="dialog"][aria-labelledby="palette-title"]')).toBeNull();
+});
+
+test("si el portapapeles no está disponible muestra el comando para copiarlo manualmente", async () => {
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: vi.fn().mockRejectedValue(new Error("denegado")) } });
+  await act(async () => root!.render(<App />));
+  await act(async () => host.querySelector<HTMLButtonElement>('[data-testid="begin-command"]')!.click());
+  await act(async () => host.querySelector<HTMLButtonElement>(".search-button")!.click());
+  await act(async () => buttonIncluding("git status").click());
+
+  expect(host.textContent).toContain("copia el comando manualmente");
+  expect(host.querySelector(".palette-fallback-command")?.textContent).toBe("git status");
+});

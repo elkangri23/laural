@@ -8,6 +8,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import TerminalPane from "./components/TerminalPane";
+import { CommandPalette } from "./components/CommandPalette";
 import { themeVariables, themes, type AppearanceMode } from "./themes";
 import "./App.css";
 
@@ -15,6 +16,7 @@ type Shell = "powershell" | "cmd" | "wsl" | "git-bash";
 type TerminalTab = { id: string; shell: Shell; title: string; cwd: string | null };
 type ChatMessage = { role: "user" | "assistant"; content: string; id?: string };
 type CommandBlock = { id: string; terminalId: string; command: string; output: string; status: "running" | "finished"; exitCode: number | null };
+type CommandHistoryEntry = { id: string; terminalId: string; command: string; shell: Shell };
 type ContextPreview = { terminal: string; project: string; selectedFiles: string; totalCharacters: number };
 type Provider = { id: string; name: string; baseUrl: string; model: string; hasApiKey: boolean };
 type ExecutionMode = "review" | "rules" | "automatic";
@@ -24,6 +26,7 @@ type PlanAction =
 type AgentPlan = { summary: string; actions: PlanAction[] };
 const COMMAND_OUTPUT_BATCH_MS = 33;
 const MAX_COMMAND_BLOCKS = 80;
+const MAX_COMMAND_HISTORY = 100;
 
 const shellNames: Record<Shell, string> = {
   powershell: "PowerShell",
@@ -44,7 +47,9 @@ function App() {
   const [splitTabId, setSplitTabId] = useState<string | null>(null);
   const [splitOrientation, setSplitOrientation] = useState<"vertical" | "horizontal" | null>(null);
   const [commandBlocks, setCommandBlocks] = useState<CommandBlock[]>([]);
+  const [commandHistory, setCommandHistory] = useState<CommandHistoryEntry[]>([]);
   const [blocksOpen, setBlocksOpen] = useState(false);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [contextPreview, setContextPreview] = useState<ContextPreview | null>(null);
   const [contextPreviewBusy, setContextPreviewBusy] = useState(false);
   const [contextPreviewError, setContextPreviewError] = useState("");
@@ -103,6 +108,17 @@ function App() {
       localStorage.setItem("laural.chat.v1", JSON.stringify(bounded));
     } catch { /* Storage may be unavailable or full; chat can still continue in memory. */ }
   }, [chatMessages]);
+
+  useEffect(() => {
+    function handlePaletteShortcut(event: KeyboardEvent) {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setCommandPaletteOpen((open) => !open);
+      }
+    }
+    window.addEventListener("keydown", handlePaletteShortcut);
+    return () => window.removeEventListener("keydown", handlePaletteShortcut);
+  }, []);
 
   useEffect(() => {
     void Promise.all([
@@ -177,11 +193,15 @@ function App() {
       pendingCompletion.resolve(null);
     }
     activeCommandBlockRef.current[terminalId] = id;
+    const shell = tabs.find((tab) => tab.id === terminalId)?.shell ?? "powershell";
+    if (command !== "Comando editado en el shell; texto no capturado") {
+      setCommandHistory((history) => [...history, { id, terminalId, command, shell }].slice(-MAX_COMMAND_HISTORY));
+    }
     setCommandBlocks((blocks) => [
       ...blocks.map((block) => block.id === previous ? { ...block, status: "finished" as const } : block),
       { id, terminalId, command, output: "", status: "running" as const, exitCode: null },
     ].slice(-MAX_COMMAND_BLOCKS));
-  }, [flushCommandOutput]);
+  }, [flushCommandOutput, tabs]);
 
   const finishCommandBlock = useCallback((terminalId: string, exitCode: number | null) => {
     flushCommandOutput();
@@ -203,6 +223,14 @@ function App() {
   );
   const activeTheme = themes.find((theme) => theme.id === themeId) ?? themes[0];
   const visibleBlocks = commandBlocks.filter((block) => block.terminalId === activeTabId).slice(-30).reverse();
+  const paletteActions = [
+    { id: "new-terminal", label: "Nueva terminal", description: "Abrir una sesión PowerShell", run: () => addTerminal("powershell") },
+    { id: "settings", label: "Abrir configuración", description: "Preferencias, seguridad y proveedores", run: () => setSettingsOpen(true) },
+    { id: "provider", label: "Conectar proveedor de IA", description: "Ollama, LM Studio o API compatible", run: () => setProviderDialogOpen(true) },
+    { id: "appearance", label: "Cambiar apariencia", description: "Temas y modo claro u oscuro", run: () => setAppearanceOpen(true) },
+    { id: "blocks", label: "Alternar bloques", description: "Mostrar u ocultar los resultados de comandos", run: () => setBlocksOpen((open) => !open) },
+    ...tabs.map((tab) => ({ id: `tab-${tab.id}`, label: `Ir a ${tab.title}`, description: `${shellNames[tab.shell]} · ${tab.cwd ?? "Directorio de inicio"}`, run: () => selectTab(tab.id) })),
+  ];
   const editingHasApiKey = providers.some((item) => item.id === editingProviderId && item.hasApiKey);
 
   useEffect(() => {
@@ -669,7 +697,7 @@ function App() {
         <header className="topbar">
           <div className="breadcrumb"><span className="breadcrumb-muted">Mi equipo</span><ChevronRightIcon /><strong>Terminal</strong></div>
           <div className="topbar-actions">
-            <button className="search-button"><SearchIcon /><span>Buscar comandos y sesiones</span><kbd>⌘ K</kbd></button>
+            <button className="search-button" onClick={() => setCommandPaletteOpen(true)}><SearchIcon /><span>Buscar comandos y sesiones</span><kbd>Ctrl K</kbd></button>
             <button className="icon-button top-icon" aria-label="Ayuda"><HelpIcon /></button>
             <button className="icon-button top-icon" aria-label="Notificaciones"><BellIcon /></button>
           </div>
@@ -764,6 +792,8 @@ function App() {
       </section>
 
       {contextPreviewError && <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setContextPreviewError(""); }}><section className="provider-dialog context-error-dialog" role="alertdialog" aria-modal="true"><button className="dialog-close" onClick={() => setContextPreviewError("")} aria-label="Cerrar">×</button><p className="eyebrow">VISTA PREVIA</p><h2>No se pudo preparar el contexto</h2><p className="dialog-copy">{contextPreviewError}</p></section></div>}
+
+      {commandPaletteOpen && <CommandPalette commands={commandHistory.map((item) => ({ ...item, shell: shellNames[item.shell] }))} actions={paletteActions} onClose={() => setCommandPaletteOpen(false)} />}
 
       {contextPreview && <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setContextPreview(null); }}>
         <section className="context-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="context-preview-title">

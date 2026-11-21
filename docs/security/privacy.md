@@ -35,4 +35,5 @@ El cliente de proveedores no sigue redirecciones HTTP: las claves y el contexto 
 ## Solicitudes de soporte
 
 Antes de compartir un log o captura, inspecciónala y elimina rutas privadas, prompts, salida del terminal, URLs internas y tokens. La clave API nunca debe ser parte de un reporte.
+La paleta conserva hasta 100 comandos recientes solo en memoria hasta que se cierra Laural. Un comando elegido se copia al portapapeles y debe pegarse y ejecutarse por separado; revisa el portapapeles si escribiste credenciales u otro dato sensible en un comando.
 La escritura del agente prepara un temporal y sincroniza sus datos antes de aplicar el cambio. En Windows, cada sustitución deja la versión previa en `.laural-backups/edicion-<id>/`. Un programa externo puede modificar el mismo archivo entre la aprobación y el guardado. La retención automática es optativa; cuando se habilita, el límite se aplica tras sobrescribir o restaurar un archivo y elimina versiones antiguas que lo excedan. Revisa [restaurar copias](../restaurar-copias.md) antes de activarla.

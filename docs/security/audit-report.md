@@ -34,6 +34,7 @@
 - Los comandos Tauri de la ventana son una frontera de confianza. CSP reduce la exposición a inyección web, pero una vulnerabilidad local del WebView o del frontend puede alcanzar capacidades concedidas.
 - La conexión HTTPS a un endpoint configurado por el usuario puede enviarle prompts, contexto de terminal y archivos elegidos. Revisar el destino y el contexto antes de enviar.
 - El historial local del agente sirve para consulta, no es inviolable: una aplicación ejecutada con la misma cuenta puede alterarlo o borrarlo.
+- La paleta mantiene hasta 100 comandos en memoria y puede copiarlos al portapapeles tras una acción explícita. Los comandos pueden incluir datos sensibles; el historial se pierde al cerrar Laural, pero el portapapeles permanece sujeto al sistema operativo.
 - La sustitución de un archivo existente consta de dos renombrados para conservar un backup y rechazar destinos concurrentes. Si Laural se interrumpe entre ambos, el archivo puede faltar hasta restaurar su versión desde `.laural-backups`.
 - No se probó malware local, una cadena de suministro comprometida, instalación limpia, escape del sandbox del WebView ni seguridad del sistema operativo. La firma del updater no equivale a Authenticode ni protege frente a una cuenta/repositorio o clave privada comprometidos.
 
@@ -41,7 +42,7 @@
 
 Se ejecutaron `git diff --check`, `npm audit`, `cargo audit`, pruebas frontend con cobertura, cobertura Rust y build NSIS de Windows con generación de `.sig`. La prueba estática no sustituye la validación manual del instalador y actualización real.
 
-- Interfaz (21-11-2026): 36 pruebas pasadas; cobertura global 62,75 % de líneas. `App.tsx` alcanza 47,18 %; `TerminalPane.tsx`, 89,09 %; el gestor de actualizaciones, 95,29 %; y los diálogos de Configuración y actividad, 100 % de líneas.
+- Interfaz (21-11-2026): 39 pruebas pasadas; cobertura global 64,27 % de líneas (58,46 % sentencias, 50,60 % ramas, 53,61 % funciones). `App.tsx` alcanza 48,80 % de líneas; `CommandPalette.tsx`, 95,23 %; `TerminalPane.tsx`, 89,09 %; y el gestor de actualizaciones, 95,29 %.
 - Backend Rust (21-11-2026): 43 pruebas pasadas, 0 fallidas, 1 ignorada; cobertura 57,56 % de líneas (59,93 % de regiones). `providers.rs` alcanza 55,18 % de líneas; `agent_files.rs`, 91,55 %; `lib.rs` sigue requiriendo más cobertura.
 - `npm audit`: 0 vulnerabilidades; `cargo check`, build frontend, formato Rust y `git diff --check` pasan en la entrega actual. `cargo audit` conserva tres avisos heredados de mantenimiento/soundness de dependencias no usadas en el artefacto Windows. El build frontend advierte que el chunk JavaScript principal supera 500 kB.
 - Build NSIS: completado con firma de updater; generó `Laural_0.1.0-alpha.14_x64-setup.exe` (2,97 MiB) y su archivo `.sig`. Instalación limpia, aviso de Windows y actualización real aún requieren ejecución manual.

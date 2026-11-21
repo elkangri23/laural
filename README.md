@@ -10,6 +10,7 @@
 
 - Terminal con PowerShell, CMD, WSL y Git Bash.
 - Pestañas, bloques navegables de comando/salida y panel dividido vertical u horizontal.
+- Paleta con `Ctrl+K` para buscar acciones, sesiones y comandos recientes; el historial dura solo la sesión y los comandos se copian para revisarlos antes de pegarlos.
 - Doce temas de color y modos claro/oscuro, con preferencias guardadas localmente.
 - Chat contextual con respuesta incremental, historial local borrable, vista previa del contexto, salida reciente de terminal, proyecto abierto y archivos elegidos.
 - Perfiles para Ollama, LM Studio, FreeLLMAPI y endpoints compatibles con OpenAI.

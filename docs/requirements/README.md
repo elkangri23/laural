@@ -27,6 +27,7 @@ Los requisitos distinguen el alcance acordado del estado actual del prototipo. �
 | FR-19 | Revisar el contexto terminal/proyecto/archivos antes de enviarlo al proveedor. | Implementación inicial; muestra el contenido con los mismos límites de envío |
 | FR-20 | Consultar, descargar e instalar actualizaciones de GitHub; permitir decisión manual o instalación automática y mostrar versión. | Integrado para instaladores NSIS de Windows; validación real de release pendiente |
 | FR-21 | Consultar y borrar el historial local de acciones del agente. | Implementado con metadatos mínimos, límite de 200 eventos/64 KiB y sin contenido de usuario |
+| FR-22 | Buscar acciones, sesiones y comandos recientes desde una paleta; reutilizar un comando sin ejecutarlo automáticamente. | Implementación inicial; historial solo en memoria, limitado a 100 comandos |
 
 ## No funcionales
 
@@ -44,6 +45,7 @@ Los requisitos distinguen el alcance acordado del estado actual del prototipo. �
 | NFR-10 | Portabilidad de datos futura. | Configuración no secreta legible y documentada; sincronización requiere decisión y diseño separados. |
 | NFR-11 | Legibilidad visual. | Contraste de texto y controles legibles en las 12 paletas y en ambos modos; cambio de tema no debe reiniciar shells. |
 | NFR-12 | Integridad de actualizaciones. | HTTPS y firma del paquete verificada con clave pública antes de instalación; secreto privado solo en GitHub Actions. |
+| NFR-13 | Privacidad del historial de terminal. | Los comandos recientes viven solo en memoria y se pierden al cerrar Laural; nunca se persisten ni sincronizan. |
 
 ## Supuestos y dependencias
 
