@@ -58,6 +58,21 @@ struct SessionResponse {
     expires_at: String,
 }
 
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AccountSession {
+    id: String,
+    created_at: String,
+    expires_at: String,
+    current: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AccountSessionsResponse {
+    sessions: Vec<AccountSession>,
+}
+
 #[tauri::command]
 pub fn account_session_status() -> Result<bool, String> {
     Ok(read_session()?.is_some())
@@ -119,13 +134,60 @@ pub async fn clear_account_session() -> Result<bool, String> {
     }
 }
 
-async fn revoke_remote_session(token: &str) -> bool {
-    let Ok(client) = Client::builder()
+#[tauri::command]
+pub async fn list_account_sessions() -> Result<Vec<AccountSession>, String> {
+    let token = session_token()?;
+    let client = account_api_client()?;
+    let response = client
+        .get(format!("{SYNC_ORIGIN}/v1/auth/sessions"))
+        .bearer_auth(token.as_str())
+        .send()
+        .await
+        .map_err(|_| "No se pudieron consultar las sesiones de la cuenta.".to_string())?;
+    if !response.status().is_success() {
+        return Err("No se pudieron consultar las sesiones de la cuenta.".into());
+    }
+    response
+        .json::<AccountSessionsResponse>()
+        .await
+        .map(|body| body.sessions)
+        .map_err(|_| "La respuesta de sesiones no tiene un formato válido.".into())
+}
+
+#[tauri::command]
+pub async fn revoke_account_session(session_id: String) -> Result<bool, String> {
+    if !valid_session_id(&session_id) {
+        return Err("El identificador de sesión no es válido.".into());
+    }
+    let token = session_token()?;
+    let response = account_api_client()?
+        .delete(format!("{SYNC_ORIGIN}/v1/auth/sessions/{session_id}"))
+        .bearer_auth(token.as_str())
+        .send()
+        .await
+        .map_err(|_| "No se pudo revocar la sesión seleccionada.".to_string())?;
+    Ok(response.status() == reqwest::StatusCode::NO_CONTENT)
+}
+
+fn account_api_client() -> Result<Client, String> {
+    Client::builder()
         .https_only(true)
         .redirect(Policy::none())
         .timeout(LOGOUT_TIMEOUT)
         .build()
-    else {
+        .map_err(|_| "No se pudo preparar la conexión segura al servicio de cuenta.".to_string())
+}
+
+fn valid_session_id(value: &str) -> bool {
+    value.len() == 36
+        && value.bytes().enumerate().all(|(index, byte)| match index {
+            8 | 13 | 18 | 23 => byte == b'-',
+            _ => byte.is_ascii_hexdigit(),
+        })
+}
+
+async fn revoke_remote_session(token: &str) -> bool {
+    let Ok(client) = account_api_client() else {
         return false;
     };
     let Ok(response) = client
@@ -478,5 +540,12 @@ mod tests {
         assert!(!remote_revocation_confirmed(
             reqwest::StatusCode::SERVICE_UNAVAILABLE
         ));
+    }
+
+    #[test]
+    fn valida_ids_de_sesion_uuid_antes_de_formar_la_ruta() {
+        assert!(valid_session_id("d5363ea7-f6cb-4cca-8e03-85aa33089e7a"));
+        assert!(!valid_session_id("../../v1/auth/session/revoke"));
+        assert!(!valid_session_id("d5363ea7-f6cb-4cca-8e03-85aa33089e7z"));
     }
 }

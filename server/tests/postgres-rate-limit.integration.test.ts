@@ -2,7 +2,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import pg, { type Pool } from "pg";
 import { createApp } from "../src/app.js";
-import { createSessionAuthenticator, createSessionRevoker } from "../src/auth.js";
+import { createAccountSessionLister, createAccountSessionRevoker, createSessionAuthenticator, createSessionRevoker } from "../src/auth.js";
 import { EmailAuthService } from "../src/email-auth.js";
 import { applyMigrations, MIGRATION_FILES } from "../src/migration-runner.js";
 import { NativeAuthService } from "../src/native-auth.js";
@@ -203,6 +203,8 @@ describePostgres("integración real de PostgreSQL para rate limits", () => {
       store: new PostgresPreferenceStore(isolatedPool),
       authenticate: createSessionAuthenticator(isolatedPool),
       revokeSession: createSessionRevoker(isolatedPool),
+      listAccountSessions: createAccountSessionLister(isolatedPool),
+      revokeAccountSession: createAccountSessionRevoker(isolatedPool),
       checkReadiness: async () => { await isolatedPool.query("SELECT 1"); },
       requestRateLimiter: new PostgresRequestRateLimiter(isolatedPool, "integracion-rate-limit-pepper-32-bytes-minimo"),
       emailAuth,
@@ -259,12 +261,33 @@ describePostgres("integración real de PostgreSQL para rate limits", () => {
       expect(session.sessionToken).toMatch(/^[A-Za-z0-9_-]{43}$/);
       expect(Date.parse(session.expiresAt)).toBeGreaterThan(Date.now());
 
-      const sessionRecord = await isolatedPool.query<{ token_hash: string }>(
-        "SELECT token_hash FROM account_sessions WHERE token_hash = $1",
+      const sessionRecord = await isolatedPool.query<{ id: string; token_hash: string }>(
+        "SELECT id, token_hash FROM account_sessions WHERE token_hash = $1",
         [createHash("sha256").update(session.sessionToken).digest("hex")],
       );
       expect(sessionRecord.rows).toHaveLength(1);
       expect(sessionRecord.rows[0]?.token_hash).not.toBe(session.sessionToken);
+
+      const otherToken = randomBytes(32).toString("base64url");
+      const otherTokenHash = createHash("sha256").update(otherToken).digest("hex");
+      await isolatedPool.query(
+        `INSERT INTO account_sessions (account_id, token_hash, expires_at)
+         SELECT account_id, $2, now() + interval '30 days' FROM account_sessions WHERE token_hash = $1`,
+        [createHash("sha256").update(session.sessionToken).digest("hex"), otherTokenHash],
+      );
+      const listedSessions = await app.inject({ method: "GET", url: "/v1/auth/sessions", headers: { authorization: `Bearer ${session.sessionToken}` } });
+      expect(listedSessions.statusCode).toBe(200);
+      expect(listedSessions.json<{ sessions: { id: string; current: boolean }[] }>().sessions).toHaveLength(2);
+      const currentSession = listedSessions.json<{ sessions: { id: string; current: boolean }[] }>().sessions.find(({ current }) => current);
+      expect(currentSession).toBeTruthy();
+      const currentRevocation = await app.inject({ method: "DELETE", url: `/v1/auth/sessions/${currentSession?.id}`, headers: { authorization: `Bearer ${session.sessionToken}` } });
+      expect(currentRevocation.statusCode).toBe(404);
+      const otherSession = listedSessions.json<{ sessions: { id: string; current: boolean }[] }>().sessions.find(({ current }) => !current);
+      expect(otherSession).toBeTruthy();
+      const otherRevoked = await app.inject({ method: "DELETE", url: `/v1/auth/sessions/${otherSession?.id}`, headers: { authorization: `Bearer ${session.sessionToken}` } });
+      expect(otherRevoked.statusCode).toBe(204);
+      expect((await app.inject({ method: "GET", url: "/v1/preferences/current", headers: { authorization: `Bearer ${otherToken}` } })).statusCode).toBe(401);
+      expect((await app.inject({ method: "GET", url: "/v1/preferences/current", headers: { authorization: `Bearer ${session.sessionToken}` } })).statusCode).toBe(200);
 
       const initial = await app.inject({
         method: "GET", url: "/v1/preferences/current",

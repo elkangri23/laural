@@ -480,6 +480,8 @@ pub fn run() {
             account::account_session_status,
             account::start_account_login,
             account::clear_account_session,
+            account::list_account_sessions,
+            account::revoke_account_session,
             sync::read_remote_preferences,
             sync::write_remote_preferences,
             sync::confirm_remote_preferences,

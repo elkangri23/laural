@@ -1,6 +1,6 @@
 # Servicio de sincronización de Laural
 
-Backend TypeScript con Fastify y PostgreSQL para snapshots permitidos de preferencias. Incluye API privada, registro/verificación por correo, login web por contraseña con PKCE, revocación de la sesión actual, migraciones, autorización por sesión y control de revisión. La integración nativa de login/cierre de sesión está conectada en Tauri. Caddy sirve la página pública `/status` y un documento editable solo por SSH, fuera del proceso Fastify para que siga disponible si la API se cae. **No incluye login Google, passkeys, TOTP, recuperación, gestión de sesiones de otros dispositivos ni operación endurecida; no debe publicarse todavía en Internet.**
+Backend TypeScript con Fastify y PostgreSQL para snapshots permitidos de preferencias. Incluye API privada, registro/verificación por correo, login web por contraseña con PKCE, revocación de la sesión actual, consulta/revocación de otras sesiones, migraciones, autorización por sesión y control de revisión. La integración nativa de login/cierre de sesión está conectada en Tauri. Caddy sirve la página pública `/status` y un documento editable solo por SSH, fuera del proceso Fastify para que siga disponible si la API se cae. **No incluye login Google, passkeys, TOTP, recuperación ni operación endurecida; no debe publicarse todavía en Internet.**
 
 ## Requisitos
 
@@ -78,4 +78,4 @@ Consulta el contrato en [OpenAPI](openapi.yaml), el [diseño aprobado](../docs/d
 
 ## Límites pendientes antes de producción
 
-Faltan validar límites detrás de Caddy en el VPS, probar autenticación y flujos con la base del servicio, desplegar TLS, monitorear, acordar el proceso de incidentes, configurar Resend, implementar revocación de otras sesiones/recuperación de cuenta y completar la revisión de lanzamiento. La página pública de status está en el código pero aún no se ha desplegado. Los snapshots no están cifrados de extremo a extremo: el operador del VPS puede leer las preferencias permitidas.
+Faltan validar límites detrás de Caddy en el VPS, probar autenticación y flujos con la base del servicio, desplegar TLS, monitorear, acordar el proceso de incidentes, configurar Resend y recuperación de cuenta, y completar la revisión de lanzamiento. La página pública de status está en el código pero aún no se ha desplegado. Los snapshots no están cifrados de extremo a extremo: el operador del VPS puede leer las preferencias permitidas.

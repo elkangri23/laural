@@ -38,7 +38,7 @@ class MemoryStore implements PreferenceStore {
 }
 
 const instances: Array<ReturnType<typeof createApp>> = [];
-function createTestApp(options: { store?: PreferenceStore; checkReadiness?: () => Promise<void>; emailAuth?: EmailAuthService; nativeAuth?: NativeAuthService; requestRateLimiter?: RequestRateLimiter; revokeSession?: (accountId: string, authorization: string | undefined) => Promise<boolean> } = {}): ReturnType<typeof createApp> {
+function createTestApp(options: { store?: PreferenceStore; checkReadiness?: () => Promise<void>; emailAuth?: EmailAuthService; nativeAuth?: NativeAuthService; requestRateLimiter?: RequestRateLimiter; revokeSession?: (accountId: string, authorization: string | undefined) => Promise<boolean>; listAccountSessions?: (accountId: string, authorization: string | undefined) => Promise<{ id: string; createdAt: string; expiresAt: string; current: boolean }[]>; revokeAccountSession?: (accountId: string, authorization: string | undefined, sessionId: string) => Promise<boolean> } = {}): ReturnType<typeof createApp> {
   const store = options.store ?? new MemoryStore();
   const requestRateLimiter = options.requestRateLimiter ?? new TestRateLimiter();
   const app = createApp({
@@ -48,6 +48,8 @@ function createTestApp(options: { store?: PreferenceStore; checkReadiness?: () =
       return match?.[1] ?? null;
     },
     revokeSession: options.revokeSession ?? (async () => true),
+    listAccountSessions: options.listAccountSessions ?? (async () => []),
+    revokeAccountSession: options.revokeAccountSession ?? (async () => true),
     checkReadiness: options.checkReadiness ?? (async () => undefined),
     requestRateLimiter,
     ...(options.emailAuth ? { emailAuth: options.emailAuth } : {}),
@@ -86,6 +88,21 @@ describe("API de snapshots de preferencias", () => {
     expect(response.statusCode).toBe(204);
     expect(response.body).toBe("");
     expect(revokeSession).toHaveBeenCalledWith("a", "Bearer account-a");
+  });
+
+  it("lista sesiones propias y revoca otra sin permitir revocar la actual", async () => {
+    const listAccountSessions = vi.fn(async () => [{ id: "d5363ea7-f6cb-4cca-8e03-85aa33089e7a", createdAt: "2026-11-21T10:00:00.000Z", expiresAt: "2026-12-21T10:00:00.000Z", current: false }]);
+    const revokeAccountSession = vi.fn(async () => true);
+    const app = createTestApp({ listAccountSessions, revokeAccountSession });
+    const headers = { authorization: "Bearer account-a" };
+
+    expect((await app.inject({ method: "GET", url: "/v1/auth/sessions" })).statusCode).toBe(401);
+    const listed = await app.inject({ method: "GET", url: "/v1/auth/sessions", headers });
+    expect(listed.statusCode).toBe(200);
+    expect(listed.json()).toEqual({ sessions: [{ id: "d5363ea7-f6cb-4cca-8e03-85aa33089e7a", createdAt: "2026-11-21T10:00:00.000Z", expiresAt: "2026-12-21T10:00:00.000Z", current: false }] });
+    expect((await app.inject({ method: "DELETE", url: "/v1/auth/sessions/not-a-uuid", headers })).statusCode).toBe(400);
+    expect((await app.inject({ method: "DELETE", url: "/v1/auth/sessions/d5363ea7-f6cb-4cca-8e03-85aa33089e7a", headers })).statusCode).toBe(204);
+    expect(revokeAccountSession).toHaveBeenCalledWith("a", "Bearer account-a", "d5363ea7-f6cb-4cca-8e03-85aa33089e7a");
   });
 
   it("limita las lecturas de preferencias por IP y devuelve Retry-After", async () => {

@@ -195,6 +195,52 @@ paths:
         '204': { description: Sesión revocada }
         '401': { description: Sesión no válida, expirada o ya revocada }
         '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/auth/sessions:
+    get:
+      summary: Lista sesiones activas de la cuenta autenticada
+      description: Devuelve solo ID opaco, fechas de creación/vencimiento y si la sesión corresponde al bearer actual. No devuelve IP, ubicación ni credenciales.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Sesiones activas
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [sessions]
+                properties:
+                  sessions:
+                    type: array
+                    maxItems: 100
+                    items:
+                      type: object
+                      additionalProperties: false
+                      required: [id, createdAt, expiresAt, current]
+                      properties:
+                        id: { type: string, format: uuid }
+                        createdAt: { type: string, format: date-time }
+                        expiresAt: { type: string, format: date-time }
+                        current: { type: boolean }
+        '401': { description: Sesión no válida }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/auth/sessions/{sessionId}:
+    delete:
+      summary: Revoca una sesión activa distinta de la actual
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: sessionId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204': { description: Sesión revocada }
+        '400': { description: Identificador no válido }
+        '401': { description: Sesión actual no válida }
+        '404': { description: Sesión inexistente, no activa, propia o de otra cuenta }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /v1/auth/register:
     post:
       summary: Crea una cuenta pendiente y solicita la verificación de correo

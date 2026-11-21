@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import Fastify, { type FastifyInstance } from "fastify";
 import formbody from "@fastify/formbody";
 import { Ajv2020 } from "ajv/dist/2020.js";
-import type { PreferenceSnapshot, PreferenceStore, ReadinessCheck, Authenticate, RevokeSession } from "./contracts.js";
+import type { PreferenceSnapshot, PreferenceStore, ReadinessCheck, Authenticate, ListAccountSessions, RevokeAccountSession, RevokeSession } from "./contracts.js";
 import type { EmailAuthService } from "./email-auth.js";
 import { NativeAuthService, validateNativeFlowParameters } from "./native-auth.js";
 import type { RequestRateLimiter } from "./request-rate-limit.js";
@@ -17,6 +17,8 @@ export type AppDependencies = {
   store: PreferenceStore;
   authenticate: Authenticate;
   revokeSession: RevokeSession;
+  listAccountSessions: ListAccountSessions;
+  revokeAccountSession: RevokeAccountSession;
   checkReadiness: ReadinessCheck;
   emailAuth?: EmailAuthService;
   nativeAuth?: NativeAuthService;
@@ -66,6 +68,25 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
     const accountId = await dependencies.authenticate(authorization);
     if (!accountId || !await dependencies.revokeSession(accountId, authorization)) {
       return reply.code(401).send({ error: "unauthorized" });
+    }
+    return reply.code(204).send();
+  });
+
+  app.get("/v1/auth/sessions", { preHandler: limited(rateLimit, "session-list", 20, 60) }, async (request, reply) => {
+    const authorization = request.headers.authorization;
+    const accountId = await dependencies.authenticate(authorization);
+    if (!accountId) return reply.code(401).send({ error: "unauthorized" });
+    return reply.send({ sessions: await dependencies.listAccountSessions(accountId, authorization) });
+  });
+
+  app.delete<{ Params: { sessionId: string } }>("/v1/auth/sessions/:sessionId", {
+    preHandler: limited(rateLimit, "session-revoke-other", 10, 60),
+    schema: { params: { type: "object", additionalProperties: false, required: ["sessionId"], properties: { sessionId: { type: "string", format: "uuid" } } } },
+  }, async (request, reply) => {
+    const authorization = request.headers.authorization;
+    const accountId = await dependencies.authenticate(authorization);
+    if (!accountId || !await dependencies.revokeAccountSession(accountId, authorization, request.params.sessionId)) {
+      return reply.code(404).send({ error: "not_found" });
     }
     return reply.code(204).send();
   });

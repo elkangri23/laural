@@ -12,6 +12,7 @@ type Snapshot = {
   providers: { id: string; kind: string; name: string; model: string; customEndpoint?: string }[];
 };
 type Remote = { snapshot: Snapshot | null; revision: number };
+type AccountSession = { id: string; createdAt: string; expiresAt: string; current: boolean };
 type ImportResult = { preferences: Preferences; activeProvider: { id: string; providerKind: string; name: string; baseUrl: string; model: string; hasApiKey: boolean; shareCustomEndpoint: boolean } | null; providers: { id: string; providerKind: string; name: string; baseUrl: string; model: string; hasApiKey: boolean; shareCustomEndpoint: boolean }[]; backupPath: string; backupEncrypted: boolean; backupContainsApiKeys: boolean };
 
 export function AccountSettings({ onClose, preferences, onImported, onSyncSettled, syncRiskAcknowledged, onAcknowledgeSyncRisk }: { onClose: () => void; preferences: Preferences; onImported: (result: ImportResult) => void; onSyncSettled: () => void; syncRiskAcknowledged: boolean; onAcknowledgeSyncRisk: () => boolean }) {
@@ -24,6 +25,8 @@ export function AccountSettings({ onClose, preferences, onImported, onSyncSettle
   const [hasConflict, setHasConflict] = useState(false);
   const [riskChecked, setRiskChecked] = useState(false);
   const [riskAcknowledged, setRiskAcknowledged] = useState(syncRiskAcknowledged);
+  const [sessions, setSessions] = useState<AccountSession[]>([]);
+  const [sessionsMessage, setSessionsMessage] = useState("");
 
   useEffect(() => setRiskAcknowledged(syncRiskAcknowledged), [syncRiskAcknowledged]);
 
@@ -36,6 +39,7 @@ export function AccountSettings({ onClose, preferences, onImported, onSyncSettle
       setBusy(payload.status === "waiting");
       if (payload.status === "signed_in") {
         setConnected(true);
+        void loadAccountSessions();
         window.dispatchEvent(new Event("laural:account-connected"));
       }
       setMessage(payload.message);
@@ -54,6 +58,7 @@ export function AccountSettings({ onClose, preferences, onImported, onSyncSettle
         setConnected(hasSession);
         setMessage(hasSession ? "Hay una sesión guardada en este equipo." : "No hay ninguna cuenta conectada.");
         setSessionReady(true);
+        if (hasSession) void loadAccountSessions();
       }
     }).catch(() => {
       if (!disposed) {
@@ -76,6 +81,36 @@ export function AccountSettings({ onClose, preferences, onImported, onSyncSettle
     } catch {
       setBusy(false);
       setMessage("No se pudo abrir el navegador. Comprueba la configuración del equipo e inténtalo de nuevo.");
+    }
+  }
+
+  async function loadAccountSessions() {
+    setSessionsMessage("Consultando sesiones…");
+    try {
+      const result = await invoke<AccountSession[]>("list_account_sessions");
+      if (!Array.isArray(result)) throw new Error("Invalid sessions response");
+      setSessions(result);
+      setSessionsMessage(result.length ? "" : "No hay sesiones activas.");
+    } catch {
+      setSessionsMessage("No se pudo consultar la lista de sesiones. Comprueba la conexión e inténtalo de nuevo.");
+    }
+  }
+
+  async function revokeAccountSession(session: AccountSession) {
+    if (session.current || !window.confirm("¿Revocar esta sesión? El dispositivo tendrá que iniciar sesión de nuevo.")) return;
+    setBusy(true);
+    try {
+      const revoked = await invoke<boolean>("revoke_account_session", { sessionId: session.id });
+      if (!revoked) {
+        setSessionsMessage("La sesión ya no estaba activa o no se pudo revocar.");
+        return;
+      }
+      setSessions((current) => current.filter(({ id }) => id !== session.id));
+      setSessionsMessage("Sesión revocada. El dispositivo deberá iniciar sesión de nuevo.");
+    } catch {
+      setSessionsMessage("No se pudo revocar la sesión. Comprueba la conexión e inténtalo de nuevo.");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -213,6 +248,23 @@ export function AccountSettings({ onClose, preferences, onImported, onSyncSettle
             </>}
           </div>
           <button className="secondary-button" onClick={() => void removeLocalSession()} disabled={busy}>Quitar cuenta de este equipo</button>
+          <div className="account-sessions" aria-labelledby="account-sessions-title">
+            <div className="account-sessions-heading">
+              <h4 id="account-sessions-title">Sesiones activas</h4>
+              <button className="secondary-button" onClick={() => void loadAccountSessions()} disabled={busy}>Actualizar</button>
+            </div>
+            {sessionsMessage && <p className="dialog-copy" role="status" aria-live="polite">{sessionsMessage}</p>}
+            {sessions.length > 0 && <ul className="account-session-list">
+              {sessions.map((session) => <li key={session.id}>
+                <div>
+                  <strong>{session.current ? "Este equipo" : "Otro inicio de sesión"}</strong>
+                  <span>Iniciada: {new Date(session.createdAt).toLocaleString()}</span>
+                  <span>Caduca: {new Date(session.expiresAt).toLocaleString()}</span>
+                </div>
+                {!session.current && <button className="secondary-button" onClick={() => void revokeAccountSession(session)} disabled={busy}>Revocar</button>}
+              </li>)}
+            </ul>}
+          </div>
         </>
         : <button className="primary-button" onClick={() => void beginLogin()} disabled={busy || !listenerReady || !sessionReady}>{busy ? "Esperando en el navegador…" : "Iniciar sesión"}</button>}
       {connected && <p className="dialog-copy account-note">Solo se sincronizan las preferencias permitidas y los perfiles de proveedor. Las claves API permanecen en el almacén seguro de este equipo. Los endpoints personalizados solo se incluyen si activaste compartirlos en cada perfil.</p>}

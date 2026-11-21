@@ -1,6 +1,6 @@
 # Especificación: perfiles, portabilidad y sincronización
 
-- **Estado:** F1 en implementación inicial; F2 implementado salvo validación automática de schema común; F3 cuenta/API local parciales y página pública de status implementada en Caddy; F4 cliente manual y auto-sync inicial implementados. Pendientes pruebas de reconexión, reanudación y VPS real. Factores adicionales, recuperación, revocación de otras sesiones y despliegue siguen pendientes.
+- **Estado:** F1 en implementación inicial; F2 implementado salvo validación automática de schema común; F3 cuenta/API local parciales y página pública de status implementada en Caddy; F4 cliente manual y auto-sync inicial implementados. La consulta y revocación de otras sesiones está implementada; pendientes validación VPS, factores adicionales, recuperación y despliegue.
 - **Fecha:** 2026-11-21.
 - **Alcance:** Windows primero; perfiles locales, exportar/importar y sincronización opcional de preferencias.
 - **Diseño formal:** [sincronización de preferencias y portabilidad](../designs/sincronizacion-preferencias-y-portabilidad.md).

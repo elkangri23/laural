@@ -1013,6 +1013,15 @@ svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width:
 .sync-risk-notice .secondary-button { justify-self: start; }
 .sync-risk-accepted { color: var(--theme-accent-muted); font-weight: 600; }
 .account-sync-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.account-sessions { display: grid; gap: 8px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+.account-sessions-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.account-sessions h4 { margin: 0; color: var(--text); font-size: 14px; }
+.account-session-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.account-session-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.account-session-list li > div { display: grid; gap: 3px; min-width: 0; }
+.account-session-list strong { color: var(--text); font-size: 12px; }
+.account-session-list span { color: var(--muted); font-size: 11px; }
+.account-session-list .secondary-button { flex: 0 0 auto; }
 .sync-notice { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 7px; margin: 8px 0; padding: 8px; border: 1px solid var(--line); border-radius: 8px; color: var(--muted); background: var(--surface-raised); font-size: 10px; line-height: 1.4; }
 .sync-notice button { border: 0; padding: 2px; color: var(--theme-accent-muted); background: transparent; font-size: 10px; cursor: pointer; }
 .sync-notice .sync-notice-close { color: var(--muted); font-size: 15px; }

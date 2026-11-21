@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
-import { createSessionAuthenticator, createSessionRevoker } from "../src/auth.js";
+import { createAccountSessionLister, createAccountSessionRevoker, createSessionAuthenticator, createSessionRevoker } from "../src/auth.js";
 
 describe("autenticación de sesiones", () => {
   it("rechaza cabeceras ausentes o tokens con formato inválido antes de consultar", async () => {
@@ -39,5 +39,25 @@ describe("autenticación de sesiones", () => {
     expect(await revoke("acct-2", `Bearer ${token}`)).toBe(false);
     expect(await revoke("acct-1", "Bearer invalid")).toBe(false);
     expect(query).toHaveBeenCalledTimes(2);
+  });
+
+  it("marca la sesión actual sin devolver hashes y revoca otra sesión de la misma cuenta", async () => {
+    const token = "D".repeat(43);
+    const hash = createHash("sha256").update(token).digest("hex");
+    const database = { query: vi.fn(async () => ({ rows: [
+      { id: "session-current", created_at: new Date("2026-11-21T10:00:00Z"), expires_at: new Date("2026-12-21T10:00:00Z"), token_hash: hash },
+      { id: "session-other", created_at: new Date("2026-11-20T10:00:00Z"), expires_at: new Date("2026-12-20T10:00:00Z"), token_hash: "e".repeat(64) },
+    ] })) };
+    const list = createAccountSessionLister(database);
+    const sessions = await list("acct-1", `Bearer ${token}`);
+    expect(sessions.map(({ id, current }) => ({ id, current }))).toEqual([
+      { id: "session-current", current: true }, { id: "session-other", current: false },
+    ]);
+    expect(JSON.stringify(sessions)).not.toContain(hash);
+
+    const revoke = createAccountSessionRevoker({ query: vi.fn(async (_sql: string, values: string[]) => ({ rows: values[2] === "session-other" ? [{ id: values[2] }] : [] })) });
+    expect(await revoke("acct-1", `Bearer ${token}`, "session-other")).toBe(true);
+    expect(await revoke("acct-1", `Bearer ${token}`, "session-current")).toBe(false);
+    expect(await revoke("acct-2", "Bearer invalid", "session-other")).toBe(false);
   });
 });
