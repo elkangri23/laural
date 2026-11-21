@@ -32,7 +32,8 @@ Los ADR registran por qué se eligió una opción y qué costes trae. Un ADR ace
 | [0026](0026-api-inicial-de-snapshots.md) | API privada de snapshots con revisión, idempotencia y schema compartido | Aceptada; integración Tauri y despliegue pendientes |
 | [0027](0027-registro-y-verificacion-de-correo.md) | Registro inicial y PIN de correo no autenticador mediante Resend | Aceptada; primera fase implementada |
 | [0028](0028-login-nativo-pkce.md) | Login por navegador externo, callback loopback y canje PKCE | Aceptada; cliente inicial implementado, VPS pendiente |
-| [0029](0029-cliente-de-sincronizacion-y-conflictos.md) | Cliente Rust, elección de snapshots completos y copia local previa | Aceptada; flujo manual inicial, automatización pendiente |
+| [0029](0029-cliente-de-sincronizacion-y-conflictos.md) | Cliente Rust, elección de snapshots completos y copia local previa | Aceptada; cliente manual/automático implementado inicialmente, validación VPS pendiente |
+| [0030](0030-panel-git-de-solo-lectura.md) | Panel Git local de solo lectura, con límites y sin shell | Aceptada; implementación inicial disponible |
 
 ## Crear un ADR
 

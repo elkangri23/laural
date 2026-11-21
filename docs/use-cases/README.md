@@ -19,12 +19,13 @@ Los casos describen el comportamiento esperado del producto. Los estados disting
 | UC-15 | Consultar y borrar actividad del agente | Desarrollador | Implementado; registro local de metadatos acotado |
 | UC-17 | Exportar/importar perfil sin cuenta | Usuario | Implementación inicial; ensayo Windows pendiente |
 | UC-18 | Transferir claves en archivo cifrado | Usuario | Implementación inicial; pruebas de rollback pendientes |
-| UC-19 | Activar cuenta y escoger snapshot inicial | Usuario | Diseño aprobado; no implementado |
-| UC-20 | Sincronizar cambios y resolver conflicto | Usuario | Diseño aprobado; no implementado |
+| UC-19 | Activar cuenta y escoger snapshot inicial | Usuario | Login Tauri y elección manual inicial disponibles; VPS pendiente |
+| UC-20 | Sincronizar cambios y resolver conflicto | Usuario | Cliente manual/automático inicial; VPS y reconexión real pendientes |
 | UC-21 | Recuperar acceso tras perder factores | Usuario/administrador | Diseño aprobado; runbook pendiente |
 | UC-22 | Consultar estado público del servicio | Visitante | Diseño aprobado; no implementado |
+| UC-23 | Consultar rama, cambios y diff Git | Desarrollador | Implementación inicial de solo lectura |
 
-Los casos UC-17 y UC-18 están disponibles en Configuración en su implementación inicial. UC-19 a UC-22 describen flujos de sincronización y estado que siguen pendientes; están detallados en [portabilidad y sincronización](sincronizacion-preferencias.md).
+Los casos UC-17 y UC-18 están disponibles en Configuración en su implementación inicial. UC-19 y UC-20 tienen un cliente inicial, pero requieren un servicio desplegado para su validación real. UC-21 y UC-22 siguen pendientes; los flujos de sincronización están detallados en [portabilidad y sincronización](sincronizacion-preferencias.md).
 
 ## UC-01 — Abrir terminal
 
@@ -183,3 +184,15 @@ Después de aplicar un archivo, el usuario puede listar copias y restaurar una v
 **Flujo principal:** pulsa `Ctrl+K` o el botón de búsqueda. Escribe parte del nombre de una acción, una sesión o un comando. Elige una acción para abrirla o cambiar de pestaña; al elegir un comando, Laural lo copia al portapapeles para que puedas revisarlo y pegarlo manualmente.
 
 **Criterios:** la paleta se cierra con `Escape`; el historial no supera 100 comandos y solo vive en memoria. La paleta no ejecuta comandos. Los comandos no se envían a los servicios de Laural ni se incluyen en la sincronización.
+
+## UC-23 — Consultar el estado Git del proyecto
+
+**Objetivo:** revisar rama, archivos preparados/modificados y diff del proyecto abierto desde Laural.
+
+**Flujo principal:** abre **Panel Git** desde la barra de herramientas. Laural consulta el repositorio con comandos Git de solo lectura y muestra los cambios preparados y sin preparar. La persona puede actualizar el panel cuando quiera.
+
+**Alternativas:** si la carpeta no es un repositorio Git, Git no está instalado o la consulta excede tiempo/tamaño, se muestra un error y no se ejecutan otras operaciones.
+
+**Privacidad y seguridad:** el diff no se envía al modelo; no se ejecutan comandos por shell, diffs externos, textconv ni fsmonitor. Los archivos no rastreados se listan en estado, pero su contenido no se incluye en el diff.
+
+**Criterios de aceptación:** el panel es de solo lectura, limita salida y tiempo, escapa los nombres como texto y no modifica el índice ni el árbol de trabajo.

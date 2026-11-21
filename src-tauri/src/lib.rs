@@ -15,6 +15,7 @@ mod activity_log;
 mod agent_files;
 mod chat_stream;
 mod configuration_transfer;
+mod git_panel;
 pub mod preferences;
 mod providers;
 mod sync;
@@ -495,6 +496,8 @@ pub fn run() {
             list_agent_backups,
             restore_agent_backup,
             clear_agent_backups,
+            git_panel::get_git_status,
+            git_panel::get_git_diff,
             providers::get_provider,
             providers::get_providers,
             providers::export_configuration,

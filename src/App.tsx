@@ -11,6 +11,7 @@ import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import TerminalPane from "./components/TerminalPane";
 import { CommandPalette } from "./components/CommandPalette";
+import { GitPanel } from "./components/GitPanel";
 import { ConfigurationTransfer, type ConfigurationImportResult } from "./components/ConfigurationTransfer";
 import { themeVariables, themes, type AppearanceMode } from "./themes";
 import "./App.css";
@@ -53,6 +54,7 @@ function App() {
   const [commandHistory, setCommandHistory] = useState<CommandHistoryEntry[]>([]);
   const [blocksOpen, setBlocksOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [gitPanelOpen, setGitPanelOpen] = useState(false);
   const [contextPreview, setContextPreview] = useState<ContextPreview | null>(null);
   const [contextPreviewBusy, setContextPreviewBusy] = useState(false);
   const [contextPreviewError, setContextPreviewError] = useState("");
@@ -811,6 +813,7 @@ function App() {
           </div>
           <div className="terminal-tools">
             <button className="toolbar-chip" onClick={() => setProviderDialogOpen(true)}><span className={`status-led ${provider ? "connected" : ""}`} /><span>{provider ? `${provider.name} · ${provider.model}` : "Proveedor sin configurar"}</span><ChevronIcon /></button>
+            <button className="toolbar-icon git-toolbar-button" aria-label="Abrir panel Git" title="Panel Git de solo lectura" onClick={() => setGitPanelOpen(true)}><BranchIcon /></button>
             <button className={`toolbar-icon ${splitTabId ? "active" : ""}`} aria-label={splitTabId ? `División ${splitOrientation === "vertical" ? "vertical" : "horizontal"}; cambiar o cerrar` : "Dividir panel"} title={splitTabId ? `${splitOrientation === "vertical" ? "Vertical" : "Horizontal"} · clic para cambiar/cerrar` : "Dividir terminal"} onClick={toggleSplit}><SplitIcon /></button>
             <button className="toolbar-icon" aria-label="Más opciones"><DotsIcon /></button>
           </div>
@@ -835,7 +838,7 @@ function App() {
                 </details>;
               })}
             </section>}
-            <div className="terminal-footer"><div className="footer-left"><span className="footer-branch"><BranchIcon /> main</span><span className="footer-divider" /><span>Sin cambios</span></div><div className="footer-right"><span>UTF-8</span><span>{activeTab?.title ?? "PowerShell"}</span><span>100%</span></div></div>
+            <div className="terminal-footer"><div className="footer-left"><button className="footer-branch" onClick={() => setGitPanelOpen(true)} title="Consultar rama y cambios reales del proyecto"><BranchIcon /> Consultar Git</button></div><div className="footer-right"><span>UTF-8</span><span>{activeTab?.title ?? "PowerShell"}</span><span>100%</span></div></div>
           </section>
 
           <aside className="assistant-panel">
@@ -888,6 +891,7 @@ function App() {
 
       {contextPreviewError && <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setContextPreviewError(""); }}><section className="provider-dialog context-error-dialog" role="alertdialog" aria-modal="true"><button className="dialog-close" onClick={() => setContextPreviewError("")} aria-label="Cerrar">×</button><p className="eyebrow">VISTA PREVIA</p><h2>No se pudo preparar el contexto</h2><p className="dialog-copy">{contextPreviewError}</p></section></div>}
 
+      {gitPanelOpen && <GitPanel projectPath={projectPath} onClose={() => setGitPanelOpen(false)} onOpenProject={() => { setGitPanelOpen(false); void openProject(); }} />}
       {commandPaletteOpen && <CommandPalette commands={commandHistory.map((item) => ({ ...item, shell: shellNames[item.shell] }))} actions={paletteActions} onClose={() => setCommandPaletteOpen(false)} />}
 
       {contextPreview && <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setContextPreview(null); }}>
