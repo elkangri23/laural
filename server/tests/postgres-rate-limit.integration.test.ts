@@ -1,8 +1,13 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import pg, { type Pool } from "pg";
 import { createApp } from "../src/app.js";
+import { createSessionAuthenticator } from "../src/auth.js";
+import { EmailAuthService } from "../src/email-auth.js";
 import { applyMigrations, MIGRATION_FILES } from "../src/migration-runner.js";
+import { NativeAuthService } from "../src/native-auth.js";
+import { PostgresEmailAuthStore } from "../src/postgres-email-auth-store.js";
+import { PostgresNativeAuthStore } from "../src/postgres-native-auth-store.js";
 import { PostgresPreferenceStore } from "../src/postgres-store.js";
 import { PostgresRequestRateLimiter } from "../src/request-rate-limit.js";
 
@@ -122,6 +127,113 @@ describePostgres("integración real de PostgreSQL para rate limits", () => {
       });
       expect(invalid.statusCode).toBe(400);
       expect(invalid.json()).toEqual({ error: "invalid_snapshot" });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("registra, verifica, inicia sesión con PKCE y sincroniza usando almacenes PostgreSQL reales", async () => {
+    const email = `${randomUUID()}@example.test`;
+    const password = "contraseña segura para integración 2026";
+    let deliveredPin = "";
+    const emailAuth = new EmailAuthService(
+      new PostgresEmailAuthStore(isolatedPool),
+      { sendVerification: async ({ pin }) => { deliveredPin = pin; } },
+      "integracion-email-pin-pepper-32-bytes-minimo",
+    );
+    const app = createApp({
+      store: new PostgresPreferenceStore(isolatedPool),
+      authenticate: createSessionAuthenticator(isolatedPool),
+      checkReadiness: async () => { await isolatedPool.query("SELECT 1"); },
+      requestRateLimiter: new PostgresRequestRateLimiter(isolatedPool, "integracion-rate-limit-pepper-32-bytes-minimo"),
+      emailAuth,
+      nativeAuth: new NativeAuthService(new PostgresNativeAuthStore(isolatedPool)),
+    });
+
+    try {
+      const registered = await app.inject({
+        method: "POST", url: "/v1/auth/register",
+        payload: { displayName: "Cuenta de integración", email, password },
+      });
+      expect(registered.statusCode).toBe(202);
+      expect(deliveredPin).toMatch(/^\d{6}$/);
+
+      const verification = await app.inject({
+        method: "POST", url: "/v1/auth/verification/confirm",
+        payload: { email, pin: deliveredPin },
+      });
+      expect(verification.statusCode).toBe(202);
+      expect(verification.headers.authorization).toBeUndefined();
+
+      const verifier = randomBytes(32).toString("base64url");
+      const challenge = createHash("sha256").update(verifier).digest("base64url");
+      const state = randomBytes(32).toString("base64url");
+      const redirectUri = "http://127.0.0.1:49152/callback";
+      const flow = await app.inject({
+        method: "GET",
+        url: `/auth/native?${new URLSearchParams({ redirect_uri: redirectUri, state, code_challenge: challenge, code_challenge_method: "S256" })}`,
+      });
+      expect(flow.statusCode).toBe(200);
+      const cookie = String(flow.headers["set-cookie"]).split(";")[0];
+      const csrf = flow.body.match(/name="csrf" value="([^"]+)"/)?.[1];
+      expect(cookie).toContain("__Host-laural-flow=");
+      expect(csrf).toMatch(/^[A-Za-z0-9_-]{43}$/);
+
+      const login = await app.inject({
+        method: "POST", url: "/auth/native/login",
+        headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+        payload: new URLSearchParams({ csrf: csrf!, email, password }).toString(),
+      });
+      expect(login.statusCode).toBe(303);
+      const callback = new URL(String(login.headers.location));
+      expect(callback.origin + callback.pathname).toBe(redirectUri);
+      expect(callback.searchParams.get("state")).toBe(state);
+      const code = callback.searchParams.get("code");
+      expect(code).toMatch(/^[A-Za-z0-9_-]{43}$/);
+
+      const exchange = await app.inject({
+        method: "POST", url: "/v1/auth/native/exchange",
+        payload: { code, codeVerifier: verifier },
+      });
+      expect(exchange.statusCode).toBe(200);
+      const session = exchange.json<{ sessionToken: string; expiresAt: string }>();
+      expect(session.sessionToken).toMatch(/^[A-Za-z0-9_-]{43}$/);
+      expect(Date.parse(session.expiresAt)).toBeGreaterThan(Date.now());
+
+      const sessionRecord = await isolatedPool.query<{ token_hash: string }>(
+        "SELECT token_hash FROM account_sessions WHERE token_hash = $1",
+        [createHash("sha256").update(session.sessionToken).digest("hex")],
+      );
+      expect(sessionRecord.rows).toHaveLength(1);
+      expect(sessionRecord.rows[0]?.token_hash).not.toBe(session.sessionToken);
+
+      const initial = await app.inject({
+        method: "GET", url: "/v1/preferences/current",
+        headers: { authorization: `Bearer ${session.sessionToken}` },
+      });
+      expect(initial.statusCode).toBe(200);
+      expect(initial.json()).toEqual({ snapshot: null, revision: 0 });
+
+      const snapshot = {
+        schemaVersion: 1,
+        preferences: { themeId: "indigo", appearance: "light", updateMode: "automatic" },
+        activeProviderId: null,
+        providers: [],
+      };
+      const saved = await app.inject({
+        method: "PUT", url: "/v1/preferences/current",
+        headers: { authorization: `Bearer ${session.sessionToken}`, "if-match": '"0"', "idempotency-key": "account-flow-write-0001" },
+        payload: snapshot,
+      });
+      expect(saved.statusCode).toBe(200);
+      expect(saved.json()).toEqual({ snapshot, revision: 1 });
+
+      const reusedCode = await app.inject({
+        method: "POST", url: "/v1/auth/native/exchange",
+        payload: { code, codeVerifier: verifier },
+      });
+      expect(reusedCode.statusCode).toBe(400);
+      expect(reusedCode.json()).toEqual({ error: "invalid_or_expired_code" });
     } finally {
       await app.close();
     }

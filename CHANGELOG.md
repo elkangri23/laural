@@ -2,6 +2,7 @@
 
 ## Sin publicar
 
+- Ampliada la integración PostgreSQL para cubrir registro con Argon2id, verificación de PIN sin inicio de sesión, login nativo PKCE, creación de sesión por hash y uso posterior de sync; el correo se captura en un mailer de prueba y no sale del proceso. Pendiente confirmar el nuevo caso en CI.
 - La integración PostgreSQL ahora atraviesa Fastify y el almacén real de snapshots: verifica aislamiento por cuenta, lectura/escritura, `ETag`/conflicto, idempotencia y rechazo de campos no permitidos. CI ejecuta esta prueba junto con las migraciones y el rate limit; la integración de login/verificación y el VPS aún quedan pendientes.
 - Añadida prueba de integración PostgreSQL aislada: aplica migraciones v1–v4, verifica el rate limit atómico en concurrencia y ejecuta en CI con una base efímera. Para correrla localmente, `server` requiere `TEST_DATABASE_URL`.
 - El servicio aplica límites persistentes por IP y ruta en PostgreSQL, comparte los contadores entre instancias y guarda solo huellas HMAC de IP. Se limitan auth y snapshots; el exceso recibe `429` con `Retry-After` y el proxy confiable queda restringido a loopback.
