@@ -11,7 +11,7 @@ export const themes: ThemeDefinition[] = [
   { id: "rose", name: "Rosa", accentDark: "#ff9bb5", accentLight: "#ad3f62" },
   { id: "coral", name: "Coral", accentDark: "#ffae8a", accentLight: "#aa4e2a" },
   { id: "amber", name: "Ámbar", accentDark: "#f5cc73", accentLight: "#82600e" },
-  { id: "teal", name: "Verde azulado", accentDark: "#65d7c4", accentLight: "#087b6d" },
+  { id: "teal", name: "Verde azulado", accentDark: "#65d7c4", accentLight: "#077164" },
   { id: "sky", name: "Cielo", accentDark: "#73c8f6", accentLight: "#176b9a" },
   { id: "ruby", name: "Rubí", accentDark: "#ff8294", accentLight: "#ac3348" },
   { id: "graphite", name: "Grafito", accentDark: "#d0d3da", accentLight: "#505561" },
