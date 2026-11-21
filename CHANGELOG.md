@@ -2,6 +2,7 @@
 
 ## Sin publicar
 
+- Conectados los botones de Ayuda y Notificaciones con sus paneles y acciones correspondientes.
 - Añadida la página pública `/status` del servicio, con estado e incidencias desde un documento JSON validado y limitado. La actualización administrativa se hace por SSH mediante archivo persistente; la vista nunca expone errores internos y muestra estado desconocido ante fallos. Aún no está desplegada en el VPS.
 - Añadidas recetas de tareas locales y editables para el modo Agente. La vista previa muestra objetivo y pasos; usar una receta solo rellena el compositor. Las recetas no ejecutan comandos, no amplían permisos y no se exportan ni sincronizan.
 - Añadido un panel Git local de solo lectura: rama, lista de cambios y diff preparado/no preparado del proyecto abierto. Usa argumentos fijos sin shell, limita proceso y salida, desactiva diff externo/textconv/fsmonitor y no envía contenido al asistente. Pruebas manuales con repositorios reales pendientes.

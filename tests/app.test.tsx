@@ -236,6 +236,52 @@ test("la paleta permite ir a una pestaña y cerrar con Escape", async () => {
   expect(host.querySelector('[role="dialog"][aria-labelledby="palette-title"]')).toBeNull();
 });
 
+test("Ayuda abre el centro y sus acciones llevan a funciones reales", async () => {
+  await act(async () => root!.render(<App />));
+  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Ayuda"]')!.click());
+  expect(host.querySelector('[role="dialog"][aria-labelledby="help-title"]')).not.toBeNull();
+  expect(host.textContent).toContain("Ctrl + K");
+  await act(async () => buttonIncluding("Conectar un modelo").click());
+  expect(host.querySelector(".provider-dialog h2")?.textContent).toBe("Conecta tu proveedor");
+});
+
+test("Ayuda permite abrir configuración o la paleta", async () => {
+  await act(async () => root!.render(<App />));
+  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Ayuda"]')!.click());
+  await act(async () => buttonIncluding("Abrir configuración").click());
+  expect(host.querySelector('[role="dialog"][aria-label="Configuración"]')).not.toBeNull();
+  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Cerrar configuración"]')!.click());
+
+  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Ayuda"]')!.click());
+  await act(async () => buttonIncluding("Buscar acciones").click());
+  expect(host.querySelector('[role="dialog"][aria-labelledby="palette-title"]')).not.toBeNull();
+});
+
+test("la campana muestra notificaciones y abre la sección de actualizaciones", async () => {
+  await act(async () => root!.render(<App />));
+  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Notificaciones"]')!.click());
+  expect(host.querySelector('[role="dialog"][aria-labelledby="notifications-title"]')).not.toBeNull();
+  expect(host.textContent).toContain("No tienes avisos nuevos.");
+  await act(async () => buttonIncluding("Ver actualizaciones y versión").click());
+  expect(host.querySelector('[aria-labelledby="notifications-title"]')).toBeNull();
+});
+
+test("la campana lleva los avisos de sincronización a Cuenta", async () => {
+  mocks.invoke.mockImplementation(async (command: string) => {
+    if (command === "get_provider") return null;
+    if (command === "get_providers") return [];
+    if (command === "get_agent_settings") return { mode: "review", allowedPrefixes: [], backupRetention: null };
+    if (command === "get_preference_sync_status") return { pending: true };
+    return undefined;
+  });
+  await act(async () => root!.render(<App />));
+  await act(async () => Promise.resolve());
+  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Notificaciones"]')!.click());
+  expect(host.textContent).toContain("Hay cambios locales pendientes");
+  await act(async () => buttonIncluding("Revisar configuración de la cuenta").click());
+  expect(host.querySelector(".account-settings")).not.toBeNull();
+});
+
 test("si el portapapeles no está disponible muestra el comando para copiarlo manualmente", async () => {
   Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: vi.fn().mockRejectedValue(new Error("denegado")) } });
   await act(async () => root!.render(<App />));

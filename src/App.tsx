@@ -1,6 +1,8 @@
 import { appendTerminalOutput, COMMAND_BLOCK_OUTPUT_LIMIT } from "./terminalOutput";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { BackupRetentionControl } from "./components/BackupRetentionControl";
+import { HelpDialog, HelpIcon } from "./components/HelpDialog";
+import { BellIcon, NotificationCenter } from "./components/NotificationCenter";
 import { AgentActivity } from "./components/AgentActivity";
 import { AccountSettings } from "./components/AccountSettings";
 import { AssistantMarkdown } from "./components/AssistantMarkdown";
@@ -65,6 +67,8 @@ function App() {
   const [prompt, setPrompt] = useState("");
   const [providerDialogOpen, setProviderDialogOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
   const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
   const [updateSettingsOpen, setUpdateSettingsOpen] = useState(false);
@@ -797,8 +801,8 @@ function App() {
           <div className="breadcrumb"><span className="breadcrumb-muted">Mi equipo</span><ChevronRightIcon /><strong>Terminal</strong></div>
           <div className="topbar-actions">
             <button className="search-button" onClick={() => setCommandPaletteOpen(true)}><SearchIcon /><span>Buscar comandos y sesiones</span><kbd>Ctrl K</kbd></button>
-            <button className="icon-button top-icon" aria-label="Ayuda"><HelpIcon /></button>
-            <button className="icon-button top-icon" aria-label="Notificaciones"><BellIcon /></button>
+            <button className="icon-button top-icon" aria-label="Ayuda" title="Ayuda" onClick={() => setHelpOpen(true)}><HelpIcon /></button>
+            <button className="icon-button top-icon" aria-label="Notificaciones" title="Notificaciones" onClick={() => setNotificationsOpen(true)}><BellIcon /></button>
           </div>
         </header>
 
@@ -896,6 +900,8 @@ function App() {
       {gitPanelOpen && <GitPanel projectPath={projectPath} onClose={() => setGitPanelOpen(false)} onOpenProject={() => { setGitPanelOpen(false); void openProject(); }} />}
       {taskRecipesOpen && <TaskRecipes onClose={() => setTaskRecipesOpen(false)} onUse={(recipePrompt) => { setAgentMode(true); setPrompt(recipePrompt); }} />}
       {commandPaletteOpen && <CommandPalette commands={commandHistory.map((item) => ({ ...item, shell: shellNames[item.shell] }))} actions={paletteActions} onClose={() => setCommandPaletteOpen(false)} />}
+      {helpOpen && <HelpDialog onClose={() => setHelpOpen(false)} onConfigureProvider={() => { setHelpOpen(false); setProviderDialogOpen(true); }} onOpenSettings={() => { setHelpOpen(false); setSettingsOpen(true); }} onOpenPalette={() => { setHelpOpen(false); setCommandPaletteOpen(true); }} />}
+      {notificationsOpen && <NotificationCenter syncNotice={syncNotice} onClose={() => setNotificationsOpen(false)} onOpenUpdates={() => { setNotificationsOpen(false); setUpdateSettingsOpen(true); }} onOpenAccount={() => { setNotificationsOpen(false); setAccountSettingsOpen(true); }} />}
 
       {contextPreview && <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setContextPreview(null); }}>
         <section className="context-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="context-preview-title">
@@ -1034,8 +1040,6 @@ function ChevronIcon() { return <svg viewBox="0 0 16 16" aria-hidden="true"><pat
 function ChevronRightIcon() { return <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3.5 4.5 4.5L6 12.5"/></svg>; }
 function DotsIcon() { return <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="4" cy="10" r="1"/><circle cx="10" cy="10" r="1"/><circle cx="16" cy="10" r="1"/></svg>; }
 function PlusIcon() { return <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12"/></svg>; }
-function HelpIcon() { return <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7.3"/><path d="M7.8 7.5a2.3 2.3 0 1 1 3.8 1.7c-.9.7-1.6 1.2-1.6 2.6M10 14.5v.1"/></svg>; }
-function BellIcon() { return <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M15.5 8a5.5 5.5 0 0 0-11 0c0 6-2 6-2 7h15c0-1-2-1-2-7ZM8 17h4"/></svg>; }
 function SplitIcon() { return <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="3" width="14" height="14" rx="2"/><path d="M10 3v14"/></svg>; }
 function CopyIcon() { return <svg viewBox="0 0 18 18" aria-hidden="true"><rect x="6" y="5" width="9" height="10" rx="2"/><path d="M12 5V4a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h2"/></svg>; }
 function ClearIcon() { return <svg viewBox="0 0 18 18" aria-hidden="true"><path d="M3 5h12M7 5V3h4v2m3 0-.6 9.2a1 1 0 0 1-1 .8H5.6a1 1 0 0 1-1-.8L4 5m3 3v4m4-4v4"/></svg>; }
