@@ -123,6 +123,36 @@ test("el menú general gestiona el foco, las flechas y Escape", async () => {
   expect(document.activeElement).toBe(host.querySelector('[aria-label="Abrir menú"]'));
 });
 
+test("el diff Git requiere selección explícita y aparece en la vista previa del contexto", async () => {
+  const diff = "diff --git a/README.md b/README.md\n+contenido de ejemplo";
+  mocks.open.mockResolvedValue("C:/proyecto");
+  mocks.invoke.mockImplementation(async (command: string) => {
+    if (command === "get_provider") return null;
+    if (command === "get_providers") return [];
+    if (command === "get_agent_settings") return { mode: "review", allowedPrefixes: ["git status", "git diff"], backupRetention: null };
+    if (command === "get_git_status") return { root: "C:/proyecto", branch: "main", changes: [] };
+    if (command === "get_git_diff") return { content: diff, truncated: false };
+    if (command === "preview_context") return { terminal: "", project: "", selectedFiles: "", gitDiff: diff, totalCharacters: diff.length };
+    return undefined;
+  });
+  await act(async () => root!.render(<App />));
+
+  await act(async () => host.querySelector<HTMLButtonElement>(".git-toolbar-button")!.click());
+  await act(async () => buttonIncluding("Abrir proyecto").click());
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+  await act(async () => host.querySelector<HTMLButtonElement>(".git-toolbar-button")!.click());
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+  expect(mocks.invoke).not.toHaveBeenCalledWith("preview_context", expect.anything());
+  await act(async () => (host.querySelector<HTMLButtonElement>(".git-include-diff")!).click());
+  expect(host.textContent).toContain("Diff Git");
+
+  await act(async () => buttonIncluding("Revisar contexto").click());
+  const previewCall = mocks.invoke.mock.calls.find(([command]) => command === "preview_context");
+  expect(previewCall?.[1]).toMatchObject({ gitDiffContext: diff });
+  expect(host.textContent).toContain("Diff Git seleccionado");
+  expect(host.textContent).toContain(diff);
+});
+
 test("usar una receta activa el modo Agente y prepara el compositor sin enviarlo", async () => {
   await act(async () => root!.render(<App />));
   await act(async () => buttonIncluding("Agente").click());

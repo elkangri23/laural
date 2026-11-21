@@ -2,6 +2,7 @@
 
 ## Sin publicar
 
+- El panel Git permite incluir explícitamente el diff en el contexto de chat o agente; aparece como adjunto removible y se muestra en la vista previa antes de enviarlo. El backend limita el tamaño y trata el contenido como dato no confiable.
 - El menú general lleva el foco a la primera opción y permite recorrer las acciones con flechas, Inicio y Fin; Escape cierra y devuelve el foco al botón.
 - El menú general junto al nombre de Laural ofrece accesos a terminal, proyecto, búsqueda, proveedor, configuración y ayuda; se cierra al pulsar Escape o fuera del menú.
 - El menú Más opciones de terminal ofrece accesos rápidos a Git, bloques, asistente, proveedor, copiar selección y limpiar.

@@ -4,7 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 type GitStatus = { root: string; branch: string; changes: { code: string; path: string }[] };
 type GitDiff = { content: string; truncated: boolean };
 
-export function GitPanel({ projectPath, onClose, onOpenProject }: { projectPath: string | null; onClose: () => void; onOpenProject: () => void }) {
+export function GitPanel({ projectPath, onClose, onOpenProject, onIncludeDiff }: { projectPath: string | null; onClose: () => void; onOpenProject: () => void; onIncludeDiff: (content: string, truncated: boolean) => void }) {
   const [status, setStatus] = useState<GitStatus | null>(null);
   const [diff, setDiff] = useState<GitDiff | null>(null);
   const [busy, setBusy] = useState(false);
@@ -54,8 +54,9 @@ export function GitPanel({ projectPath, onClose, onOpenProject }: { projectPath:
         <section className="git-diff-section"><div className="git-diff-heading"><h3>Diff</h3><span>Solo lectura</span></div>
           {diff?.truncated && <p className="git-panel-warning">El diff es grande; se muestra solo una parte.</p>}
           {diff ? <pre className="git-diff-content">{diff.content || "No hay cambios preparados ni sin preparar."}</pre> : !error && <p className="git-empty">Cargando cambios…</p>}
+          {diff?.content && <button className="action-primary git-include-diff" onClick={() => onIncludeDiff(diff.content, diff.truncated)}>Incluir diff en el contexto</button>}
         </section>
-        <p className="git-panel-note">Laural no modifica ni prepara archivos. El diff no se envía al asistente automáticamente.</p>
+        <p className="git-panel-note">Laural no modifica ni prepara archivos. El diff solo se comparte con el modelo si eliges incluirlo y enviar una consulta.</p>
       </> : <div className="git-no-project"><p>Abre una carpeta de proyecto para consultar su estado Git.</p><button className="action-primary" onClick={onOpenProject}>Abrir proyecto</button></div>}
     </section>
   </div>;

@@ -24,7 +24,7 @@ type TerminalTab = { id: string; shell: Shell; title: string; cwd: string | null
 type ChatMessage = { role: "user" | "assistant"; content: string; id?: string };
 type CommandBlock = { id: string; terminalId: string; command: string; output: string; status: "running" | "finished"; exitCode: number | null };
 type CommandHistoryEntry = { id: string; terminalId: string; command: string; shell: Shell };
-type ContextPreview = { terminal: string; project: string; selectedFiles: string; totalCharacters: number };
+type ContextPreview = { terminal: string; project: string; selectedFiles: string; gitDiff: string; totalCharacters: number };
 type Provider = { id: string; providerKind: string; name: string; baseUrl: string; model: string; hasApiKey: boolean; shareCustomEndpoint: boolean };
 type ExecutionMode = "review" | "rules" | "automatic";
 type PlanAction =
@@ -106,6 +106,8 @@ function App() {
   });
   const [chatBusy, setChatBusy] = useState(false);
   const [contextFiles, setContextFiles] = useState<string[]>([]);
+  const [gitDiffContext, setGitDiffContext] = useState("");
+  const [gitDiffTruncated, setGitDiffTruncated] = useState(false);
   const [backupVersions, setBackupVersions] = useState<Record<number, string[]>>({});
   const [selectedBackups, setSelectedBackups] = useState<Record<number, string>>({});
   const [agentPlan, setAgentPlan] = useState<AgentPlan | null>(null);
@@ -480,6 +482,8 @@ function App() {
       const selected = await open({ directory: true, multiple: false });
       if (typeof selected !== "string") return;
       setProjectPath(selected);
+      setGitDiffContext("");
+      setGitDiffTruncated(false);
       addTerminal(activeTab?.shell ?? "powershell", selected);
     } catch (error) {
       setProviderError(`No se pudo abrir el selector de carpetas: ${String(error)}`);
@@ -577,6 +581,7 @@ function App() {
         terminalContext: terminalContextRef.current[planTerminalId] ?? "",
         projectPath,
         selectedFiles: contextFiles,
+        gitDiffContext,
       }).then(async (plan) => {
         if (agentStopRequestedRef.current) return;
         const prepared: AgentPlan = { ...plan, actions: plan.actions.map((action) => ({ ...action, status: "pending" })) };
@@ -622,6 +627,7 @@ function App() {
       terminalContext: terminalContextRef.current[activeTabId] ?? "",
       projectPath,
       selectedFiles: contextFiles,
+      gitDiffContext,
       });
     }).catch((error) => {
       const message = String(error);
@@ -660,6 +666,7 @@ function App() {
         terminalContext: terminalContextRef.current[activeTabId] ?? "",
         projectPath,
         selectedFiles: contextFiles,
+        gitDiffContext,
       }));
     } catch (error) {
       setContextPreviewError(String(error));
@@ -1044,7 +1051,7 @@ function App() {
             <div className="composer-wrap">
               <form className="composer" onSubmit={submitPrompt}>
                 <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder={agentMode ? "Describe una tarea para el agente…" : "Pregunta sobre tu terminal…"} rows={3} />
-                {contextFiles.length > 0 && <div className="context-file-list">{contextFiles.map((path) => <button type="button" className="context-file-chip" key={path} title={path} onClick={() => setContextFiles((current) => current.filter((item) => item !== path))}><PaperclipIcon /> {path.split(/[\\/]/).pop()} <span>×</span></button>)}</div>}
+                {(contextFiles.length > 0 || gitDiffContext) && <div className="context-file-list">{contextFiles.map((path) => <button type="button" className="context-file-chip" key={path} title={path} onClick={() => setContextFiles((current) => current.filter((item) => item !== path))}><PaperclipIcon /> {path.split(/[\\/]/).pop()} <span>×</span></button>)}{gitDiffContext && <button type="button" className="context-file-chip" title="Quitar el diff Git del contexto" onClick={() => { setGitDiffContext(""); setGitDiffTruncated(false); }}><BranchIcon /> Diff Git{gitDiffTruncated ? " (parcial)" : ""} <span>×</span></button>}</div>}
                 <div className="composer-controls"><div className="composer-left"><button type="button" className="composer-tool" title="Adjuntar archivos" onClick={() => void addContextFiles()}><PaperclipIcon /></button><button type="button" className="context-chip" title="Revisar el contenido de terminal, proyecto y archivos que se enviará" onClick={() => void openContextPreview()}><span className="context-indicator" /> Revisar contexto</button>{projectPath && <span className="project-context-chip" title="Se incluirá contexto acotado del proyecto">Proyecto</span>}<button type="button" className="composer-tool" title="Seleccionar modelo" onClick={() => setProviderDialogOpen(true)}><ModelIcon /></button></div><button type="submit" className="send-button" aria-label="Enviar mensaje" disabled={!prompt.trim() || chatBusy || agentPlanBusy || agentCommandBusy}><ArrowUpIcon /></button></div>
               </form>
               <div className="composer-note"><span>{agentMode ? "Modo agente: ejecución pendiente" : provider ? `El contexto seleccionado se enviará a ${provider.name}` : "Conecta un proveedor para empezar"}</span><button onClick={() => setProviderDialogOpen(true)}>{provider ? "Ajustes" : "Configurar modelo"}</button></div>
@@ -1055,7 +1062,7 @@ function App() {
 
       {contextPreviewError && <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setContextPreviewError(""); }}><section className="provider-dialog context-error-dialog" role="alertdialog" aria-modal="true"><button className="dialog-close" onClick={() => setContextPreviewError("")} aria-label="Cerrar">×</button><p className="eyebrow">VISTA PREVIA</p><h2>No se pudo preparar el contexto</h2><p className="dialog-copy">{contextPreviewError}</p></section></div>}
 
-      {gitPanelOpen && <GitPanel projectPath={projectPath} onClose={() => setGitPanelOpen(false)} onOpenProject={() => { setGitPanelOpen(false); void openProject(); }} />}
+      {gitPanelOpen && <GitPanel projectPath={projectPath} onClose={() => setGitPanelOpen(false)} onOpenProject={() => { setGitPanelOpen(false); void openProject(); }} onIncludeDiff={(content, truncated) => { setGitDiffContext(content); setGitDiffTruncated(truncated); setGitPanelOpen(false); }} />}
       {taskRecipesOpen && <TaskRecipes onClose={() => setTaskRecipesOpen(false)} onUse={(recipePrompt) => { setAgentMode(true); setPrompt(recipePrompt); }} />}
       {commandPaletteOpen && <CommandPalette commands={commandHistory.map((item) => ({ ...item, shell: shellNames[item.shell] }))} actions={paletteActions} view={commandPaletteView} onClose={() => setCommandPaletteOpen(false)} />}
       {helpOpen && <HelpDialog onClose={() => setHelpOpen(false)} onConfigureProvider={() => { setHelpOpen(false); setProviderDialogOpen(true); }} onOpenSettings={() => { setHelpOpen(false); setSettingsOpen(true); }} onOpenPalette={() => { setHelpOpen(false); setCommandPaletteView("all"); setCommandPaletteOpen(true); }} />}
@@ -1067,7 +1074,7 @@ function App() {
           <div className="dialog-mark"><PaperclipIcon /></div><p className="eyebrow">DATOS QUE SE ADJUNTAN</p><h2 id="context-preview-title">Revisa el contexto</h2>
           <p className="dialog-copy">Este contenido se enviará al proveedor activo al mandar el siguiente mensaje. Comprueba que no incluya credenciales o datos privados.</p>
           <span className="context-size">{contextPreview.totalCharacters.toLocaleString("es-ES")} caracteres</span>
-          {[ ["Salida de terminal", contextPreview.terminal], ["Proyecto", contextPreview.project], ["Archivos elegidos", contextPreview.selectedFiles] ].map(([title, content]) => <details className="context-preview-section" key={title} open={Boolean(content)}>
+          {[ ["Salida de terminal", contextPreview.terminal], ["Proyecto", contextPreview.project], ["Archivos elegidos", contextPreview.selectedFiles], ["Diff Git seleccionado", contextPreview.gitDiff] ].map(([title, content]) => <details className="context-preview-section" key={title} open={Boolean(content)}>
             <summary>{title}<span>{content ? `${content.length.toLocaleString("es-ES")} caracteres` : "Sin contenido"}</span></summary>
             <pre>{content || "No se enviará contenido de esta fuente."}</pre>
           </details>)}
