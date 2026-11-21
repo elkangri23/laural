@@ -2,6 +2,7 @@
 
 ## Sin publicar
 
+- El panel lateral del asistente se puede ocultar y volver a mostrar; la preferencia se conserva en este equipo.
 - La paleta de comandos ahora permite recorrer acciones y comandos recientes con las flechas y abrir/copiar con Enter.
 - El menú de los tres puntos del perfil local abre configuración, portabilidad y sincronización.
 - La paleta `Ctrl+K` incorpora accesos a proyectos, Git, recetas, ayuda y notificaciones.

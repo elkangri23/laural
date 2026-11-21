@@ -56,6 +56,7 @@ function App() {
   const [commandBlocks, setCommandBlocks] = useState<CommandBlock[]>([]);
   const [commandHistory, setCommandHistory] = useState<CommandHistoryEntry[]>([]);
   const [blocksOpen, setBlocksOpen] = useState(false);
+  const [assistantVisible, setAssistantVisible] = useState(() => localStorage.getItem("laural.assistant-visible.v1") !== "false");
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [gitPanelOpen, setGitPanelOpen] = useState(false);
   const [taskRecipesOpen, setTaskRecipesOpen] = useState(false);
@@ -351,6 +352,10 @@ function App() {
     localStorage.setItem("laural.theme", activeTheme.id);
     localStorage.setItem("laural.appearance", appearance);
   }, [activeTheme, appearance]);
+
+  useEffect(() => {
+    localStorage.setItem("laural.assistant-visible.v1", String(assistantVisible));
+  }, [assistantVisible]);
 
   useEffect(() => () => {
     if (outputFlushTimerRef.current !== null) window.clearTimeout(outputFlushTimerRef.current);
@@ -880,11 +885,12 @@ function App() {
             <button className="toolbar-chip" onClick={() => setProviderDialogOpen(true)}><span className={`status-led ${provider ? "connected" : ""}`} /><span>{provider ? `${provider.name} · ${provider.model}` : "Proveedor sin configurar"}</span><ChevronIcon /></button>
             <button className="toolbar-icon git-toolbar-button" aria-label="Abrir panel Git" title="Panel Git de solo lectura" onClick={() => setGitPanelOpen(true)}><BranchIcon /></button>
             <button className={`toolbar-icon ${splitTabId ? "active" : ""}`} aria-label={splitTabId ? `División ${splitOrientation === "vertical" ? "vertical" : "horizontal"}; cambiar o cerrar` : "Dividir panel"} title={splitTabId ? `${splitOrientation === "vertical" ? "Vertical" : "Horizontal"} · clic para cambiar/cerrar` : "Dividir terminal"} onClick={toggleSplit}><SplitIcon /></button>
+            <button className={`toolbar-icon assistant-toggle ${assistantVisible ? "active" : ""}`} aria-label={assistantVisible ? "Ocultar asistente IA" : "Mostrar asistente IA"} aria-pressed={assistantVisible} title={assistantVisible ? "Ocultar asistente IA" : "Mostrar asistente IA"} onClick={() => setAssistantVisible((visible) => !visible)}><PanelRightIcon /></button>
             <button className="toolbar-icon" aria-label="Más opciones"><DotsIcon /></button>
           </div>
         </div>
 
-        <div className="workspace-body">
+        <div className={`workspace-body ${assistantVisible ? "" : "assistant-hidden"}`}>
           <section className="terminal-area" aria-label="Terminal">
             <div className="terminal-heading">
               <div><div className="terminal-title-line"><span className="terminal-title-mark">⌁</span><h1>{activeTab?.title ?? "Terminal"}</h1><span className="connection-pill"><span /> Local</span></div><p className="terminal-path">{activeTab?.cwd ?? "Directorio de inicio"} <span>·</span> Windows</p></div>
@@ -906,7 +912,7 @@ function App() {
             <div className="terminal-footer"><div className="footer-left"><button className="footer-branch" onClick={() => setGitPanelOpen(true)} title="Consultar rama y cambios reales del proyecto"><BranchIcon /> Consultar Git</button></div><div className="footer-right"><span>UTF-8</span><span>{activeTab?.title ?? "PowerShell"}</span><span>100%</span></div></div>
           </section>
 
-          <aside className="assistant-panel">
+          {assistantVisible && <aside className="assistant-panel">
             <div className="assistant-header"><div className="assistant-heading"><div className="assistant-avatar"><SparkIcon /></div><div><strong>Asistente</strong><span>Contexto de esta terminal</span></div></div><button className="action-quiet" onClick={clearChat} disabled={chatBusy || agentPlanBusy || agentCommandBusy}>Borrar historial</button></div>
             <div className="mode-switch" role="tablist" aria-label="Modo de IA">
               <button className={!agentMode ? "active" : ""} onClick={() => setAgentMode(false)} role="tab" aria-selected={!agentMode}><MessageIcon /> Chat</button>
@@ -950,7 +956,7 @@ function App() {
               </form>
               <div className="composer-note"><span>{agentMode ? "Modo agente: ejecución pendiente" : provider ? `El contexto seleccionado se enviará a ${provider.name}` : "Conecta un proveedor para empezar"}</span><button onClick={() => setProviderDialogOpen(true)}>{provider ? "Ajustes" : "Configurar modelo"}</button></div>
             </div>
-          </aside>
+          </aside>}
         </div>
       </section>
 
@@ -1101,6 +1107,7 @@ function DotsIcon() { return <svg viewBox="0 0 20 20" aria-hidden="true"><circle
 function PlusIcon() { return <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12"/></svg>; }
 function FolderIcon() { return <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2.5 5.5A1.5 1.5 0 0 1 4 4h4l2 2h6A1.5 1.5 0 0 1 17.5 7.5v7A1.5 1.5 0 0 1 16 16H4a1.5 1.5 0 0 1-1.5-1.5v-9Z"/><path d="M2.8 8h14.4"/></svg>; }
 function SyncIcon() { return <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M16.5 8A6.5 6.5 0 0 0 5.3 4.3L3.5 6M3.5 6V2.8M3.5 6h3.2M3.5 12a6.5 6.5 0 0 0 11.2 3.7l1.8-1.7m0 0v3.2m0-3.2h-3.2"/></svg>; }
+function PanelRightIcon() { return <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2.5" y="3" width="15" height="14" rx="2"/><path d="M12 3v14"/></svg>; }
 function SplitIcon() { return <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="3" width="14" height="14" rx="2"/><path d="M10 3v14"/></svg>; }
 function CopyIcon() { return <svg viewBox="0 0 18 18" aria-hidden="true"><rect x="6" y="5" width="9" height="10" rx="2"/><path d="M12 5V4a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h2"/></svg>; }
 function ClearIcon() { return <svg viewBox="0 0 18 18" aria-hidden="true"><path d="M3 5h12M7 5V3h4v2m3 0-.6 9.2a1 1 0 0 1-1 .8H5.6a1 1 0 0 1-1-.8L4 5m3 3v4m4-4v4"/></svg>; }

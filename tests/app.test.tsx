@@ -348,6 +348,24 @@ test("el selector de espacio abre acciones de proyecto y cuenta", async () => {
   expect(host.textContent).toContain("Cuenta y sincronización");
 });
 
+test("el panel del asistente se puede ocultar, mostrar y recuerda la preferencia local", async () => {
+  await act(async () => root!.render(<App />));
+  expect(host.querySelector(".assistant-panel")).not.toBeNull();
+  const toggle = host.querySelector<HTMLButtonElement>('[aria-label="Ocultar asistente IA"]')!;
+  await act(async () => toggle.click());
+  expect(host.querySelector(".assistant-panel")).toBeNull();
+  expect(host.querySelector(".workspace-body")?.classList.contains("assistant-hidden")).toBe(true);
+  expect(localStorage.getItem("laural.assistant-visible.v1")).toBe("false");
+
+  await act(async () => root!.unmount());
+  root = createRoot(host);
+  await act(async () => root!.render(<App />));
+  expect(host.querySelector(".assistant-panel")).toBeNull();
+  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Mostrar asistente IA"]')!.click());
+  expect(host.querySelector(".assistant-panel")).not.toBeNull();
+  expect(localStorage.getItem("laural.assistant-visible.v1")).toBe("true");
+});
+
 test("los tres puntos del perfil abren sus opciones de portabilidad y cuenta", async () => {
   await act(async () => root!.render(<App />));
   const profile = host.querySelector<HTMLButtonElement>(".profile-row")!;
