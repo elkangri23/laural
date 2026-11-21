@@ -19,7 +19,7 @@ type ChatMessage = { role: "user" | "assistant"; content: string; id?: string };
 type CommandBlock = { id: string; terminalId: string; command: string; output: string; status: "running" | "finished"; exitCode: number | null };
 type CommandHistoryEntry = { id: string; terminalId: string; command: string; shell: Shell };
 type ContextPreview = { terminal: string; project: string; selectedFiles: string; totalCharacters: number };
-type Provider = { id: string; name: string; baseUrl: string; model: string; hasApiKey: boolean };
+type Provider = { id: string; providerKind: string; name: string; baseUrl: string; model: string; hasApiKey: boolean; shareCustomEndpoint: boolean };
 type ExecutionMode = "review" | "rules" | "automatic";
 type PlanAction =
   | { type: "run_command"; command: string; reason: string; status?: string; result?: string }
@@ -68,6 +68,7 @@ function App() {
   const [providers, setProviders] = useState<Provider[]>([]);
   const [editingProviderId, setEditingProviderId] = useState<string | null>(null);
   const [providerKind, setProviderKind] = useState("freellmapi");
+  const [shareCustomEndpoint, setShareCustomEndpoint] = useState(false);
   const [providerName, setProviderName] = useState("FreeLLMAPI");
   const [baseUrl, setBaseUrl] = useState("http://127.0.0.1:31415/v1");
   const [model, setModel] = useState("auto");
@@ -138,10 +139,12 @@ function App() {
     setProviderName(saved.name);
     setBaseUrl(saved.baseUrl);
     setModel(saved.model);
-    if (saved.name.toLowerCase().includes("freellmapi")) setProviderKind("freellmapi");
+    if (saved.providerKind) setProviderKind(saved.providerKind);
+    else if (saved.name.toLowerCase().includes("freellmapi")) setProviderKind("freellmapi");
     else if (saved.name.toLowerCase().includes("ollama")) setProviderKind("ollama");
     else if (saved.name.toLowerCase().includes("lm studio")) setProviderKind("lmstudio");
     else setProviderKind("custom");
+    setShareCustomEndpoint(saved.shareCustomEndpoint ?? false);
   }
 
   function applyImportedConfiguration(result: ConfigurationImportResult) {
@@ -590,6 +593,7 @@ function App() {
 
   function chooseProvider(kind: string) {
     setProviderKind(kind);
+    setShareCustomEndpoint(false);
     setApiKey("");
     setModels([]);
     setEditingProviderId(null);
@@ -610,10 +614,12 @@ function App() {
     return {
       input: {
         id: editingProviderId ?? crypto.randomUUID(),
+        providerKind,
         name: providerName,
         baseUrl,
         model,
         apiKey: apiKey.trim() || null,
+        shareCustomEndpoint,
       },
     };
   }
@@ -665,7 +671,7 @@ function App() {
 
   function newProviderProfile() {
     setEditingProviderId(null);
-    setProviderKind("custom"); setProviderName("Nuevo proveedor"); setBaseUrl(""); setModel(""); setApiKey(""); setModels([]);
+    setProviderKind("custom"); setShareCustomEndpoint(false); setProviderName("Nuevo proveedor"); setBaseUrl(""); setModel(""); setApiKey(""); setModels([]);
     setProviderError(""); setProviderNotice("");
   }
 
@@ -853,6 +859,8 @@ function App() {
           <label className="form-label">URL base
             <input readOnly={editingProviderId !== null} title={editingProviderId ? "Crea un perfil nuevo para cambiar el destino" : undefined} value={baseUrl} onChange={(event) => setBaseUrl(event.currentTarget.value)} placeholder="http://127.0.0.1:1234/v1" autoCapitalize="off" autoCorrect="off" />
           </label>
+          <label className="transfer-check"><input type="checkbox" checked={shareCustomEndpoint} onChange={(event) => setShareCustomEndpoint(event.currentTarget.checked)} /> Permitir sincronizar esta URL si activo la sincronización</label>
+          <p className="dialog-copy">Desactivado por defecto. La URL solo se enviará a la cuenta de Laural si activas la sincronización; ese servicio todavía no está disponible.</p>
           <div className="form-row">
             <label className="form-label">Modelo
               <input value={model} onChange={(event) => setModel(event.currentTarget.value)} list="provider-model-list" placeholder="Selecciona o escribe un modelo" autoCapitalize="off" autoCorrect="off" />

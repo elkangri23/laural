@@ -15,6 +15,9 @@ use crate::agent_files;
 use crate::configuration_transfer::{
     self, ApiKeyEntry, TransferData, TransferPreferences, TransferProvider,
 };
+use crate::preferences::snapshot::{
+    self, PreferenceSnapshot, SnapshotPreferences, SnapshotProvider,
+};
 use futures_util::StreamExt;
 use keyring::Entry;
 use serde::{Deserialize, Serialize};
@@ -118,9 +121,13 @@ struct ChatStreamEvent {
 #[serde(rename_all = "camelCase")]
 struct ProviderSettings {
     id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    provider_kind: Option<String>,
     name: String,
     base_url: String,
     model: String,
+    #[serde(default)]
+    share_custom_endpoint: bool,
 }
 
 #[derive(Clone, Default, Deserialize, Serialize)]
@@ -134,20 +141,24 @@ struct ProviderStore {
 #[serde(rename_all = "camelCase")]
 pub struct ProviderInput {
     id: String,
+    provider_kind: String,
     name: String,
     base_url: String,
     model: String,
     api_key: Option<String>,
+    share_custom_endpoint: bool,
 }
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PublicProvider {
     id: String,
+    provider_kind: String,
     name: String,
     base_url: String,
     model: String,
     has_api_key: bool,
+    share_custom_endpoint: bool,
 }
 
 #[derive(Deserialize)]
@@ -328,11 +339,60 @@ fn public_provider(provider: &ProviderSettings) -> PublicProvider {
     let has_api_key = matches!(read_api_key(&provider.id), Ok(Some(_)));
     PublicProvider {
         id: provider.id.clone(),
+        provider_kind: effective_provider_kind(provider).to_string(),
         name: provider.name.clone(),
         base_url: provider.base_url.clone(),
         model: provider.model.clone(),
         has_api_key,
+        share_custom_endpoint: provider.share_custom_endpoint,
     }
+}
+
+fn effective_provider_kind(provider: &ProviderSettings) -> &str {
+    provider
+        .provider_kind
+        .as_deref()
+        .unwrap_or_else(|| configuration_transfer::infer_provider_kind(&provider.name))
+}
+
+fn transfer_provider_kind(provider: &TransferProvider) -> &str {
+    provider
+        .provider_kind
+        .as_deref()
+        .unwrap_or_else(|| configuration_transfer::infer_provider_kind(&provider.name))
+}
+
+fn build_preference_snapshot(
+    store: ProviderStore,
+    preferences: SnapshotPreferences,
+) -> Result<PreferenceSnapshot, String> {
+    let snapshot = PreferenceSnapshot {
+        schema_version: 1,
+        preferences,
+        active_provider_id: store.active_provider_id,
+        providers: store
+            .providers
+            .iter()
+            .map(|provider| SnapshotProvider {
+                id: provider.id.clone(),
+                kind: effective_provider_kind(provider).to_string(),
+                name: provider.name.clone(),
+                model: provider.model.clone(),
+                custom_endpoint: provider
+                    .share_custom_endpoint
+                    .then(|| provider.base_url.clone()),
+            })
+            .collect(),
+    };
+    snapshot::decode(&snapshot::encode(&snapshot)?)
+}
+
+#[tauri::command]
+pub fn get_preference_snapshot(
+    app: AppHandle,
+    preferences: SnapshotPreferences,
+) -> Result<PreferenceSnapshot, String> {
+    build_preference_snapshot(read_provider_store(&app)?, preferences)
 }
 
 fn active_provider(store: &ProviderStore) -> Option<&ProviderSettings> {
@@ -395,7 +455,7 @@ pub fn save_agent_settings(
     Ok(settings)
 }
 
-fn validate_base_url(input: &str) -> Result<String, String> {
+pub(crate) fn validate_base_url(input: &str) -> Result<String, String> {
     if input.len() > 2_048 {
         return Err("La URL del proveedor supera el límite de 2.048 caracteres.".into());
     }
@@ -544,10 +604,12 @@ pub fn get_providers(app: AppHandle) -> Result<Vec<PublicProvider>, String> {
 #[serde(rename_all = "camelCase")]
 pub struct TransferPreviewProvider {
     id: String,
+    provider_kind: String,
     name: String,
     base_url: String,
     model: String,
     has_api_key: bool,
+    share_custom_endpoint: bool,
 }
 
 #[derive(Serialize)]
@@ -577,11 +639,16 @@ fn transfer_data(store: ProviderStore, preferences: TransferPreferences) -> Tran
         providers: store
             .providers
             .into_iter()
-            .map(|provider| TransferProvider {
-                id: provider.id,
-                name: provider.name,
-                base_url: provider.base_url,
-                model: provider.model,
+            .map(|provider| {
+                let provider_kind = effective_provider_kind(&provider).to_string();
+                TransferProvider {
+                    id: provider.id,
+                    provider_kind: Some(provider_kind),
+                    name: provider.name,
+                    base_url: provider.base_url,
+                    model: provider.model,
+                    share_custom_endpoint: provider.share_custom_endpoint,
+                }
             })
             .collect(),
     }
@@ -698,9 +765,11 @@ fn preview_configuration_inner(
         .iter()
         .map(|provider| TransferPreviewProvider {
             id: provider.id.clone(),
+            provider_kind: transfer_provider_kind(provider).to_string(),
             name: provider.name.clone(),
             base_url: provider.base_url.clone(),
             model: provider.model.clone(),
+            share_custom_endpoint: provider.share_custom_endpoint,
             has_api_key: decoded
                 .api_keys
                 .iter()
@@ -780,9 +849,11 @@ fn build_import_store(
                     .get(&provider.id)
                     .cloned()
                     .ok_or_else(|| "No se pudo asignar el ID del perfil importado.".to_string())?,
+                provider_kind: Some(transfer_provider_kind(provider).to_string()),
                 name: provider.name.clone(),
                 base_url: validate_base_url(&provider.base_url)?,
                 model: provider.model.clone(),
+                share_custom_endpoint: provider.share_custom_endpoint,
             })
         })
         .collect::<Result<_, String>>()?;
@@ -1097,8 +1168,15 @@ pub fn save_provider(app: AppHandle, input: ProviderInput) -> Result<PublicProvi
     }
     let name = input.name.trim();
     let model = input.model.trim();
+    let provider_kind = input.provider_kind.trim();
     if name.is_empty() || model.is_empty() || name.len() > 128 || model.len() > 256 {
         return Err("Indica un nombre de proveedor y un modelo.".to_string());
+    }
+    if !matches!(
+        provider_kind,
+        "freellmapi" | "ollama" | "lmstudio" | "custom"
+    ) {
+        return Err("El tipo de proveedor no es válido.".into());
     }
     if input.api_key.as_ref().is_some_and(|key| key.len() > 16_384) {
         return Err("La clave del proveedor supera el límite permitido.".into());
@@ -1115,9 +1193,11 @@ pub fn save_provider(app: AppHandle, input: ProviderInput) -> Result<PublicProvi
     }
     let provider = ProviderSettings {
         id: id.to_string(),
+        provider_kind: Some(provider_kind.to_string()),
         name: name.to_string(),
         base_url,
         model: model.to_string(),
+        share_custom_endpoint: input.share_custom_endpoint,
     };
     if let Some(existing) = store.providers.iter_mut().find(|entry| entry.id == id) {
         *existing = provider.clone();
@@ -1944,9 +2024,11 @@ mod tests {
     fn transfer_profile(id: &str, base_url: &str, name: &str) -> TransferProvider {
         TransferProvider {
             id: id.into(),
+            provider_kind: Some("custom".into()),
             name: name.into(),
             base_url: base_url.into(),
             model: "modelo".into(),
+            share_custom_endpoint: false,
         }
     }
 
@@ -1968,21 +2050,117 @@ mod tests {
             active_provider_id: Some("local".into()),
             providers: vec![ProviderSettings {
                 id: "local".into(),
+                provider_kind: Some("ollama".into()),
                 name: "Local".into(),
                 base_url: "http://127.0.0.1:11434/v1".into(),
                 model: "qwen".into(),
+                share_custom_endpoint: false,
             }],
         };
-        let incoming = transfer_data(
+        let mut incoming = transfer_data(
             vec![transfer_profile("cloud", "https://llm.example/v1", "Nube")],
             Some("cloud"),
         );
+        incoming.providers[0].share_custom_endpoint = true;
         let id_map = remap_provider_ids(&incoming, &local).unwrap();
         let merged = build_import_store(&local, &incoming, "merge", &id_map).unwrap();
 
         assert_eq!(merged.providers.len(), 2);
         assert!(merged.providers.iter().any(|item| item.id == "local"));
         assert_eq!(merged.active_provider_id.as_deref(), Some("cloud"));
+        assert!(
+            merged
+                .providers
+                .iter()
+                .find(|item| item.id == "cloud")
+                .unwrap()
+                .share_custom_endpoint
+        );
+    }
+
+    #[test]
+    fn migra_perfiles_antiguos_sin_tipo_ni_consentimiento() {
+        let legacy: ProviderStore = serde_json::from_str(
+            r#"{"activeProviderId":"local","providers":[{"id":"local","name":"Ollama local","baseUrl":"http://127.0.0.1:11434/v1","model":"qwen"}]}"#,
+        )
+        .unwrap();
+        let provider = &legacy.providers[0];
+
+        assert_eq!(provider.provider_kind, None);
+        assert_eq!(effective_provider_kind(provider), "ollama");
+        assert!(!provider.share_custom_endpoint);
+    }
+
+    #[test]
+    fn snapshot_local_omite_endpoints_sin_consentimiento_y_no_lee_claves() {
+        let store = ProviderStore {
+            active_provider_id: Some("local".into()),
+            providers: vec![ProviderSettings {
+                id: "local".into(),
+                provider_kind: Some("ollama".into()),
+                name: "Ollama local".into(),
+                base_url: "http://127.0.0.1:11434/v1".into(),
+                model: "qwen".into(),
+                share_custom_endpoint: false,
+            }],
+        };
+        let preferences = SnapshotPreferences {
+            theme_id: "laurel".into(),
+            appearance: "dark".into(),
+            update_mode: "manual".into(),
+        };
+
+        let snapshot = build_preference_snapshot(store, preferences).unwrap();
+        let serialized = serde_json::to_value(&snapshot).unwrap();
+
+        assert_eq!(snapshot.providers[0].kind, "ollama");
+        assert_eq!(snapshot.providers[0].custom_endpoint, None);
+        assert_eq!(snapshot.active_provider_id.as_deref(), Some("local"));
+        assert_eq!(
+            serialized,
+            json!({
+                "schemaVersion": 1,
+                "preferences": {
+                    "themeId": "laurel",
+                    "appearance": "dark",
+                    "updateMode": "manual"
+                },
+                "activeProviderId": "local",
+                "providers": [{
+                    "id": "local",
+                    "kind": "ollama",
+                    "name": "Ollama local",
+                    "model": "qwen"
+                }]
+            })
+        );
+    }
+
+    #[test]
+    fn snapshot_local_incluye_endpoint_solo_con_consentimiento_guardado() {
+        let store = ProviderStore {
+            active_provider_id: Some("custom".into()),
+            providers: vec![ProviderSettings {
+                id: "custom".into(),
+                provider_kind: Some("custom".into()),
+                name: "Endpoint propio".into(),
+                base_url: "https://llm.example/v1".into(),
+                model: "modelo".into(),
+                share_custom_endpoint: true,
+            }],
+        };
+        let preferences = SnapshotPreferences {
+            theme_id: "laurel".into(),
+            appearance: "dark".into(),
+            update_mode: "manual".into(),
+        };
+
+        let snapshot = build_preference_snapshot(store, preferences).unwrap();
+
+        assert_eq!(
+            snapshot.providers[0].custom_endpoint.as_deref(),
+            Some("https://llm.example/v1")
+        );
     }
 
     #[test]
@@ -1991,9 +2169,11 @@ mod tests {
             active_provider_id: Some("principal".into()),
             providers: vec![ProviderSettings {
                 id: "principal".into(),
+                provider_kind: Some("custom".into()),
                 name: "Antiguo".into(),
                 base_url: "https://old.example/v1".into(),
                 model: "modelo-a".into(),
+                share_custom_endpoint: false,
             }],
         };
         let incoming = transfer_data(
@@ -2553,9 +2733,11 @@ mod tests {
         let store = ProviderStore {
             providers: vec![ProviderSettings {
                 id: "principal".into(),
+                provider_kind: Some("custom".into()),
                 name: "Local".into(),
                 base_url: "http://localhost:1234/v1/".into(),
                 model: "ejemplo".into(),
+                share_custom_endpoint: false,
             }],
             ..Default::default()
         };

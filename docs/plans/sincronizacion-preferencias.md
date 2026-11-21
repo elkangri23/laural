@@ -1,6 +1,6 @@
 # Especificación: perfiles, portabilidad y sincronización
 
-- **Estado:** F1 (portabilidad local) en implementación inicial; F2–F4 pendientes.
+- **Estado:** F1 (portabilidad local) en implementación inicial; F2 (contrato v1 de snapshot) iniciado; servicio y cliente de sincronización pendientes.
 - **Fecha:** 2026-11-21.
 - **Alcance:** Windows primero; perfiles locales, exportar/importar y sincronización opcional de preferencias.
 - **Diseño formal:** [sincronización de preferencias y portabilidad](../designs/sincronizacion-preferencias-y-portabilidad.md).
@@ -50,9 +50,10 @@ La versión actual ofrece exportar/importar local desde Configuración: formato 
 ## Entregas y tareas
 
 1. **F1 — Portabilidad local:** implementación inicial en el escritorio. Restan pruebas de integración de fallos del almacén, ensayo de restauración en Windows y objetivo de cobertura específica.
-2. **F2 — Servicio y cuenta:** Fastify/PostgreSQL, migraciones, Resend para correo transaccional, email/contraseña, Google, passkeys, TOTP, PIN, revocación de sesión y borrado de cuenta.
-3. **F3 — Sincronización:** snapshot cerrado, cliente Rust, estado y cola offline, revisiones condicionales, consentimiento de endpoint, conflictos, **Sincronizar ahora** y revisión cada 3 horas con Laural abierta.
-4. **F4 — Estado y operación:** página `/status`, avisos de mantenimiento/incidentes desde operación protegida, backups, procedimientos de recuperación y despliegue TLS.
+2. **F2 — Contrato y adaptador local:** implementados schema cerrado v1, fixture, tipos Rust/TypeScript, validación con tope de 256 KiB y comando nativo para construir el snapshot desde preferencias y perfiles. El endpoint se incluye solo si su consentimiento por perfil está guardado. Pendiente validar automáticamente el JSON Schema canónico en Rust y TypeScript.
+3. **F3 — Servicio y cuenta:** Fastify/PostgreSQL, migraciones, Resend para correo transaccional, email/contraseña, Google, passkeys, TOTP, PIN, revocación de sesión y borrado de cuenta.
+4. **F4 — Sincronización:** cliente Rust, estado y cola offline, revisiones condicionales, conflictos, **Sincronizar ahora** y revisión cada 3 horas con Laural abierta.
+5. **F5 — Estado y operación:** página `/status`, avisos de mantenimiento/incidentes desde operación protegida, procedimientos de recuperación y despliegue TLS.
 
 El [backlog](../BACKLOG.md) contiene criterios de cierre por tarea; la [hoja de ruta](../ROADMAP.md) ordena las entregas. Los módulos críticos de sync, cifrado, autenticación y recuperación requieren al menos 85 % de cobertura de líneas y ramas, además de pruebas de integración en PostgreSQL y pruebas manuales de Windows.
 

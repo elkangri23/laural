@@ -13,14 +13,14 @@ type TransferPreferences = {
 type TransferPreview = {
   preferences: TransferPreferences;
   activeProviderId: string | null;
-  providers: Array<{ id: string; name: string; baseUrl: string; model: string; hasApiKey: boolean }>;
+  providers: Array<{ id: string; providerKind: string; name: string; baseUrl: string; model: string; hasApiKey: boolean; shareCustomEndpoint: boolean }>;
   containsApiKeys: boolean;
 };
 
 export type ConfigurationImportResult = {
   preferences: TransferPreferences;
-  activeProvider: { id: string; name: string; baseUrl: string; model: string; hasApiKey: boolean } | null;
-  providers: Array<{ id: string; name: string; baseUrl: string; model: string; hasApiKey: boolean }>;
+  activeProvider: { id: string; providerKind: string; name: string; baseUrl: string; model: string; hasApiKey: boolean; shareCustomEndpoint: boolean } | null;
+  providers: Array<{ id: string; providerKind: string; name: string; baseUrl: string; model: string; hasApiKey: boolean; shareCustomEndpoint: boolean }>;
   backupPath: string;
   backupEncrypted: boolean;
   backupContainsApiKeys: boolean;

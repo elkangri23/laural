@@ -133,16 +133,19 @@ test("cambiar de proveedor descarta la clave en memoria del perfil anterior", as
 
   expect(keyInput.value).toBe("");
   expect((host.querySelector<HTMLInputElement>('input[type="password"]')!).placeholder).toContain("Clave guardada");
+  expect(host.querySelector<HTMLInputElement>('input[type="checkbox"]')?.checked).toBe(false);
   await act(async () => buttonIncluding("Probar conexión y modelos").click());
   const testCall = mocks.invoke.mock.calls.find(([command]) => command === "test_provider");
   expect(testCall?.[1]).toEqual({
-    input: { id: second.id, name: second.name, baseUrl: second.baseUrl, model: second.model, apiKey: null },
+    input: { id: second.id, providerKind: "custom", name: second.name, baseUrl: second.baseUrl, model: second.model, apiKey: null, shareCustomEndpoint: false },
   });
 
+  const consentCheckbox = host.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+  await act(async () => consentCheckbox.click());
   await act(async () => buttonIncluding("Guardar proveedor").click());
   const saveCall = mocks.invoke.mock.calls.find(([command]) => command === "save_provider");
   expect(saveCall?.[1]).toEqual({
-    input: { id: second.id, name: second.name, baseUrl: second.baseUrl, model: second.model, apiKey: null },
+    input: { id: second.id, providerKind: "custom", name: second.name, baseUrl: second.baseUrl, model: second.model, apiKey: null, shareCustomEndpoint: true },
   });
 
   await act(async () => root!.unmount());

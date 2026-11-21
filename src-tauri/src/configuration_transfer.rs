@@ -34,9 +34,26 @@ pub(crate) struct TransferPreferences {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct TransferProvider {
     pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_kind: Option<String>,
     pub name: String,
     pub base_url: String,
     pub model: String,
+    #[serde(default)]
+    pub share_custom_endpoint: bool,
+}
+
+pub(crate) fn infer_provider_kind(name: &str) -> &'static str {
+    let name = name.to_lowercase();
+    if name.contains("freellmapi") {
+        "freellmapi"
+    } else if name.contains("ollama") {
+        "ollama"
+    } else if name.contains("lm studio") {
+        "lmstudio"
+    } else {
+        "custom"
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
@@ -272,6 +289,9 @@ fn validate_data(data: &TransferData, api_keys: &[ApiKeyEntry]) -> Result<(), St
         if provider.id.trim().is_empty()
             || provider.id.len() > 64
             || provider.id.chars().any(char::is_control)
+            || provider.provider_kind.as_deref().is_some_and(|kind| {
+                !matches!(kind, "freellmapi" | "ollama" | "lmstudio" | "custom")
+            })
             || provider.name.trim().is_empty()
             || provider.name.len() > 128
             || provider.model.trim().is_empty()
@@ -321,9 +341,11 @@ mod tests {
                 active_provider_id: Some("provider-1".into()),
                 providers: vec![TransferProvider {
                     id: "provider-1".into(),
+                    provider_kind: Some("ollama".into()),
                     name: "Local".into(),
                     base_url: "http://127.0.0.1:11434/v1".into(),
                     model: "qwen".into(),
+                    share_custom_endpoint: false,
                 }],
             },
             vec![ApiKeyEntry {
@@ -348,6 +370,25 @@ mod tests {
     }
 
     #[test]
+    fn mantiene_compatibilidad_con_exportaciones_sin_metadatos_de_sync() {
+        let (data, _) = sample();
+        let bytes = encode(data, Vec::new(), None).unwrap();
+        let mut value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let provider = value["data"]["providers"][0].as_object_mut().unwrap();
+        provider.remove("providerKind");
+        provider.remove("shareCustomEndpoint");
+
+        let decoded = decode(&serde_json::to_vec(&value).unwrap(), None).unwrap();
+
+        assert_eq!(decoded.data.providers[0].provider_kind, None);
+        assert_eq!(
+            infer_provider_kind(&decoded.data.providers[0].name),
+            "custom"
+        );
+        assert!(!decoded.data.providers[0].share_custom_endpoint);
+    }
+
+    #[test]
     fn exportacion_cifrada_recupera_configuracion_y_clave() {
         let (data, keys) = sample();
         assert!(encode(data.clone(), keys, None).is_err());
@@ -360,6 +401,11 @@ mod tests {
         assert!(decoded.contains_api_keys);
         assert_eq!(decoded.api_keys[0].api_key, "secret-key");
         assert_eq!(decoded.data.providers[0].name, "Local");
+        assert_eq!(
+            decoded.data.providers[0].provider_kind.as_deref(),
+            Some("ollama")
+        );
+        assert!(!decoded.data.providers[0].share_custom_endpoint);
     }
 
     #[test]

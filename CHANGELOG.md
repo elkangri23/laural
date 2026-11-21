@@ -2,6 +2,9 @@
 
 ## Sin publicar
 
+- Iniciado el contrato v1 compartido para preferencias sincronizables con schema cerrado, fixture común y tipos Rust/TypeScript. Rechaza versiones/campos desconocidos, perfiles duplicados, endpoints no válidos y snapshots mayores de 256 KiB.
+- Guardado el tipo de proveedor y el consentimiento opcional por perfil para compartir el endpoint en una futura sincronización; queda desactivado por defecto y los perfiles anteriores conservan sus destinos.
+- Añadido el constructor nativo del snapshot v1: incluye tema, apariencia, actualización, proveedor activo y metadatos permitidos. Solo incorpora URLs de perfiles con consentimiento; no consulta ni serializa claves.
 - Añadida la primera versión de exportar/importar configuración `.laural` en Configuración, con vista previa y opciones de fusión/reemplazo. Las claves API se excluyen por defecto; al incluirlas, el archivo exige contraseña y usa Argon2id + AES-256-GCM. La importación crea una copia local previa y revierte cambios de claves si falla la aplicación.
 - Añadidas regresiones de fallo de escritura de credenciales para comprobar el rollback correcto y la ruta de recuperación si el almacén también falla.
 - Endurecido el diseño de exportación/importación: las claves quedan fuera por defecto y solo podrán exportarse con contraseña obligatoria y cifrado autenticado; nunca en texto plano. Documentado el alcance y los límites reales de Credential Manager.

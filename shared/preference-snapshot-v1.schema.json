@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://laural.app/schemas/preference-snapshot-v1.schema.json",
+  "title": "Laural preference snapshot v1",
+  "description": "Allowlisted preferences for optional Laural account sync. Never place credentials or workspace data here.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "preferences", "activeProviderId", "providers"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "preferences": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["themeId", "appearance", "updateMode"],
+      "properties": {
+        "themeId": {
+          "type": "string",
+          "enum": ["laurel", "ocean", "indigo", "lavender", "rose", "coral", "amber", "teal", "sky", "ruby", "graphite", "sand"]
+        },
+        "appearance": { "type": "string", "enum": ["dark", "light"] },
+        "updateMode": { "type": "string", "enum": ["manual", "automatic"] }
+      }
+    },
+    "activeProviderId": { "type": ["string", "null"], "maxLength": 64 },
+    "providers": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "kind", "name", "model"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1, "maxLength": 64 },
+          "kind": { "type": "string", "enum": ["freellmapi", "ollama", "lmstudio", "custom"] },
+          "name": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "model": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "customEndpoint": { "type": "string", "minLength": 1, "maxLength": 2048 }
+        }
+      }
+    }
+  }
+}

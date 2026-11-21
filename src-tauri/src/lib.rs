@@ -14,6 +14,7 @@ mod activity_log;
 mod agent_files;
 mod chat_stream;
 mod configuration_transfer;
+pub mod preferences;
 mod providers;
 
 struct TerminalIo {
@@ -486,6 +487,7 @@ pub fn run() {
             providers::get_provider,
             providers::get_providers,
             providers::export_configuration,
+            providers::get_preference_snapshot,
             providers::import_configuration,
             providers::preview_configuration,
             providers::select_provider,

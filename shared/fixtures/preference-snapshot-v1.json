@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "preferences": {
+    "themeId": "ocean",
+    "appearance": "dark",
+    "updateMode": "manual"
+  },
+  "activeProviderId": "local-ollama",
+  "providers": [
+    {
+      "id": "local-ollama",
+      "kind": "ollama",
+      "name": "Ollama local",
+      "model": "qwen2.5-coder"
+    },
+    {
+      "id": "custom-cloud",
+      "kind": "custom",
+      "name": "Endpoint autorizado",
+      "model": "modelo-ejemplo",
+      "customEndpoint": "https://llm.example/v1"
+    }
+  ]
+}
