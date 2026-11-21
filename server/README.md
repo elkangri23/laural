@@ -62,6 +62,10 @@ Fastify aplica límites por IP y ruta a autenticación y snapshots. El contador 
 
 Las rutas de cuenta no deben exponerse públicamente todavía: faltan revisar límites ante tráfico real, Google, passkeys, MFA, recuperación, sesiones de otros dispositivos y validar la IP tras Caddy. CI aplica las cuatro migraciones, prueba rate limit, snapshots, login y revocación con PostgreSQL temporal y correo simulado. Estas pruebas no sustituyen las comprobaciones de despliegue. El cliente Tauri abre el navegador, valida state, usa listener loopback y HTTPS, guarda el token en Credential Manager y al cerrar sesión intenta revocarlo; si la red falla elimina el token local y advierte que el servidor podría seguir aceptándolo. Los flujos PKCE caducan en 10 minutos, los códigos en 2 minutos y las sesiones en 30 días. El código y la sesión son secretos aleatorios opacos; solo sus SHA-256 se almacenan en PostgreSQL. No se registran cabeceras ni se habilitan logs de petición.
 
+### Retención de registros temporales
+
+El servicio limpia registros transitorios en una transacción al iniciar y cada hora: verificadores de PIN de más de 15 minutos, flows y códigos PKCE de más de 24 horas, sesiones vencidas o revocadas, y claves de idempotencia de más de 30 días. El plazo de PIN conserva la ventana de límite por cuenta de 15 minutos; las idempotencias se retienen el tiempo máximo de vida de una sesión. La limpieza nunca elimina snapshots de preferencias ni cuentas. Si falla una pasada, se registra solo un mensaje genérico y se vuelve a intentar en la siguiente.
+
 ### Status público servido por Caddy
 
 `server/deploy/Caddyfile` sirve `/status`, `/status.css` y `/status.js` desde `server/dist/server/web` del release y `/status.json` desde `/var/lib/laural/status/status.json`; el resto se envía a Fastify. Así la página permanece disponible si falla el proceso API o PostgreSQL, mientras Caddy y el VPS sigan activos. La ruta de status no pasa por Fastify.
@@ -74,4 +78,4 @@ Consulta el contrato en [OpenAPI](openapi.yaml), el [diseño aprobado](../docs/d
 
 ## Límites pendientes antes de producción
 
-Faltan validar límites detrás de Caddy en el VPS, probar autenticación y flujos con la base del servicio, limpiar claves idempotentes, desplegar TLS, monitorear, acordar el proceso de incidentes, configurar Resend, implementar revocación de otras sesiones/recuperación de cuenta y completar la revisión de lanzamiento. La página pública de status está en el código pero aún no se ha desplegado. Los snapshots no están cifrados de extremo a extremo: el operador del VPS puede leer las preferencias permitidas.
+Faltan validar límites detrás de Caddy en el VPS, probar autenticación y flujos con la base del servicio, desplegar TLS, monitorear, acordar el proceso de incidentes, configurar Resend, implementar revocación de otras sesiones/recuperación de cuenta y completar la revisión de lanzamiento. La página pública de status está en el código pero aún no se ha desplegado. Los snapshots no están cifrados de extremo a extremo: el operador del VPS puede leer las preferencias permitidas.

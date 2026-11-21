@@ -25,7 +25,7 @@ El login de Laural debe mantener las contraseñas fuera del WebView y devolver l
 - `POST /v1/auth/session/revoke` autentica la sesión antes de revocarla, requiere la cuenta activa/verificada y tiene límite persistente de diez solicitudes por minuto. Repetir la petición con un token ya revocado devuelve `401` sin revelar si la sesión existió.
 - Login por Google, passkeys, TOTP y recuperación se implementan aparte; el flujo email actual no retira MFA.
 - Los límites persistentes por IP/ruta están implementados y se prueban en PostgreSQL temporal de CI. Falta validar la IP real detrás de Caddy y mitigar abuso coordinado. No habilitar ni publicar estas rutas todavía.
-- Los códigos/flows vencidos y sesiones requieren limpieza/retención operativa; CI prueba login y revocación con PostgreSQL real temporal, pero falta validar carreras/carga en el VPS y gestionar sesiones de otros dispositivos.
+- Los flows/códigos PKCE de más de 24 horas y las sesiones vencidas o revocadas se eliminan en el barrido horario. CI prueba login y revocación con PostgreSQL real temporal, pero falta validar carreras/carga en el VPS y gestionar sesiones de otros dispositivos.
 
 ## Evidencia
 

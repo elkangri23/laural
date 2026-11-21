@@ -8,6 +8,7 @@ import { NativeAuthService } from "./native-auth.js";
 import { PostgresNativeAuthStore } from "./postgres-native-auth-store.js";
 import { PostgresPreferenceStore } from "./postgres-store.js";
 import { PostgresRequestRateLimiter } from "./request-rate-limit.js";
+import { cleanupExpiredRecords, RETENTION_INTERVAL_MS } from "./retention.js";
 import { ResendMailer } from "./resend-mailer.js";
 
 const config = readConfig(process.env);
@@ -34,10 +35,21 @@ const app = createApp({
 
 await app.listen({ host: config.host, port: config.port });
 
+function runRetentionCleanup(): void {
+  void cleanupExpiredRecords(pool).catch(() => {
+    console.error("Falló la limpieza periódica de retención del servicio sync.");
+  });
+}
+
+runRetentionCleanup();
+const retentionTimer = setInterval(runRetentionCleanup, RETENTION_INTERVAL_MS);
+retentionTimer.unref();
+
 let closing = false;
 async function shutdown(): Promise<void> {
   if (closing) return;
   closing = true;
+  clearInterval(retentionTimer);
   await app.close();
   await pool.end();
 }

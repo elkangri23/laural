@@ -10,6 +10,7 @@ import { PostgresEmailAuthStore } from "../src/postgres-email-auth-store.js";
 import { PostgresNativeAuthStore } from "../src/postgres-native-auth-store.js";
 import { PostgresPreferenceStore } from "../src/postgres-store.js";
 import { PostgresRequestRateLimiter } from "../src/request-rate-limit.js";
+import { cleanupExpiredRecords } from "../src/retention.js";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const describePostgres = databaseUrl ? describe : describe.skip;
@@ -65,6 +66,62 @@ describePostgres("integración real de PostgreSQL para rate limits", () => {
     expect(stored.rows).toHaveLength(2);
     expect(stored.rows.every(({ key_digest }) => /^[a-f0-9]{64}$/.test(key_digest))).toBe(true);
     expect(stored.rows.every(({ request_count }) => request_count >= 1)).toBe(true);
+  });
+
+  it("limpia registros caducados y conserva los que aún están dentro de su retención", async () => {
+    const accountId = randomUUID();
+    const expiredFlow = randomUUID();
+    const activeFlow = randomUUID();
+    await isolatedPool.query(
+      "INSERT INTO accounts (id, email, display_name, email_verified_at) VALUES ($1, $2, 'Retención', now())",
+      [accountId, `${accountId}@example.test`],
+    );
+    await isolatedPool.query(
+      `INSERT INTO email_verification_codes (account_id, verifier_digest, expires_at, created_at)
+       VALUES ($1, repeat('a', 64), now() - interval '20 minutes', now() - interval '20 minutes'),
+              ($1, repeat('b', 64), now() + interval '4 minutes', now() - interval '1 minute')`,
+      [accountId],
+    );
+    await isolatedPool.query(
+      `INSERT INTO native_auth_flows
+         (id, cookie_digest, csrf_digest, redirect_uri, state, code_challenge, expires_at, created_at)
+       VALUES ($1, repeat('c', 64), repeat('d', 64), 'http://127.0.0.1:49152/callback', repeat('s', 43), repeat('e', 43), now() - interval '24 hours', now() - interval '25 hours'),
+              ($2, repeat('f', 64), repeat('0', 64), 'http://127.0.0.1:49152/callback', repeat('t', 43), repeat('1', 43), now() + interval '10 minutes', now())`,
+      [expiredFlow, activeFlow],
+    );
+    await isolatedPool.query(
+      `INSERT INTO native_authorization_codes (code_digest, flow_id, account_id, code_challenge, expires_at, created_at)
+       VALUES (repeat('2', 64), $1, $2, repeat('e', 43), now() - interval '24 hours', now() - interval '25 hours')`,
+      [expiredFlow, accountId],
+    );
+    await isolatedPool.query(
+      `INSERT INTO account_sessions (account_id, token_hash, expires_at, revoked_at)
+       VALUES ($1, repeat('3', 64), now() - interval '1 minute', NULL),
+              ($1, repeat('4', 64), now() + interval '1 day', now()),
+              ($1, repeat('5', 64), now() + interval '1 day', NULL)`,
+      [accountId],
+    );
+    await isolatedPool.query(
+      `INSERT INTO preference_idempotency (account_id, idempotency_key, payload_digest, snapshot, revision, created_at)
+       VALUES ($1, 'expired-retention-key', repeat('6', 64), '{}'::jsonb, 1, now() - interval '31 days'),
+              ($1, 'fresh-retention-key', repeat('7', 64), '{}'::jsonb, 2, now())`,
+      [accountId],
+    );
+
+    await cleanupExpiredRecords(isolatedPool);
+
+    const [emailCodes, authFlows, authCodes, sessions, idempotency] = await Promise.all([
+      isolatedPool.query("SELECT id FROM email_verification_codes WHERE account_id = $1", [accountId]),
+      isolatedPool.query("SELECT id FROM native_auth_flows WHERE id = ANY($1::uuid[])", [[expiredFlow, activeFlow]]),
+      isolatedPool.query("SELECT id FROM native_authorization_codes WHERE account_id = $1", [accountId]),
+      isolatedPool.query("SELECT id FROM account_sessions WHERE account_id = $1", [accountId]),
+      isolatedPool.query("SELECT idempotency_key FROM preference_idempotency WHERE account_id = $1 ORDER BY idempotency_key", [accountId]),
+    ]);
+    expect(emailCodes.rows).toHaveLength(1);
+    expect(authFlows.rows.map(({ id }) => id)).toEqual([activeFlow]);
+    expect(authCodes.rows).toHaveLength(0);
+    expect(sessions.rows).toHaveLength(1);
+    expect(idempotency.rows.map(({ idempotency_key }) => idempotency_key)).toEqual(["fresh-retention-key"]);
   });
 
   it("sirve snapshots reales de PostgreSQL con aislamiento, revisión e idempotencia", async () => {

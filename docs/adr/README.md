@@ -38,6 +38,7 @@ Los ADR registran por qué se eligió una opción y qué costes trae. Un ADR ace
 | [0032](0032-pagina-publica-de-estado.md) | Estado público servido en el mismo VPS y actualizado por SSH | Aceptada; implementación inicial, despliegue pendiente |
 | [0033](0033-limites-persistentes-por-ip.md) | Límites atómicos por IP/ruta en PostgreSQL con huella HMAC | Aceptada; código y migración listos, validación VPS pendiente |
 | [0034](0034-revocacion-de-sesion-al-cerrar-sesion.md) | Revocar la sesión actual al cerrar sesión, con limpieza local aun sin red | Aceptada; API y cliente implementados, VPS pendiente |
+| [0035](0035-retencion-de-registros-transitorios.md) | Limpieza periódica de PINs, PKCE, sesiones e idempotencias | Aceptada; servicio y pruebas implementados, VPS pendiente |
 
 ## Crear un ADR
 
