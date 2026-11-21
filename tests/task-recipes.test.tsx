@@ -65,6 +65,23 @@ test("crea recetas locales y las conserva en el almacenamiento del equipo", asyn
   expect(host.textContent).toContain("Revisión de dependencias");
 });
 
+test("conserva una receta creada al cerrar y volver a abrir el panel", async () => {
+  await act(async () => root!.render(<TaskRecipes onClose={onClose} onUse={onUse} />));
+  await act(async () => button("Crear receta").click());
+  const fields = host.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(".recipe-editor input, .recipe-editor textarea");
+  await setValue(fields[0], "Verificar licencias");
+  await setValue(fields[1], "Revisa las licencias declaradas en el proyecto.");
+  await setValue(fields[2], "Localiza manifiestos de dependencias.\nResume las licencias encontradas.");
+  await act(async () => button("Guardar receta").click());
+  await act(async () => root!.unmount());
+  root = createRoot(host);
+
+  await act(async () => root!.render(<TaskRecipes onClose={onClose} onUse={onUse} />));
+  await act(async () => button("Verificar licencias").click());
+  expect(host.querySelector(".recipe-preview h3")?.textContent).toBe("Verificar licencias");
+  expect(host.querySelector(".recipe-preview")?.textContent).toContain("Resume las licencias encontradas.");
+});
+
 test("descarta entradas inválidas guardadas y limita el contenido a texto", async () => {
   localStorage.setItem("laural.task-recipes.v1", JSON.stringify({ version: 1, recipes: [{ id: "x", name: "", objective: "", steps: [] }] }));
   await act(async () => root!.render(<TaskRecipes onClose={onClose} onUse={onUse} />));
