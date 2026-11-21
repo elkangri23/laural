@@ -66,8 +66,8 @@ describePostgres("integración real de PostgreSQL para rate limits", () => {
     const firstAccount = randomUUID();
     const secondAccount = randomUUID();
     await isolatedPool.query(
-      `INSERT INTO accounts (id, email, email_verified_at)
-       VALUES ($1, $2, now()), ($3, $4, now())`,
+      `INSERT INTO accounts (id, email, display_name, email_verified_at)
+       VALUES ($1, $2, 'Primera cuenta', now()), ($3, $4, 'Segunda cuenta', now())`,
       [firstAccount, `${firstAccount}@example.test`, secondAccount, `${secondAccount}@example.test`],
     );
 
