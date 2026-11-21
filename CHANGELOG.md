@@ -2,6 +2,7 @@
 
 ## Sin publicar
 
+- Añadidos fundamentos criptográficos para la siguiente fase de MFA: TOTP compatible con RFC 6238, semillas cifradas con AES-256-GCM y AAD por cuenta, códigos de recuperación aleatorios y verificador HMAC. Pruebas del núcleo pasan (100 % líneas, 93,87 % ramas). Esto todavía no activa MFA; faltan persistencia, protección transaccional contra replay, login/UI, confirmación de códigos y operación.
 - Implementado el restablecimiento de contraseña mediante PIN de correo de seis dígitos y cinco minutos. Respuestas genéricas, HMAC separado, límites y máximo de intentos; el cambio de contraseña invalida sesiones y no inicia sesión ni modifica MFA. Añadidas migración PostgreSQL, correo Resend y pruebas unitarias/de integración. Falta el despliegue/validación del VPS con Resend.
 - Documentado el runbook de recuperación de cuenta: el PIN solo demuestra acceso al buzón y el administrador necesita una prueba preexistente e independiente para retirar factores. Sin esa prueba, la solicitud se deniega. El procedimiento todavía no se puede operar; MFA, códigos, acción administrativa local al VPS y ensayos siguen pendientes.
 - Añadida gestión de sesiones de cuenta: consulta limitada a 100 sesiones con fechas y marca «Este equipo», y revocación individual de otras sesiones con confirmación. No se guardan ni muestran IP, ubicación, tokens o huellas de dispositivo; se cubre la API con PostgreSQL real en CI.
