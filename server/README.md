@@ -25,6 +25,16 @@ npm run test:coverage
 npm start
 ```
 
+Para probar las migraciones y concurrencia del rate limit contra una base PostgreSQL real, usa una base local de pruebas vacía y ejecuta en PowerShell:
+
+```powershell
+$env:TEST_DATABASE_URL = "postgres://laural:contraseña-de-pruebas@127.0.0.1:5432/laural_test"
+npm run test:postgres
+Remove-Item Env:TEST_DATABASE_URL
+```
+
+La prueba crea un schema con nombre aleatorio, aplica las cuatro migraciones y lo elimina al terminar; no modifica las tablas de la base fuera de ese schema. `npm run test:postgres` falla si no se define la URL. La cobertura normal omite esta prueba cuando `TEST_DATABASE_URL` no está configurada; CI la ejecuta con un PostgreSQL de servicio temporal.
+
 Para generar cada pepper desde PowerShell: `[Convert]::ToBase64String([System.Security.Cryptography.RandomNumberGenerator]::GetBytes(32))`. Guarda los resultados solo en el entorno de secretos del servicio; usa valores distintos para `RATE_LIMIT_PEPPER` y `AUTH_PIN_PEPPER`. No habilites `EMAIL_AUTH_ENABLED` hasta verificar los límites desde Caddy y el remitente Resend.
 
 En desarrollo se puede usar `npm run dev`; las tablas deben existir antes de arrancar. `GET /health/live` comprueba que el proceso responde y `GET /health/ready` realiza una consulta de disponibilidad a PostgreSQL. Las respuestas de salud no filtran errores internos.

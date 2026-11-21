@@ -31,6 +31,22 @@ jobs:
           if-no-files-found: error
   cobertura-servicio-sync:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: laural_test
+          POSTGRES_USER: laural
+          POSTGRES_PASSWORD: laural_test_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U laural -d laural_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://laural:laural_test_password@localhost:5432/laural_test
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5

@@ -13,6 +13,7 @@
     "migrate": "node --env-file-if-exists=.env dist/server/src/migrate.js",
     "status:validate": "node scripts/validate-status.mjs",
     "test": "vitest run",
+    "test:postgres": "node scripts/assert-test-database.mjs && vitest run tests/postgres-rate-limit.integration.test.ts",
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {

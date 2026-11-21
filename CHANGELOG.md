@@ -2,6 +2,7 @@
 
 ## Sin publicar
 
+- Añadida prueba de integración PostgreSQL aislada: aplica migraciones v1–v4, verifica el rate limit atómico en concurrencia y ejecuta en CI con una base efímera. Para correrla localmente, `server` requiere `TEST_DATABASE_URL`.
 - El servicio aplica límites persistentes por IP y ruta en PostgreSQL, comparte los contadores entre instancias y guarda solo huellas HMAC de IP. Se limitan auth y snapshots; el exceso recibe `429` con `Retry-After` y el proxy confiable queda restringido a loopback.
 - La comprobación al reconectar/volver a primer plano agrupa eventos y se prueba junto a la reanudación. El lector del estado de sync local valida campos obligatorios, contenido, integridad y tamaño antes de usarlo.
 - Al recuperar la conexión o volver a la app, se programa una comprobación sincronizada de preferencias; las comprobaciones cercanas se agrupan y la aceptación local de riesgos sigue siendo obligatoria.

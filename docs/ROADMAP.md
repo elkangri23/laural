@@ -110,6 +110,7 @@ Añadidas regresiones que simulan el fallo al escribir una credencial y comprueb
 
 - El riesgo de no tener copias fuera del VPS ya se documenta y se muestra antes de habilitar sync. Acordar si habrá una copia local de PostgreSQL y aclarar que no sobrevive a la pérdida del host.
 - Implementado un límite persistente de solicitudes por IP y ruta, con contador atómico en PostgreSQL, huella HMAC sin IP en claro y confianza de proxy restringida a loopback. Pendiente verificar migración/contención bajo carga con PostgreSQL y Caddy reales, calibrar umbrales y añadir alertas operativas.
+- Añadida una integración aislada que aplica las cuatro migraciones en PostgreSQL real y verifica límites concurrentes compartidos por dos instancias, renovación de ventana y separación por ruta/IP. CI ejecuta la prueba con un servicio PostgreSQL temporal; falta confirmar su ejecución y validar cabeceras de IP detrás de Caddy en el VPS.
 - Implementar códigos de recuperación y runbook de revisión manual con una prueba independiente preexistente; sin ella el administrador no retira MFA. Revocar sesiones y notificar al usuario.
 - Fijar límites de cuenta/dispositivo/solicitud, monitorización y procedimiento de incidentes.
 - Completar revisión de seguridad, cobertura de líneas y ramas (mínimo 85 % para lógica crítica), instalación/actualización Windows y plan de incidentes.
