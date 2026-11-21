@@ -2,6 +2,7 @@
 
 ## Sin publicar
 
+- El diálogo de recetas mantiene el foco dentro, permite cerrarlo con Escape y enfoca el formulario al crear o editar.
 - Añadida una regresión que verifica la persistencia de recetas propias al cerrar y volver a abrir el panel.
 - Los controles de terminal permiten copiar la selección actual y limpiar la pantalla sin ejecutar comandos adicionales.
 - La navegación Historial abre una vista filtrada de comandos recientes de la sesión; desde ahí solo se copian, nunca se ejecutan.

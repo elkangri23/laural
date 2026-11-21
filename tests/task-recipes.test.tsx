@@ -25,17 +25,20 @@ async function setValue(element: HTMLInputElement | HTMLTextAreaElement, value: 
 }
 
 beforeEach(() => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   localStorage.clear();
   onClose.mockReset();
   onUse.mockReset();
   vi.stubGlobal("confirm", vi.fn(() => true));
   host = document.createElement("div");
+  document.body.appendChild(host);
   root = createRoot(host);
 });
 
 afterEach(async () => {
   await act(async () => root?.unmount());
   root = undefined;
+  host.remove();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -158,4 +161,22 @@ test("cierra el diálogo con Escape o al pulsar fuera", async () => {
   expect(onClose).toHaveBeenCalledOnce();
   await act(async () => host.querySelector(".dialog-backdrop")!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true })));
   expect(onClose).toHaveBeenCalledTimes(2);
+});
+
+test("mantiene el foco dentro del diálogo y enfoca el formulario al editar", async () => {
+  await act(async () => root!.render(<TaskRecipes onClose={onClose} onUse={onUse} />));
+  const dialog = host.querySelector<HTMLElement>(".recipes-dialog")!;
+  const first = dialog.querySelector<HTMLButtonElement>(".dialog-close")!;
+  const buttons = dialog.querySelectorAll<HTMLButtonElement>("button");
+  const last = buttons[buttons.length - 1];
+  expect(document.activeElement).toBe(host.querySelector(".recipes-list button.selected"));
+
+  await act(async () => first.focus());
+  await act(async () => first.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true })));
+  expect(document.activeElement).toBe(last);
+  await act(async () => last.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true })));
+  expect(document.activeElement).toBe(first);
+
+  await act(async () => button("Editar").click());
+  expect(document.activeElement).toBe(host.querySelector(".recipe-editor input"));
 });

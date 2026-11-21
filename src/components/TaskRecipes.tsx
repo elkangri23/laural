@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 
 export type TaskRecipe = { id: string; name: string; objective: string; steps: string[] };
 
@@ -53,9 +53,38 @@ export function TaskRecipes({ onClose, onUse }: { onClose: () => void; onUse: (p
   const [editing, setEditing] = useState<TaskRecipe | null>(null);
   const [error, setError] = useState("");
   const dialogRef = useRef<HTMLElement>(null);
+  const isEditing = editing !== null;
   const selected = useMemo(() => recipes.find((recipe) => recipe.id === selectedId) ?? recipes[0], [recipes, selectedId]);
 
-  useEffect(() => { dialogRef.current?.focus(); }, []);
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    if (isEditing) dialog.querySelector<HTMLInputElement>(".recipe-editor input")?.focus();
+    else (dialog.querySelector<HTMLButtonElement>(".recipes-list button.selected") ?? dialog.querySelector<HTMLButtonElement>(".recipes-add"))?.focus();
+  }, [isEditing]);
+
+  function handleDialogKeyDown(event: KeyboardEvent<HTMLElement>) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      onClose();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const focusable = [...dialog.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [href], [tabindex]:not([tabindex="-1"])')];
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    const focusIsInside = document.activeElement instanceof Node && dialog.contains(document.activeElement);
+    if (event.shiftKey && (!focusIsInside || document.activeElement === first)) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && (!focusIsInside || document.activeElement === last)) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
 
   function persist(next: TaskRecipe[]) {
     try {
@@ -99,7 +128,7 @@ export function TaskRecipes({ onClose, onUse }: { onClose: () => void; onUse: (p
   }
 
   return <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <section ref={dialogRef} className="recipes-dialog" role="dialog" aria-modal="true" aria-labelledby="recipes-title" tabIndex={-1} onKeyDown={(event) => { if (event.key === "Escape") onClose(); }}>
+    <section ref={dialogRef} className="recipes-dialog" role="dialog" aria-modal="true" aria-labelledby="recipes-title" tabIndex={-1} onKeyDown={handleDialogKeyDown}>
       <button className="dialog-close" onClick={onClose} aria-label="Cerrar recetas">×</button>
       <p className="eyebrow">AGENTE · SOLO EN ESTE EQUIPO</p><h2 id="recipes-title">Recetas de tareas</h2>
       <p className="dialog-copy">Plantillas para preparar planes repetibles. La receta no ejecuta acciones; cada cambio sigue sujeto a los permisos del agente.</p>
