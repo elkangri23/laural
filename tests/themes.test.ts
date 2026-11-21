@@ -51,3 +51,23 @@ test.each(["dark", "light"] as const)("el texto secundario mantiene contraste AA
     expect(contrastRatio(muted, cssVariable(block, surface)), `${mode}: ${surface}`).toBeGreaterThanOrEqual(4.5);
   }
 });
+
+test.each(["dark", "light"] as const)("los colores secundarios de navegación y paneles mantienen contraste AA en modo %s", mode => {
+  const block = mode === "light"
+    ? appCss.match(/:root\[data-mode="light"\]\s*\{([\s\S]*?)\n\}/)?.[1]
+    : appCss.match(/:root\s*\{([\s\S]*?)\n\}/)?.[1];
+  if (!block) throw new Error(`No se encontró la configuración CSS del modo ${mode}`);
+  const pairs = [
+    ["--palette-7d7f89", ["--palette-17181d", "--palette-1d1e24"]],
+    ["--palette-70727d", ["--palette-17181d", "--palette-131419"]],
+    ["--palette-6e707b", ["--palette-17181d"]],
+    ["--palette-737580", ["--palette-17181d"]],
+    ["--palette-777984", ["--palette-1b1c22", "--palette-17181d", "--palette-1d1e24"]],
+    ["--palette-898b93", ["--palette-23271f", "--palette-1d1e23", "--palette-17181d", "--palette-1d1e24"]],
+  ] as const;
+  for (const [foreground, surfaces] of pairs) {
+    for (const surface of surfaces) {
+      expect(contrastRatio(cssVariable(block, foreground), cssVariable(block, surface)), `${mode}: ${foreground} sobre ${surface}`).toBeGreaterThanOrEqual(4.5);
+    }
+  }
+});

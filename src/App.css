@@ -42,7 +42,7 @@
   --palette-354a31: #354a31;
   --palette-273328: #273328;
   --palette-70845d48: #70845d48;
-  --palette-7d7f89: #7d7f89;
+  --palette-7d7f89: #858894;
   --palette-9698a2: #9698a2;
   --palette-858792: #858792;
   --palette-ffffff06: #ffffff06;
@@ -50,10 +50,10 @@
   --palette-363940: #363940;
   --palette-25262d: #25262d;
   --palette-f0f1f2: #f0f1f2;
-  --palette-70727d: #70727d;
+  --palette-70727d: #858894;
   --palette-747681: #747681;
-  --palette-6e707b: #6e707b;
-  --palette-737580: #737580;
+  --palette-6e707b: #858894;
+  --palette-737580: #858894;
   --palette-c6c7ce: #c6c7ce;
   --palette-ffffff08: #ffffff08;
   --palette-42454e: #42454e;
@@ -62,7 +62,7 @@
   --palette-23271f: #23271f;
   --palette-1d1e23: #1d1e23;
   --palette-dadbdc: #dadbdc;
-  --palette-898b93: #898b93;
+  --palette-898b93: #9698a2;
   --palette-747680: #747680;
   --palette-55574d: #55574d;
   --palette-34352e: #34352e;
@@ -75,7 +75,7 @@
   --palette-7f818c: #7f818c;
   --palette-303139: #303139;
   --palette-1b1c22: #1b1c22;
-  --palette-777984: #777984;
+  --palette-777984: #858894;
   --palette-373942: #373942;
   --palette-80828c: #80828c;
   --palette-292a31: #292a31;
@@ -777,7 +777,7 @@ svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width:
   --palette-354a31: #b9ceb5;
   --palette-273328: #ccd8cd;
   --palette-70845d48: #8ea27b48;
-  --palette-7d7f89: #767882;
+  --palette-7d7f89: #535560;
   --palette-9698a2: #5d5f69;
   --palette-858792: #6d6f7a;
   --palette-ffffff06: #00000006;
@@ -785,10 +785,10 @@ svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width:
   --palette-363940: #bfc2c9;
   --palette-25262d: #d2d3da;
   --palette-f0f1f2: #0d0e0f;
-  --palette-70727d: #82848f;
+  --palette-70727d: #535560;
   --palette-747681: #7e808b;
-  --palette-6e707b: #848691;
-  --palette-737580: #7f818c;
+  --palette-6e707b: #535560;
+  --palette-737580: #535560;
   --palette-c6c7ce: #313239;
   --palette-ffffff08: #00000008;
   --palette-42454e: #b1b4bd;
@@ -797,7 +797,7 @@ svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width:
   --palette-23271f: #dce0d8;
   --palette-1d1e23: #dcdde2;
   --palette-dadbdc: #232425;
-  --palette-898b93: #6c6e76;
+  --palette-898b93: #535560;
   --palette-747680: #7f818b;
   --palette-55574d: #b0b2a8;
   --palette-34352e: #d0d1ca;
@@ -810,7 +810,7 @@ svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width:
   --palette-7f818c: #737580;
   --palette-303139: #c6c7cf;
   --palette-1b1c22: #dddee4;
-  --palette-777984: #7b7d88;
+  --palette-777984: #535560;
   --palette-373942: #bdbfc8;
   --palette-80828c: #73757f;
   --palette-292a31: #cecfd6;
