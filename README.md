@@ -17,7 +17,7 @@
 - Agente que propone comandos y cambios de archivos para revisión. Las políticas permiten confirmar comandos, aplicar reglas o activar el modo automático; se puede cancelar la planificación, detener comandos en ejecución y las ediciones de archivos requieren aprobación explícita.
 - Icono y favicon propios; la compilación para Windows se puede generar desde GitHub Actions al publicar una etiqueta `v*`.
 - Actualizaciones Windows firmadas desde GitHub, con instalación manual o automática y versión visible en Configuración.
-- La app de escritorio funciona sin cuenta ni servicio. Configuración permite exportar e importar preferencias y perfiles mediante archivos `.laural`, con vista previa y fusión o reemplazo. Las claves se excluyen por defecto; si se incluyen, el archivo exige contraseña y cifrado autenticado. También incluye el inicio de sesión nativo inicial mediante navegador y Credential Manager; necesita el servicio habilitado y todavía no sincroniza snapshots. No usar cuentas reales hasta completar controles y despliegue. Consulta el [diseño aprobado](docs/designs/sincronizacion-preferencias-y-portabilidad.md) y el [estado técnico del servicio](server/README.md).
+- La app funciona sin cuenta ni servicio. Permite exportar/importar `.laural` con vista previa; las claves se excluyen por defecto y solo se incluyen cifradas con contraseña. Configuración incorpora una primera fase manual de sincronización: compara equipo/nube y requiere elegir antes de reemplazar. El cliente aún no sincroniza automáticamente, no conserva cambios offline y necesita que el servicio esté habilitado; no usar cuentas reales hasta completar controles y despliegue. Consulta el [diseño aprobado](docs/designs/sincronizacion-preferencias-y-portabilidad.md), el [plan de implementación](docs/plans/sincronizacion-preferencias.md) y el [estado técnico del servicio](server/README.md).
 - Las claves de proveedor se guardan en Windows Credential Manager, no en el archivo de perfiles. Consulta [privacidad y seguridad](docs/security/privacy.md).
 
 Laural es una implementación independiente con marca e interfaz propias. No incluye código, recursos ni componentes de Warp.
@@ -84,6 +84,7 @@ HTTP solo se acepta para `localhost` o loopback. Los endpoints remotos deben usa
 - [Sistema visual](docs/ui/design-system.md)
 - [Contribuir](CONTRIBUTING.md)
 - [Política de seguridad](SECURITY.md)
+- [Sincronización de preferencias: estado, privacidad y tareas](docs/plans/sincronizacion-preferencias.md)
 
 ## Privacidad y seguridad
 

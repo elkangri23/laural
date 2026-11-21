@@ -17,6 +17,7 @@ mod chat_stream;
 mod configuration_transfer;
 pub mod preferences;
 mod providers;
+mod sync;
 
 struct TerminalIo {
     master: Box<dyn MasterPty + Send>,
@@ -478,6 +479,8 @@ pub fn run() {
             account::account_session_status,
             account::start_account_login,
             account::clear_account_session,
+            sync::read_remote_preferences,
+            sync::write_remote_preferences,
             create_terminal,
             write_terminal,
             resize_terminal,
@@ -493,6 +496,7 @@ pub fn run() {
             providers::get_providers,
             providers::export_configuration,
             providers::get_preference_snapshot,
+            providers::apply_remote_preference_snapshot,
             providers::import_configuration,
             providers::preview_configuration,
             providers::select_provider,

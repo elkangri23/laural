@@ -19,6 +19,8 @@ vi.mock("../src/components/SettingsDialog", () => ({
 
 let host: HTMLDivElement;
 let root: Root;
+const preferences = { themeId: "laurel", appearance: "dark" as const, updateMode: "manual" as const };
+const renderAccountSettings = (onImported = vi.fn()) => <AccountSettings onClose={vi.fn()} preferences={preferences} onImported={onImported} />;
 
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -38,7 +40,7 @@ afterEach(async () => {
 });
 
 test("inicia login en navegador y muestra el resultado de la sesión", async () => {
-  await act(async () => root.render(<AccountSettings onClose={vi.fn()} />));
+  await act(async () => root.render(renderAccountSettings()));
   const login = host.querySelector("button");
   expect(login?.textContent).toBe("Iniciar sesión");
 
@@ -49,7 +51,7 @@ test("inicia login en navegador y muestra el resultado de la sesión", async () 
   expect(host.querySelector("button")?.textContent).toBe("Esperando en el navegador…");
   await act(async () => mocks.onStatus?.({ payload: { status: "signed_in", message: "Sesión iniciada correctamente." } }));
   expect(host.textContent).toContain("Sesión iniciada correctamente.");
-  expect(host.querySelector("button")?.textContent).toBe("Quitar cuenta de este equipo");
+  expect([...host.querySelectorAll("button")].map((button) => button.textContent)).toContain("Quitar cuenta de este equipo");
 });
 
 test("presenta errores de navegador y del almacén local", async () => {
@@ -58,8 +60,8 @@ test("presenta errores de navegador y del almacén local", async () => {
     if (command === "start_account_login") throw new Error("browser unavailable");
     return undefined;
   });
-  await act(async () => root.render(<AccountSettings onClose={vi.fn()} />));
-  await act(async () => host.querySelector("button")?.click());
+  await act(async () => root.render(renderAccountSettings()));
+  await act(async () => host.querySelector<HTMLButtonElement>('button')?.click());
   expect(host.textContent).toContain("No se pudo abrir el navegador");
 
   mocks.invoke.mockImplementation(async (command: string) => {
@@ -69,14 +71,14 @@ test("presenta errores de navegador y del almacén local", async () => {
   });
   await act(async () => root.unmount());
   root = createRoot(host);
-  await act(async () => root.render(<AccountSettings onClose={vi.fn()} />));
-  await act(async () => host.querySelector("button")?.click());
+  await act(async () => root.render(renderAccountSettings()));
+  await act(async () => [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Quitar cuenta de este equipo")?.click());
   expect(host.textContent).toContain("No se pudo quitar la sesión");
 });
 
 test("informa si falla la lectura del almacén seguro", async () => {
   mocks.invoke.mockRejectedValue(new Error("credential store unavailable"));
-  await act(async () => root.render(<AccountSettings onClose={vi.fn()} />));
+  await act(async () => root.render(renderAccountSettings()));
   await act(async () => new Promise((resolve) => window.setTimeout(resolve, 0)));
   expect(host.textContent).toContain("No se pudo consultar el almacén seguro de Windows");
 });
@@ -84,17 +86,55 @@ test("informa si falla la lectura del almacén seguro", async () => {
 test("informa si no se puede escuchar el resultado del login", async () => {
   mocks.invoke.mockReturnValue(new Promise(() => undefined));
   mocks.listenFails = true;
-  await act(async () => root.render(<AccountSettings onClose={vi.fn()} />));
+  await act(async () => root.render(renderAccountSettings()));
   await act(async () => new Promise((resolve) => window.setTimeout(resolve, 0)));
   expect(host.textContent).toContain("No se pudo escuchar el resultado");
 });
 
 test("quita solo la sesión local y comunica la limitación", async () => {
   mocks.invoke.mockImplementation(async (command: string) => command === "account_session_status");
-  await act(async () => root.render(<AccountSettings onClose={vi.fn()} />));
-  await act(async () => host.querySelector("button")?.click());
+  await act(async () => root.render(renderAccountSettings()));
+  await act(async () => [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Quitar cuenta de este equipo")?.click());
 
   expect(mocks.invoke).toHaveBeenCalledWith("clear_account_session");
   expect(host.textContent).toContain("la revocación remota está pendiente");
-  expect(host.querySelector("button")?.textContent).toBe("Iniciar sesión");
+  expect([...host.querySelectorAll("button")].map((button) => button.textContent)).toContain("Iniciar sesión");
+});
+
+test("compara el snapshot y ofrece elección sin revelar los cambios", async () => {
+  const local = { schemaVersion: 1, preferences, activeProviderId: "local", providers: [{ id: "local", kind: "ollama", name: "Ollama", model: "qwen", customEndpoint: undefined }] };
+  const cloud = { ...local, preferences: { ...preferences, themeId: "ocean" } };
+  mocks.invoke.mockImplementation(async (command: string) => {
+    if (command === "account_session_status") return true;
+    if (command === "get_preference_snapshot") return local;
+    if (command === "read_remote_preferences") return { snapshot: cloud, revision: 7 };
+    return undefined;
+  });
+  await act(async () => root.render(renderAccountSettings()));
+  await act(async () => host.querySelector<HTMLButtonElement>("button")?.click());
+  await act(async () => [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Sincronizar ahora")?.click());
+  expect(host.textContent).toContain("no coincide");
+  expect(host.textContent).not.toContain("ocean");
+  expect([...host.querySelectorAll("button")].map((button) => button.textContent)).toContain("Usar este equipo");
+  expect([...host.querySelectorAll("button")].map((button) => button.textContent)).toContain("Usar la nube");
+});
+
+test("aplica la configuración cloud mediante Rust y comunica la copia local", async () => {
+  const snapshot = { schemaVersion: 1, preferences, activeProviderId: null, providers: [] };
+  const imported = { preferences, activeProvider: null, providers: [], backupPath: "C:/Laural/transfer-backups/configuracion.laural", backupEncrypted: false, backupContainsApiKeys: false };
+  const onImported = vi.fn();
+  mocks.invoke.mockImplementation(async (command: string) => {
+    if (command === "account_session_status") return true;
+    if (command === "get_preference_snapshot") return snapshot;
+    if (command === "read_remote_preferences") return { snapshot: { ...snapshot, preferences: { ...preferences, themeId: "ocean" } }, revision: 3 };
+    if (command === "apply_remote_preference_snapshot") return imported;
+    return undefined;
+  });
+  await act(async () => root.render(renderAccountSettings(onImported)));
+  await act(async () => [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Sincronizar ahora")?.click());
+  await act(async () => [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Sincronizar ahora")?.click());
+  await act(async () => [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Usar la nube")?.click());
+  expect(mocks.invoke).toHaveBeenCalledWith("apply_remote_preference_snapshot", expect.objectContaining({ snapshot: expect.objectContaining({ preferences: expect.objectContaining({ themeId: "ocean" }) }) }));
+  expect(onImported).toHaveBeenCalledWith(imported);
+  expect(host.textContent).toContain(imported.backupPath);
 });

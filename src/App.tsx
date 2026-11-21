@@ -915,7 +915,15 @@ function App() {
         onClose={() => { setTransferOpen(false); setSettingsOpen(true); }}
         onImported={applyImportedConfiguration}
       />}
-      {accountSettingsOpen && <AccountSettings onClose={() => setAccountSettingsOpen(false)} />}
+      {accountSettingsOpen && <AccountSettings
+        preferences={{
+          themeId,
+          appearance,
+          updateMode: localStorage.getItem("laural.update-mode.v1") === "automatic" ? "automatic" : "manual",
+        }}
+        onImported={applyImportedConfiguration}
+        onClose={() => setAccountSettingsOpen(false)}
+      />}
       {appearanceOpen && <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setAppearanceOpen(false); }}>
         <section className="appearance-dialog" role="dialog" aria-modal="true" aria-labelledby="appearance-title">
           <button className="dialog-close" onClick={() => setAppearanceOpen(false)} aria-label="Cerrar">×</button>

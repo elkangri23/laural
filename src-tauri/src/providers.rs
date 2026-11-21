@@ -395,6 +395,102 @@ pub fn get_preference_snapshot(
     build_preference_snapshot(read_provider_store(&app)?, preferences)
 }
 
+#[tauri::command]
+pub async fn apply_remote_preference_snapshot(
+    app: AppHandle,
+    snapshot: PreferenceSnapshot,
+    current_preferences: TransferPreferences,
+) -> Result<TransferImportResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        apply_remote_preference_snapshot_inner(app, snapshot, current_preferences)
+    })
+    .await
+    .map_err(|_| "No se pudo aplicar la configuración de la nube.".to_string())?
+}
+
+fn apply_remote_preference_snapshot_inner(
+    app: AppHandle,
+    snapshot: PreferenceSnapshot,
+    current_preferences: TransferPreferences,
+) -> Result<TransferImportResult, String> {
+    snapshot::encode(&snapshot)?;
+    let old_store = read_provider_store(&app)?;
+    let incoming = remote_transfer_data(snapshot, &old_store)?;
+    for provider in &incoming.providers {
+        validate_base_url(&provider.base_url)?;
+    }
+    let id_map = remap_provider_ids(&incoming, &old_store)?;
+    let new_store = build_import_store(&old_store, &incoming, "replace", &id_map)?;
+
+    let previous_data = transfer_data(old_store, current_preferences);
+    let backup_bytes = configuration_transfer::encode(previous_data, Vec::new(), None)?;
+    let backup = backup_path(&app)?;
+    let backup_string = backup.to_string_lossy().into_owned();
+    write_transfer_file(&backup_string, &backup_bytes)?;
+    write_provider_store(&app, &new_store)?;
+
+    Ok(TransferImportResult {
+        preferences: incoming.preferences.clone(),
+        active_provider: active_provider(&new_store).map(public_provider),
+        providers: new_store.providers.iter().map(public_provider).collect(),
+        backup_path: backup_string,
+        backup_encrypted: false,
+        backup_contains_api_keys: false,
+    })
+}
+
+fn remote_transfer_data(
+    snapshot: PreferenceSnapshot,
+    local_store: &ProviderStore,
+) -> Result<TransferData, String> {
+    let local_by_id: HashMap<&str, &ProviderSettings> = local_store
+        .providers
+        .iter()
+        .map(|provider| (provider.id.as_str(), provider))
+        .collect();
+    let providers: Vec<TransferProvider> = snapshot
+        .providers
+        .iter()
+        .map(|provider| {
+            let local = local_by_id.get(provider.id.as_str()).copied();
+            let base_url = match (&provider.custom_endpoint, local) {
+                (Some(endpoint), _) => endpoint.clone(),
+                (None, Some(existing)) => existing.base_url.clone(),
+                (None, None) => default_provider_endpoint(&provider.kind).ok_or_else(|| {
+                    "El snapshot incluye un proveedor personalizado sin endpoint compartido; configúralo manualmente en este equipo.".to_string()
+                })?.to_string(),
+            };
+            Ok(TransferProvider {
+                id: provider.id.clone(),
+                provider_kind: Some(provider.kind.clone()),
+                name: provider.name.clone(),
+                base_url,
+                model: provider.model.clone(),
+                share_custom_endpoint: false,
+            })
+        })
+        .collect::<Result<_, String>>()?;
+    let incoming = TransferData {
+        preferences: TransferPreferences {
+            theme_id: snapshot.preferences.theme_id.clone(),
+            appearance: snapshot.preferences.appearance.clone(),
+            update_mode: snapshot.preferences.update_mode.clone(),
+        },
+        active_provider_id: snapshot.active_provider_id.clone(),
+        providers,
+    };
+    Ok(incoming)
+}
+
+fn default_provider_endpoint(kind: &str) -> Option<&'static str> {
+    match kind {
+        "freellmapi" => Some("http://127.0.0.1:31415/v1"),
+        "ollama" => Some("http://127.0.0.1:11434/v1"),
+        "lmstudio" => Some("http://127.0.0.1:1234/v1"),
+        _ => None,
+    }
+}
+
 fn active_provider(store: &ProviderStore) -> Option<&ProviderSettings> {
     store
         .active_provider_id
@@ -2020,6 +2116,80 @@ pub fn preview_context(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn endpoints_locales_por_defecto_de_sync_no_incluyen_destinos_remotos() {
+        assert_eq!(
+            default_provider_endpoint("ollama"),
+            Some("http://127.0.0.1:11434/v1")
+        );
+        assert_eq!(
+            default_provider_endpoint("lmstudio"),
+            Some("http://127.0.0.1:1234/v1")
+        );
+        assert_eq!(
+            default_provider_endpoint("freellmapi"),
+            Some("http://127.0.0.1:31415/v1")
+        );
+        assert_eq!(default_provider_endpoint("custom"), None);
+    }
+
+    fn sync_snapshot(provider: SnapshotProvider) -> PreferenceSnapshot {
+        PreferenceSnapshot {
+            schema_version: 1,
+            preferences: SnapshotPreferences {
+                theme_id: "laurel".into(),
+                appearance: "dark".into(),
+                update_mode: "manual".into(),
+            },
+            active_provider_id: Some(provider.id.clone()),
+            providers: vec![provider],
+        }
+    }
+
+    #[test]
+    fn aplicar_snapshot_preserva_endpoint_local_pero_requiere_optar_de_nuevo_para_compartirlo() {
+        let local = ProviderStore {
+            active_provider_id: Some("perfil".into()),
+            providers: vec![ProviderSettings {
+                id: "perfil".into(),
+                provider_kind: Some("custom".into()),
+                name: "Privado".into(),
+                base_url: "https://privado.example/v1".into(),
+                model: "modelo".into(),
+                share_custom_endpoint: true,
+            }],
+        };
+        let snapshot = sync_snapshot(SnapshotProvider {
+            id: "perfil".into(),
+            kind: "custom".into(),
+            name: "Privado".into(),
+            model: "modelo".into(),
+            custom_endpoint: None,
+        });
+
+        let incoming = remote_transfer_data(snapshot, &local).unwrap();
+        assert_eq!(incoming.providers[0].base_url, "https://privado.example/v1");
+        assert!(!incoming.providers[0].share_custom_endpoint);
+    }
+
+    #[test]
+    fn aplicar_snapshot_no_inventa_un_endpoint_personalizado_ni_recomparte_el_recibido() {
+        let empty = ProviderStore::default();
+        let mut custom = SnapshotProvider {
+            id: "nuevo".into(),
+            kind: "custom".into(),
+            name: "Personalizado".into(),
+            model: "modelo".into(),
+            custom_endpoint: None,
+        };
+        assert!(remote_transfer_data(sync_snapshot(custom.clone()), &empty).is_err());
+
+        custom.custom_endpoint = Some("https://llm.example/v1".into());
+        let incoming = remote_transfer_data(sync_snapshot(custom), &empty).unwrap();
+        assert_eq!(incoming.providers[0].base_url, "https://llm.example/v1");
+        assert!(!incoming.providers[0].share_custom_endpoint);
+    }
 
     fn transfer_profile(id: &str, base_url: &str, name: &str) -> TransferProvider {
         TransferProvider {

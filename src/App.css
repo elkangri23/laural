@@ -892,6 +892,7 @@ svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width:
 .account-settings h3 { margin: 0 0 8px; color: var(--text); font-size: 17px; font-weight: 650; }
 .account-settings .form-message { margin: 12px 0; line-height: 1.5; }
 .account-settings .account-note { margin: 18px 0 0; font-size: 12px; }
+.account-sync-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
 .transfer-settings { display: grid; gap: 12px; max-height: min(78vh, 760px); overflow: auto; }
 .transfer-settings .eyebrow { margin: 0; color: var(--theme-accent); font-size: 10px; letter-spacing: .1em; }
 .transfer-settings h3 { margin: 0; color: var(--text); font-size: 17px; font-weight: 650; }

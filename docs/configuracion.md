@@ -2,7 +2,7 @@
 
 Abre **Configuración** en la barra lateral. Los ajustes pertenecen al equipo actual.
 
-La versión actual incluye **Importar y exportar configuración** sin cuenta. La sincronización de cuenta sigue pendiente; consulta el [diseño y su estado](designs/sincronizacion-preferencias-y-portabilidad.md).
+La versión actual incluye **Importar y exportar configuración** sin cuenta y una primera fase manual de **Cuenta y sincronización**. Con una sesión válida, puedes consultar la nube, comparar snapshots sin mostrar diferencias por campo, subir la configuración local si la nube está vacía o elegir cuál conservar si no coinciden. Aplicar la nube crea antes una copia local `.laural` sin claves. El servicio todavía no está desplegado; el auto-sync, los cambios offline y la comprobación cada tres horas están pendientes. Consulta el [plan y su estado](plans/sincronizacion-preferencias.md) y el [diseño](designs/sincronizacion-preferencias-y-portabilidad.md).
 
 | Sección | Opciones y efecto |
 | --- | --- |

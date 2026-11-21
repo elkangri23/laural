@@ -17,7 +17,7 @@ use tauri_plugin_opener::OpenerExt;
 use url::Url;
 use zeroize::Zeroizing;
 
-const SYNC_ORIGIN: &str = "https://sync.laurafernandezenfermeria.com";
+pub(crate) const SYNC_ORIGIN: &str = "https://sync.laurafernandezenfermeria.com";
 const SESSION_SERVICE: &str = "laural.sync";
 const SESSION_ACCOUNT: &str = "account-session";
 const CALLBACK_PATH: &str = "/callback";
@@ -331,6 +331,10 @@ fn read_session() -> Result<Option<Zeroizing<String>>, String> {
         Err(keyring::Error::NoEntry) => Ok(None),
         Err(_) => Err("No se pudo leer la sesión del almacén seguro de Windows.".into()),
     }
+}
+
+pub(crate) fn session_token() -> Result<Zeroizing<String>, String> {
+    read_session()?.ok_or_else(|| "Inicia sesión para sincronizar las preferencias.".to_string())
 }
 
 #[cfg(test)]

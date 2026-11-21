@@ -1,6 +1,6 @@
 # Casos de uso: portabilidad y sincronización
 
-- **Estado:** UC-17/18 tienen una implementación inicial en la app; API, registro/verificación, login web con PKCE y cliente inicial de login Tauri están implementados localmente. La sincronización, revocación, recuperación de cuenta y status público siguen pendientes.
+- **Estado:** UC-17/18 tienen una implementación inicial; login Tauri y primera fase de cliente de sincronización están implementados. Falta auto-sync, cola offline, sondeo periódico y validación contra VPS. Revocación, recuperación y status público siguen pendientes.
 - **Especificación:** [plan de sincronización](../plans/sincronizacion-preferencias.md).
 - **Diseño técnico:** [diseño formal](../designs/sincronizacion-preferencias-y-portabilidad.md).
 
@@ -30,7 +30,7 @@
 
 **Precondición:** cuenta verificada, servicio publicado/habilitado y preferencias locales.
 
-**Flujo:** desde Configuración → Cuenta y sincronización, Laural abre el navegador externo. Tras autenticarse, el navegador redirige al listener local de un solo uso; Rust valida `state`, canjea el código con PKCE y guarda el token en Credential Manager. Esta fase no lee ni escribe snapshots.
+**Flujo:** desde Configuración → Cuenta y sincronización, Laural abre el navegador externo. Tras autenticarse, el navegador redirige al listener local de un solo uso; Rust valida `state`, canjea el código con PKCE y guarda el token en Credential Manager. El panel no recibe el token.
 
 **Aceptación:** redirect limitado a loopback, código de un solo uso, `state` validado, canje HTTPS y PKCE; token ausente del WebView y guardado en Credential Manager. Quitar la cuenta elimina solo el token local; hasta que exista revocación remota, el servidor puede aceptar la sesión hasta su caducidad. Ningún secreto de proveedor se envía.
 
@@ -38,7 +38,9 @@
 
 **Actor:** usuario con sync habilitado en uno o más dispositivos.
 
-**Flujo:** Laural intenta sincronizar al guardar una preferencia, al pulsar **Sincronizar ahora**, cada tres horas mientras está abierta y al reanudar si corresponde. Sin red guarda primero en local y marca cambios pendientes. Si otra revisión avanzó, presenta la elección entre snapshot local y nube.
+**Flujo implementado parcialmente:** la persona pulsa **Sincronizar ahora**. Laural lee ambos snapshots; si coinciden lo confirma, si la nube está vacía ofrece subir el local, y si difieren permite usar este equipo o la nube sin exponer un diff. Al aplicar nube Rust crea una copia local `.laural` sin claves antes de sustituir perfiles. Las escrituras condicionales detectan cambios concurrentes y devuelven a la comparación.
+
+**Pendiente:** sincronizar automáticamente al guardar, comprobar cada tres horas mientras Laural está abierta, almacenar/mostrar cambios pendientes offline y comprobar al reanudar.
 
 **Aceptación:** escritura condicional e idempotente; no hay «última escritura gana» silenciosa; no se muestran diferencias por campo; la copia recuperable se crea antes de reemplazar; un schema futuro/corrupto no se trata como nube vacía.
 

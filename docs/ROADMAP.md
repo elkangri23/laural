@@ -94,11 +94,13 @@ Añadidas regresiones que simulan el fallo al escribir una credencial y comprueb
 - Servir `/status` estáticamente en el mismo VPS; mostrar disponibilidad, incidentes y mantenimiento sin contenido privado.
 - Pendiente probar migraciones/aislamiento/PIN/PKCE/rate limits en PostgreSQL real, retención de códigos/flows/idempotencia, recuperación, publicación de avisos y operación del servicio. No desplegar para usuarios hasta validar el flujo Tauri con el servicio configurado, implementar límites por origen/IP, mitigar abuso y verificar entrega Resend real.
 
-## M10 — Cliente y sincronización (pendiente)
+## M10 — Cliente y sincronización (parcial)
 
-- Sincronizar solo el allowlist aprobado, con endpoint personalizado sujeto a consentimiento por perfil.
-- Guardar local primero; enviar tras los cambios, ofrecer **Sincronizar ahora** y revisar cada tres horas mientras Laural está abierta.
-- Añadir estados pendientes offline, revisiones condicionales, idempotencia, copia previa a reemplazos y elección de snapshot completo ante conflicto.
+- Implementados en Configuración: **Sincronizar ahora**, lectura/comparación inicial, elección de snapshot completo sin mostrar diferencias, y carga explícita de la configuración local cuando la nube está vacía.
+- El cliente Rust consulta y escribe la API por HTTPS usando la sesión de Credential Manager; emplea `ETag`, `If-Match`, clave de idempotencia y detección de conflicto. El token no llega al WebView.
+- Aplicar la nube crea primero un `.laural` recuperable sin API keys; sustituye los perfiles de forma atómica. Las claves locales quedan en Credential Manager y los IDs se remapean si cambia el destino para no reutilizar una clave contra otro endpoint.
+- La nube solo recibe el allowlist aprobado; endpoint personalizado sujeto a consentimiento. Al descargar un endpoint compartido, la app desactiva el consentimiento local para volver a compartirlo.
+- Pendiente: auto-sync tras guardar, revisión cada tres horas mientras Laural está abierta, cola offline durable/visible, puesta al día al reabrir, y prueba real con el VPS habilitado.
 - Excluir siempre claves, chats, terminal/historial, proyectos/rutas y política del agente.
 
 ## M11 — Preparación para producción (pendiente)
