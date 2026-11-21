@@ -57,7 +57,10 @@ El [backlog](../BACKLOG.md) contiene criterios de cierre por tarea; la [hoja de 
 
 ## Pendientes antes de producción
 
-- Definir retención de backups de desastre del VPS, separada de las copias de recuperación visibles que no caducan automáticamente, y el borrado al restaurar.
-- Documentar las pruebas aceptables, avisos y registro que usa el administrador para evaluar una recuperación.
+- **Propuesta por aprobar:** backup lógico diario de PostgreSQL, cifrado antes de subirlo a almacenamiento fuera del VPS, retención de 30 días, aviso si falla y prueba de restauración trimestral en entorno aislado. Objetivo inicial de recuperación: hasta 24 h de cambios podrían perderse. No hay backups configurados ahora; el diseño no afirma lo contrario.
+- **Propuesta por aprobar:** emitir códigos de recuperación de un solo uso al activar MFA; permitir revisión manual del administrador solo con PIN de correo más un factor/prueba independiente preexistente. Sin ella no se retiran factores. Revocar sesiones y notificar al aprobar; registrar categoría de evidencia y decisión, no el contenido de pruebas.
+- Implementar tombstones de borrado fuera del backup y reaplicarlos antes de reabrir el servicio tras restaurar. Informar que las copias de desastre cifradas pueden persistir hasta 30 días; son distintas de las copias visibles de recuperación.
 - Fijar límites de cuenta/dispositivos/peticiones, monitorización y procedimiento de incidentes.
 - Configurar proveedor de correo y credenciales de Google fuera del repositorio; nunca publicar secretos en GitHub.
+
+El diseño técnico y estos criterios operativos recomendados están en el [diseño formal](../designs/sincronizacion-preferencias-y-portabilidad.md). Se deben aprobar e implementar antes de habilitar cuentas para el público.

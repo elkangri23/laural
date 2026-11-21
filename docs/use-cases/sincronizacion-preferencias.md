@@ -46,9 +46,9 @@
 
 **Actor:** titular de cuenta y administrador del servicio.
 
-**Flujo:** el titular demuestra control del buzón con PIN de seis dígitos, un solo uso y cinco minutos, y presenta solicitud. El administrador revisa evidencia independiente y aprueba o deniega.
+**Flujo:** al activar MFA, Laural ofrece códigos de recuperación de un solo uso. Si se pierden los factores, el titular usa una recuperación disponible o solicita revisión administrativa. El PIN de correo de seis dígitos, un solo uso y cinco minutos demuestra control del buzón; no autentica ni elimina MFA.
 
-**Aceptación:** el PIN por sí solo no inicia sesión ni retira MFA; sin decisión administrativa no cambia factores. Al aprobar se retiran los factores perdidos, se revocan sesiones, se avisa al usuario y se registra solo categoría/fecha de decisión. El checklist de evidencia se define en el runbook antes de activar el flujo.
+**Aceptación:** el administrador requiere el PIN y una prueba independiente preexistente: código de recuperación válido, otro factor inscrito, identidad Google vinculada o dispositivo que mantenga sesión autenticada. Si no queda ninguna, se deniega la retirada y se indica crear una cuenta nueva. Al aprobar se revocan sesiones, se retiran solo los factores perdidos, se avisa al correo registrado y se guarda la categoría de evidencia/decisión, nunca su contenido. El PIN solo jamás inicia sesión ni retira MFA.
 
 ## UC-22 — Consultar estado público
 

@@ -46,10 +46,28 @@ The feature must preserve local-only use and manual transfer as complete options
 
 --------------------------------------------------------------------------------
 
-## Open Questions
+## Recommended operational baseline (pending owner approval)
 
-* **VPS disaster-recovery backups**: What retention period and deletion procedure will apply to encrypted service backups, separately from user-visible cloud recovery snapshots that do not expire automatically?
-* **Administrator recovery runbook**: Which independent evidence categories will the administrator accept, and what notice will be sent after approval or rejection? The administrator's case-by-case review is agreed; the operational checklist must be written before enabling factor removal.
+The service is not deployed and currently has no disaster-recovery backups. The following is a small, maintainable baseline for the first production release; it is a recommendation, not a claim that backups or recovery are already configured.
+
+### Disaster-recovery backups
+
+* Run one PostgreSQL logical backup each day and encrypt it before uploading to storage outside the VPS. Keep the latest 30 days; use credentials separate from the VPS login and keep the encryption key outside the repository and backup storage.
+* Alert the operator if a backup is missing or fails. Restore a backup to an isolated environment at least quarterly and record the result; do not count an untested archive as a working backup.
+* Set the initial recovery-point objective to 24 hours: a catastrophic failure may lose changes made since the previous successful backup. This first-stage policy does not provide point-in-time recovery; PostgreSQL documents that `pg_dump` is a logical dump and not a continuous-archiving/PITR backup.
+* On account deletion, remove live data immediately and append a minimal account-ID deletion tombstone to separately protected recovery metadata. Replay tombstones before reopening the API after a restore so deleted accounts do not return. Disclose that encrypted disaster copies may persist until the 30-day retention expires; user-visible recovery snapshots remain a separate feature and do not expire automatically.
+
+### Lost-factor account recovery
+
+* When a user enrolls MFA, generate single-use recovery codes, show them once, store only verifiers on the service, and require the user to confirm they saved them.
+* The six-digit email PIN proves control of the mailbox only. It may open a support case but never grants a session or removes MFA by itself.
+* The administrator reviews the case and requires the email PIN plus at least one pre-existing independent proof: a valid recovery code, another enrolled factor, a linked Google identity, or a still-authenticated trusted device. Record the evidence category and decision, not evidence contents, and notify the account's registered email address.
+* If no independent proof remains, do not bypass MFA based on personal details, provider names, or configuration trivia. Explain that the account cannot be safely recovered and let the user create a new account. This avoids making the support process weaker than sign-in; OWASP notes that recovery is an alternate authentication path and that MFA bypass/reset can be exploited.
+* On approval, revoke every session, remove only the lost factors, require the user to set up a new factor at next sign-in, and retain a minimal decision audit. No public endpoint or public admin panel can perform this action.
+
+These defaults need owner approval before they become release policy. The actual backup job, alerting, restore drill, recovery codes, support procedure and disclosure must be implemented and verified before enabling public account sync.
+
+Rationale: [PostgreSQL backup and restore](https://www.postgresql.org/docs/current/backup.html) distinguishes logical dumps from continuous archiving/PITR; [OWASP MFA guidance](https://cheatsheetseries.owasp.org/cheatsheets/Multifactor_Authentication_Cheat_Sheet.html) recommends single-use recovery codes and warns that MFA reset paths can be exploited.
 
 --------------------------------------------------------------------------------
 
