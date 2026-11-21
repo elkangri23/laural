@@ -101,6 +101,14 @@ test("recupera y guarda el tema y el modo desde Configuración", async () => {
   expect(document.documentElement.dataset.mode).toBe("dark");
 });
 
+test("no inicia sincronización automática sin aceptar el riesgo del VPS", async () => {
+  await act(async () => root!.render(<App />));
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 1_600)); });
+
+  expect(mocks.invoke).not.toHaveBeenCalledWith("get_preference_snapshot", expect.anything());
+  expect(mocks.invoke).not.toHaveBeenCalledWith("sync_local_preferences", expect.anything());
+});
+
 test("el menú general gestiona el foco, las flechas y Escape", async () => {
   await act(async () => root!.render(<App />));
 
