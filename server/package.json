@@ -11,6 +11,7 @@
     "build": "tsc -p tsconfig.json && node scripts/copy-assets.mjs",
     "start": "node --env-file-if-exists=.env dist/server/src/main.js",
     "migrate": "node --env-file-if-exists=.env dist/server/src/migrate.js",
+    "status:validate": "node scripts/validate-status.mjs",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage"
   },

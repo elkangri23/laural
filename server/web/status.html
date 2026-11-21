@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>Estado del servicio · Laural</title>
+  <meta name="description" content="Estado público y avisos del servicio de sincronización de Laural.">
+  <link rel="stylesheet" href="/status.css">
+  <script src="/status.js" defer></script>
+</head>
+<body>
+  <main class="page-shell">
+    <header class="brand"><span class="brand-mark" aria-hidden="true">L</span><span>Laural <small>ESTADO DEL SERVICIO</small></span></header>
+    <section class="status-card" aria-labelledby="page-title">
+      <p class="eyebrow">SINCRONIZACIÓN</p>
+      <h1 id="page-title">Estado del servicio</h1>
+      <div id="status-summary" class="status-summary" role="status" aria-live="polite">
+        <span class="status-dot unknown" aria-hidden="true"></span><span>Consultando el estado…</span>
+      </div>
+      <p id="status-updated" class="updated-at"></p>
+    </section>
+    <section class="notices-section" aria-labelledby="notices-title">
+      <div class="section-heading"><div><p class="eyebrow">COMUNICACIONES</p><h2 id="notices-title">Avisos e incidencias</h2></div><span id="refresh-state" class="refresh-state">Actualización automática</span></div>
+      <div id="notices" class="notices-list"><p class="empty-notices">No hay avisos publicados.</p></div>
+    </section>
+    <footer>
+      <p>Estado y avisos publicados por el administrador del servicio.</p>
+      <p>Esta página comparte servidor con la sincronización. Si el servidor completo deja de responder, la página también puede quedar inaccesible.</p>
+    </footer>
+  </main>
+</body>
+</html>

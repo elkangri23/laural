@@ -1,6 +1,6 @@
 # Especificación: perfiles, portabilidad y sincronización
 
-- **Estado:** F1 en implementación inicial; F2 implementado salvo validación automática de schema común; F3 cuenta/API local parciales; F4 cliente manual y auto-sync inicial implementados. Pendientes pruebas de reconexión, reanudación y VPS real. Factores adicionales, recuperación, revocación, status y despliegue siguen pendientes.
+- **Estado:** F1 en implementación inicial; F2 implementado salvo validación automática de schema común; F3 cuenta/API local parciales y página pública de status implementada en Caddy; F4 cliente manual y auto-sync inicial implementados. Pendientes pruebas de reconexión, reanudación y VPS real. Factores adicionales, recuperación, revocación y despliegue siguen pendientes.
 - **Fecha:** 2026-11-21.
 - **Alcance:** Windows primero; perfiles locales, exportar/importar y sincronización opcional de preferencias.
 - **Diseño formal:** [sincronización de preferencias y portabilidad](../designs/sincronizacion-preferencias-y-portabilidad.md).
@@ -53,9 +53,9 @@ La app ofrece exportar/importar `.laural` local, y el cliente sync manual/autom�
 2. **F2 — Contrato y adaptador local:** implementados schema cerrado v1, fixture, tipos Rust/TypeScript, validación con tope de 256 KiB y comando nativo para construir el snapshot desde preferencias y perfiles. El endpoint se incluye solo si su consentimiento por perfil está guardado. Pendiente validar automáticamente el JSON Schema canónico en Rust y TypeScript.
 3. **F3 — Servicio y cuenta:** API Fastify, migraciones, registro/verificación por PIN, página web de email/contraseña, flujo loopback/PKCE y emisión de sesión opaca están implementados localmente tras bandera apagada. La app Tauri ya abre el navegador, valida state, canjea por HTTPS y almacena la sesión. Faltan validar con el VPS, revocación remota, Google, passkeys, TOTP, recuperación, rate limits por IP, PostgreSQL real y publicación.
 4. **F4 — Sincronización:** cliente Rust con token nativo, botón manual, comparación/elección, auto-sync inicial, estado pendiente durable, revisión al abrir y cada tres horas, `If-Match`, idempotencia y copia local previa implementados. Pendientes pruebas de reconexión, suspensión/reanudación y VPS real.
-5. **F5 — Estado y operación:** página `/status`, avisos de mantenimiento/incidentes desde operación protegida, procedimientos de recuperación y despliegue TLS.
+5. **F5 — Estado y operación:** página estática `/status` y documento acotado implementados en Caddy, con actualización administrativa por SSH; pendientes validación del Caddyfile y despliegue en VPS, procedimientos operativos completos, recuperación y despliegue TLS.
 
-El [backlog](../BACKLOG.md) contiene criterios de cierre por tarea; la [hoja de ruta](../ROADMAP.md) ordena las entregas. La suite del servicio obtiene 96,45 % de líneas y 91,75 % de ramas en 62 pruebas, con PostgreSQL y Resend simulados; faltan pruebas de integración reales y pruebas manuales de Windows. Los módulos restantes de autenticación, cifrado y recuperación deberán cumplir al menos 85 % en líneas y ramas antes de habilitarse.
+El [backlog](../BACKLOG.md) contiene criterios de cierre por tarea; la [hoja de ruta](../ROADMAP.md) ordena las entregas. La suite del servicio obtiene 96,65 % de líneas y 91,43 % de ramas en 69 pruebas, con PostgreSQL y Resend simulados; faltan pruebas de integración reales, validación Caddy/VPS y pruebas manuales de Windows. Los módulos restantes de autenticación, cifrado y recuperación deberán cumplir al menos 85 % en líneas y ramas antes de habilitarse.
 
 ## Pendientes antes de producción
 

@@ -22,11 +22,11 @@ Los casos describen el comportamiento esperado del producto. Los estados disting
 | UC-19 | Activar cuenta y escoger snapshot inicial | Usuario | Login Tauri y elección manual inicial disponibles; VPS pendiente |
 | UC-20 | Sincronizar cambios y resolver conflicto | Usuario | Cliente manual/automático inicial; VPS y reconexión real pendientes |
 | UC-21 | Recuperar acceso tras perder factores | Usuario/administrador | Diseño aprobado; runbook pendiente |
-| UC-22 | Consultar estado público del servicio | Visitante | Diseño aprobado; no implementado |
+| UC-22 | Consultar estado público del servicio | Visitante | Página y contrato iniciales; despliegue y operación pendientes |
 | UC-23 | Consultar rama, cambios y diff Git | Desarrollador | Implementación inicial de solo lectura |
 | UC-24 | Preparar una tarea repetible con una receta del agente | Desarrollador | Implementación inicial; se guarda localmente |
 
-Los casos UC-17 y UC-18 están disponibles en Configuración en su implementación inicial. UC-19 y UC-20 tienen un cliente inicial, pero requieren un servicio desplegado para su validación real. UC-21 y UC-22 siguen pendientes; los flujos de sincronización están detallados en [portabilidad y sincronización](sincronizacion-preferencias.md).
+Los casos UC-17 y UC-18 están disponibles en Configuración en su implementación inicial. UC-19 y UC-20 tienen un cliente inicial, pero requieren un servicio desplegado para su validación real. UC-21 sigue pendiente; UC-22 tiene una implementación local que requiere operación del VPS. Los flujos de sincronización están detallados en [portabilidad y sincronización](sincronizacion-preferencias.md).
 
 ## UC-01 — Abrir terminal
 
@@ -209,3 +209,15 @@ Después de aplicar un archivo, el usuario puede listar copias y restaurar una v
 **Privacidad y seguridad:** las recetas se guardan solo en `localStorage` local y no se sincronizan, exportan ni ejecutan. Elegir una receta no envía solicitudes al modelo ni ejecuta comandos. La generación de plan requiere enviar el mensaje y cada acción queda sujeta a las aprobaciones vigentes.
 
 **Criterios de aceptación:** un objetivo y entre uno y doce pasos de texto acotado; vista previa antes de usar; sin permisos adicionales y sin ejecución directa.
+
+## UC-22 — Consultar el estado del servicio
+
+**Objetivo:** conocer el estado general de sincronización y leer avisos de incidencias o mantenimiento.
+
+**Flujo principal:** la visita `/status` sin iniciar sesión. La página muestra el estado, el resumen, la fecha de actualización y los avisos públicos, y consulta cambios cada minuto.
+
+**Alternativas:** si el documento no existe, no valida o el servicio no puede leerlo, se muestra estado desconocido sin rutas ni errores internos.
+
+**Administración y privacidad:** solo el administrador actualiza el archivo por SSH. No existe modificación web. El contenido no debe incluir cuentas, correos, direcciones IP, logs, secretos, rutas privadas ni detalles de seguridad.
+
+**Limitación:** la página comparte el VPS; una caída total del host también la deja inaccesible.

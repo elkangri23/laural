@@ -3,12 +3,48 @@ info:
   title: Laural Preference Sync API
   version: 0.1.0
   description: >-
-    API privada inicial para snapshots allowlisted. El alta de cuenta y la emisión
-    de sesiones aún no están implementadas; esta especificación no implica que
-    el servicio esté publicado o listo para producción.
+    API privada inicial para snapshots allowlisted y rutas públicas de estado.
+    La autenticación y sincronización aún no están desplegadas ni listas para
+    producción; esta especificación no implica que el servicio esté publicado.
 servers:
   - url: https://sync.laurafernandezenfermeria.com
 paths:
+  /status:
+    get:
+      summary: Consulta la página pública de estado
+      security: []
+      responses:
+        '200': { description: Página HTML pública de estado, servida desde el mismo VPS, content: { text/html: { schema: { type: string } } } }
+  /status.json:
+    get:
+      summary: Consulta estado general e incidencias públicas
+      security: []
+      responses:
+        '200':
+          description: Documento público validado y sin datos de usuarios
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [state, summary, updatedAt, notices]
+                properties:
+                  state: { type: string, enum: [unknown, operational, degraded, maintenance] }
+                  summary: { type: string, maxLength: 240 }
+                  updatedAt: { type: string, format: date-time }
+                  notices:
+                    type: array
+                    maxItems: 8
+                    items:
+                      type: object
+                      additionalProperties: false
+                      required: [kind, title, message, updatedAt]
+                      properties:
+                        kind: { type: string, enum: [incident, maintenance, notice] }
+                        title: { type: string, maxLength: 100 }
+                        message: { type: string, maxLength: 600 }
+                        updatedAt: { type: string, format: date-time }
+        '503': { description: Documento de estado no disponible; estado desconocido genérico }
   /auth/native:
     get:
       summary: Inicia un flujo PKCE y muestra el acceso web de Laural
