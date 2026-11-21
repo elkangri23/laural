@@ -93,6 +93,19 @@ test("recupera y guarda el tema y el modo desde Configuración", async () => {
   expect(document.documentElement.dataset.mode).toBe("dark");
 });
 
+test("usar una receta activa el modo Agente y prepara el compositor sin enviarlo", async () => {
+  await act(async () => root!.render(<App />));
+  await act(async () => buttonIncluding("Agente").click());
+  await act(async () => buttonIncluding("Recetas").click());
+  await act(async () => buttonIncluding("Usar receta").click());
+
+  const composer = host.querySelector<HTMLTextAreaElement>(".composer textarea");
+  expect(composer?.value).toContain("Objetivo: Revisa el proyecto");
+  expect(composer?.value).toContain("espera la aprobación de cada acción");
+  expect(host.querySelector('[aria-label="Modo de IA"] [role="tab"][aria-selected="true"]')?.textContent).toContain("Agente");
+  expect(mocks.invoke).not.toHaveBeenCalledWith("plan_agent", expect.anything());
+});
+
 test("cambiar de proveedor descarta la clave en memoria del perfil anterior", async () => {
   const first = { id: "profile-a", name: "Proveedor A", baseUrl: "https://a.example/v1", model: "modelo-a", hasApiKey: true };
   const second = { id: "profile-b", name: "Proveedor B", baseUrl: "https://b.example/v1", model: "modelo-b", hasApiKey: true };

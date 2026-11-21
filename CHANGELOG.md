@@ -2,6 +2,7 @@
 
 ## Sin publicar
 
+- Añadidas recetas de tareas locales y editables para el modo Agente. La vista previa muestra objetivo y pasos; usar una receta solo rellena el compositor. Las recetas no ejecutan comandos, no amplían permisos y no se exportan ni sincronizan.
 - Añadido un panel Git local de solo lectura: rama, lista de cambios y diff preparado/no preparado del proyecto abierto. Usa argumentos fijos sin shell, limita proceso y salida, desactiva diff externo/textconv/fsmonitor y no envía contenido al asistente. Pruebas manuales con repositorios reales pendientes.
 - El asistente ahora representa Markdown con títulos, listas, tablas, enlaces y código formateado. HTML arbitrario no se ejecuta, los esquemas de enlace se limitan a HTTP(S)/mailto y las imágenes remotas no se cargan.
 - Añadida sincronización automática tras guardar tema, modo, proveedor o perfil activo; también al iniciar sesión, al abrir Laural y cada tres horas. Un estado local atómico guarda los snapshots permitidos local/nube, revisión y marca pendiente. Reintenta al volver la conexión y detiene escrituras si otra revisión remota avanzó. Preserva endpoints aceptados desde nube sin re-compartirlos desde este dispositivo; al revocar explícitamente el consentimiento local, quita el endpoint de nube. El servidor sigue sin estar desplegado; falta validar VPS y reconexión/reanudación en Windows.

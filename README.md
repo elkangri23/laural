@@ -11,6 +11,7 @@
 - Terminal con PowerShell, CMD, WSL y Git Bash.
 - Pestañas, bloques navegables de comando/salida y panel dividido vertical u horizontal.
 - Panel Git de solo lectura con rama, cambios y diff preparado/no preparado. Está acotado por tamaño/tiempo y no envía el contenido al asistente automáticamente.
+- Recetas de tareas para el modo Agente: plantillas locales editables con vista previa que preparan instrucciones; el plan requiere envío y conserva las aprobaciones actuales.
 - Paleta con `Ctrl+K` para buscar acciones, sesiones y comandos recientes; el historial dura solo la sesión y los comandos se copian para revisarlos antes de pegarlos.
 - Doce temas de color y modos claro/oscuro, con preferencias guardadas localmente.
 - Chat contextual con respuesta incremental y Markdown formateado (listas, tablas, enlaces y código), historial local borrable, vista previa del contexto, salida reciente de terminal, proyecto abierto y archivos elegidos.

@@ -603,6 +603,28 @@ svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width:
 .git-diff-content { min-height: 110px; max-height: 38vh; overflow: auto; margin: 0; padding: 12px; border: 1px solid var(--palette-303139, #303139); border-radius: 7px; color: var(--palette-b5b6bd, #b5b6bd); background: var(--palette-101115, #101115); font: 10px/1.55 var(--mono); white-space: pre; scrollbar-color: var(--palette-393b44, #393b44) transparent; }
 .git-panel-note { margin: 10px 0 0; color: var(--palette-777984, #777984); font-size: 10px; }
 .git-no-project { padding: 40px 10px; }
+.agent-mode-actions { display: flex; gap: 8px; padding: 6px 13px; border-bottom: 1px solid var(--palette-2a2b32, #2a2b32); }
+.recipes-dialog { position: relative; width: min(820px, 100%); max-height: min(88vh, 780px); overflow: auto; padding: 24px; border: 1px solid var(--palette-41434b, #41434b); border-radius: 15px; background: linear-gradient(155deg, var(--palette-23252a, #23252a), var(--palette-1b1c21, #1b1c21) 62%); box-shadow: 0 28px 90px var(--palette-0009, #0009); }
+.recipes-dialog > .eyebrow { margin: 0 0 5px; color: var(--theme-accent); font-size: 10px; letter-spacing: .1em; }
+.recipes-dialog > h2 { margin: 0 0 7px; color: var(--palette-eff0f2, #eff0f2); font-size: 19px; }
+.recipes-dialog > .dialog-copy { margin: 0 34px 16px 0; }
+.recipes-layout { min-height: 350px; display: grid; grid-template-columns: minmax(170px, 220px) minmax(0, 1fr); gap: 14px; }
+.recipes-list { display: flex; flex-direction: column; gap: 5px; align-items: stretch; padding-right: 8px; border-right: 1px solid var(--palette-303139, #303139); }
+.recipes-list button { padding: 8px 9px; border: 1px solid transparent; border-radius: 6px; color: var(--palette-9a9ca5, #9a9ca5); background: transparent; text-align: left; cursor: pointer; font-size: 11px; }
+.recipes-list button:hover, .recipes-list button.selected { border-color: var(--palette-3a3d43, #3a3d43); color: var(--palette-e1e2e6, #e1e2e6); background: var(--palette-ffffff08, #ffffff08); }
+.recipes-list .recipes-add { margin-top: 5px; color: var(--theme-accent); }
+.recipe-preview, .recipe-editor { min-width: 0; display: flex; flex-direction: column; gap: 11px; }
+.recipe-preview h3 { margin: 0; color: var(--palette-e1e2e6, #e1e2e6); font-size: 15px; }
+.recipe-preview > p { margin: 0; color: var(--palette-b5b6bd, #b5b6bd); font-size: 12px; line-height: 1.5; }
+.recipe-preview ol { display: grid; gap: 8px; margin: 0; padding-left: 22px; color: var(--palette-a9abb4, #a9abb4); font-size: 11px; line-height: 1.5; }
+.recipe-preview-warning { display: grid; gap: 4px; padding: 10px; border: 1px solid var(--palette-3b4333, #3b4333); border-radius: 7px; color: var(--palette-b3cf92, #b3cf92); background: var(--palette-22281d, #22281d); font-size: 11px; }
+.recipe-preview-warning span { color: var(--palette-a9abb4, #a9abb4); line-height: 1.45; }
+.recipe-editor .form-label { margin: 0; }
+.recipe-editor .form-label input, .recipe-editor .form-label textarea { width: 100%; padding: 8px 9px; border: 1px solid var(--palette-383a43, #383a43); border-radius: 6px; outline: 0; color: var(--palette-e1e2e6, #e1e2e6); background: var(--palette-191a20, #191a20); font: 11px/1.5 'Segoe UI', system-ui, sans-serif; resize: vertical; }
+.recipe-editor .form-label input:focus, .recipe-editor .form-label textarea:focus { border-color: var(--theme-accent-muted); }
+.recipes-actions { display: flex; justify-content: flex-end; gap: 7px; margin-top: auto; }
+.recipes-error { margin: 10px 0 0; color: var(--palette-f1c279, #f1c279); font-size: 11px; }
+.recipes-privacy { margin: 14px 0 0; color: var(--palette-777984, #777984); font-size: 10px; }
 .dialog-copy { margin: 0 0 14px; color: var(--palette-a2a4ad, #a2a4ad); font-size: 14px; line-height: 1.6; }
 .form-label { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; color: var(--palette-bfc1c8, #bfc1c8); font-size: 11px; font-weight: 600; }
 .form-label input, .form-label select { width: 100%; height: 34px; padding: 0 9px; border: 1px solid var(--palette-383a43, #383a43); border-radius: 6px; outline: 0; color: var(--palette-e1e2e6, #e1e2e6); background: var(--palette-191a20, #191a20); font-size: 11px; font-weight: 400; }

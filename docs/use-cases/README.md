@@ -24,6 +24,7 @@ Los casos describen el comportamiento esperado del producto. Los estados disting
 | UC-21 | Recuperar acceso tras perder factores | Usuario/administrador | Diseño aprobado; runbook pendiente |
 | UC-22 | Consultar estado público del servicio | Visitante | Diseño aprobado; no implementado |
 | UC-23 | Consultar rama, cambios y diff Git | Desarrollador | Implementación inicial de solo lectura |
+| UC-24 | Preparar una tarea repetible con una receta del agente | Desarrollador | Implementación inicial; se guarda localmente |
 
 Los casos UC-17 y UC-18 están disponibles en Configuración en su implementación inicial. UC-19 y UC-20 tienen un cliente inicial, pero requieren un servicio desplegado para su validación real. UC-21 y UC-22 siguen pendientes; los flujos de sincronización están detallados en [portabilidad y sincronización](sincronizacion-preferencias.md).
 
@@ -196,3 +197,15 @@ Después de aplicar un archivo, el usuario puede listar copias y restaurar una v
 **Privacidad y seguridad:** el diff no se envía al modelo; no se ejecutan comandos por shell, diffs externos, textconv ni fsmonitor. Los archivos no rastreados se listan en estado, pero su contenido no se incluye en el diff.
 
 **Criterios de aceptación:** el panel es de solo lectura, limita salida y tiempo, escapa los nombres como texto y no modifica el índice ni el árbol de trabajo.
+
+## UC-24 — Usar una receta de tarea
+
+**Objetivo:** repetir instrucciones habituales al agente sin volver a redactarlas.
+
+**Flujo principal:** activa el modo Agente, abre **Recetas**, revisa el objetivo y los pasos de una receta, y pulsa **Usar receta**. Laural rellena el compositor; la persona puede editar el texto antes de enviarlo. El agente genera un plan que se revisa bajo los permisos actuales.
+
+**Alternativas:** la persona puede crear, editar o eliminar recetas locales. Datos inválidos o almacenamiento no disponible se informan sin ejecutar acciones.
+
+**Privacidad y seguridad:** las recetas se guardan solo en `localStorage` local y no se sincronizan, exportan ni ejecutan. Elegir una receta no envía solicitudes al modelo ni ejecuta comandos. La generación de plan requiere enviar el mensaje y cada acción queda sujeta a las aprobaciones vigentes.
+
+**Criterios de aceptación:** un objetivo y entre uno y doce pasos de texto acotado; vista previa antes de usar; sin permisos adicionales y sin ejecución directa.

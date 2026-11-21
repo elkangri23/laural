@@ -12,6 +12,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import TerminalPane from "./components/TerminalPane";
 import { CommandPalette } from "./components/CommandPalette";
 import { GitPanel } from "./components/GitPanel";
+import { TaskRecipes } from "./components/TaskRecipes";
 import { ConfigurationTransfer, type ConfigurationImportResult } from "./components/ConfigurationTransfer";
 import { themeVariables, themes, type AppearanceMode } from "./themes";
 import "./App.css";
@@ -55,6 +56,7 @@ function App() {
   const [blocksOpen, setBlocksOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [gitPanelOpen, setGitPanelOpen] = useState(false);
+  const [taskRecipesOpen, setTaskRecipesOpen] = useState(false);
   const [contextPreview, setContextPreview] = useState<ContextPreview | null>(null);
   const [contextPreviewBusy, setContextPreviewBusy] = useState(false);
   const [contextPreviewError, setContextPreviewError] = useState("");
@@ -847,7 +849,7 @@ function App() {
               <button className={!agentMode ? "active" : ""} onClick={() => setAgentMode(false)} role="tab" aria-selected={!agentMode}><MessageIcon /> Chat</button>
               <button className={agentMode ? "active" : ""} onClick={() => setAgentMode(true)} role="tab" aria-selected={agentMode}><AgentIcon /> Agente <span className="mode-beta">PREVIEW</span></button>
             </div>
-            {agentMode && <button className="action-quiet" onClick={() => setSettingsOpen(true)}>Permisos del agente</button>}
+            {agentMode && <div className="agent-mode-actions"><button className="action-quiet" onClick={() => setTaskRecipesOpen(true)}>Recetas</button><button className="action-quiet" onClick={() => setSettingsOpen(true)}>Permisos del agente</button></div>}
             {chatMessages.length === 0 ? <div className="assistant-empty">
               <div className="empty-orbit orbit-one" /><div className="empty-orbit orbit-two" /><div className="empty-spark"><SparkIcon /></div>
               <h2>{agentMode ? "Trabaja junto al agente" : "¿Qué quieres hacer?"}</h2>
@@ -892,6 +894,7 @@ function App() {
       {contextPreviewError && <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setContextPreviewError(""); }}><section className="provider-dialog context-error-dialog" role="alertdialog" aria-modal="true"><button className="dialog-close" onClick={() => setContextPreviewError("")} aria-label="Cerrar">×</button><p className="eyebrow">VISTA PREVIA</p><h2>No se pudo preparar el contexto</h2><p className="dialog-copy">{contextPreviewError}</p></section></div>}
 
       {gitPanelOpen && <GitPanel projectPath={projectPath} onClose={() => setGitPanelOpen(false)} onOpenProject={() => { setGitPanelOpen(false); void openProject(); }} />}
+      {taskRecipesOpen && <TaskRecipes onClose={() => setTaskRecipesOpen(false)} onUse={(recipePrompt) => { setAgentMode(true); setPrompt(recipePrompt); }} />}
       {commandPaletteOpen && <CommandPalette commands={commandHistory.map((item) => ({ ...item, shell: shellNames[item.shell] }))} actions={paletteActions} onClose={() => setCommandPaletteOpen(false)} />}
 
       {contextPreview && <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setContextPreview(null); }}>
