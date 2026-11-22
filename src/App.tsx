@@ -1,6 +1,7 @@
 import { appendTerminalOutput, COMMAND_BLOCK_OUTPUT_LIMIT } from "./terminalOutput";
 import { createChatHistoryPersistence } from "./chatPersistence";
 import { limitChatMessages, prepareChatHistoryForRequest } from "./chatHistory";
+import { createStreamingTextBuffer } from "./streamingText";
 import { HelpDialog, HelpIcon } from "./components/HelpDialog";
 import { BellIcon, NotificationCenter } from "./components/NotificationCenter";
 import { SettingsDialog } from "./components/SettingsDialog";
@@ -117,7 +118,8 @@ function App() {
   if (chatHistoryPersistenceRef.current === null) chatHistoryPersistenceRef.current = createChatHistoryPersistence(localStorage);
   const [chatBusy, setChatBusy] = useState(false);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
-  const streamingContentRef = useRef("");
+  const streamingContentRef = useRef<ReturnType<typeof createStreamingTextBuffer> | null>(null);
+  if (streamingContentRef.current === null) streamingContentRef.current = createStreamingTextBuffer();
   const [contextFiles, setContextFiles] = useState<string[]>([]);
   const [gitDiffContext, setGitDiffContext] = useState("");
   const [gitDiffTruncated, setGitDiffTruncated] = useState(false);
@@ -665,7 +667,7 @@ function App() {
     setChatMessages(nextMessages);
     setPrompt("");
     setChatBusy(true);
-    streamingContentRef.current = "";
+    streamingContentRef.current?.clear();
     setStreamingMessageId(assistantMessageId);
     activeChatRequestRef.current = requestId;
     let unlisten: (() => void) | undefined;
@@ -682,7 +684,7 @@ function App() {
       }
       lastUiFlushAt = performance.now();
       hasPublishedStreamContent = true;
-      const content = streamingContentRef.current;
+      const content = streamingContentRef.current?.snapshot() ?? "";
       setChatMessages((current) => {
         let changed = false;
         const next = current.map((message) => {
@@ -699,7 +701,7 @@ function App() {
         deltaTimer = undefined;
       }
       if (pendingDelta) {
-        streamingContentRef.current += pendingDelta;
+        streamingContentRef.current?.append(pendingDelta);
         pendingDelta = "";
       }
       if (forceUiFlush) {

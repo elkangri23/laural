@@ -4,7 +4,7 @@ import { SparkIcon } from "./SparkIcon";
 const AssistantMarkdown = lazy(() => import("./AssistantMarkdown").then(module => ({ default: module.AssistantMarkdown })));
 
 export type ChatMessage = { role: "user" | "assistant"; content: string; id?: string };
-type StreamingContentRef = { current: string };
+type StreamingContentRef = { current: { snapshot: () => string } | null };
 const STREAM_MARKDOWN_REFRESH_MS = 200;
 
 type ChatMessageItemProps = { message: ChatMessage; isStreaming?: boolean; streamingContentRef?: StreamingContentRef };
@@ -14,7 +14,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({ message, isStream
 
   useEffect(() => {
     if (!isStreaming) return;
-    const currentContent = () => streamingContentRef?.current ?? message.content;
+    const currentContent = () => streamingContentRef?.current?.snapshot() ?? message.content;
     setRenderedStreamContent(currentContent());
     const timer = window.setInterval(() => setRenderedStreamContent(currentContent()), STREAM_MARKDOWN_REFRESH_MS);
     return () => window.clearInterval(timer);

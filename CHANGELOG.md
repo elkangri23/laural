@@ -2,6 +2,7 @@
 
 ## Sin publicar
 
+- El chat acumula los fragmentos del streaming y solo compone el texto al solicitar una instantánea visual, reduciendo concatenaciones sin cambiar el ritmo de actualización. El benchmark sintético comparativo obtuvo ≈9,6 % menos tiempo al acumular 270.000 caracteres con 375 lecturas; no representa una medición del proceso de escritorio.
 - Durante el streaming del asistente, los deltas se acumulan cada 50 ms sin actualizar el estado global de React en cada lote; la interfaz se actualiza como máximo cada 200 ms. Primer fragmento y respuesta final inmediatos, y no se pierden fragmentos si falla la conexión. Regresiones dirigidas cubren los límites temporales, éxito y error.
 - El CI mide los commits de React con 20 deltas durante un segundo simulado y limita el total a 14; esto evita reintroducir una actualización global por cada lote.
 - El historial del chat agrupa escrituras locales cada 500 ms durante streaming, hasta diez veces menos frecuentes, y fuerza el guardado al ocultar la ventana.

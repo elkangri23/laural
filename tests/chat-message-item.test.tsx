@@ -3,6 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
 import { ChatMessageItem, type ChatMessage } from "../src/components/ChatMessageItem";
+import { createStreamingTextBuffer } from "../src/streamingText";
 
 const mocks = vi.hoisted(() => ({ sparkIconRender: vi.fn() }));
 vi.mock("../src/components/SparkIcon", () => ({ SparkIcon: () => { mocks.sparkIconRender(); return null; } }));
@@ -45,14 +46,16 @@ test("limita a cinco por segundo el render Markdown mientras llega el streaming"
   document.body.append(host);
   root = createRoot(host);
   const message: ChatMessage = { id: "stream", role: "assistant", content: "fragmento 1" };
-  const streamingContentRef = { current: "fragmento 1" };
+  const streamingContentRef = { current: createStreamingTextBuffer() };
+  streamingContentRef.current.append("fragmento 1");
 
   await act(async () => root!.render(<ChatMessageItem message={message} isStreaming streamingContentRef={streamingContentRef} />));
   await act(async () => { await Promise.resolve(); });
   expect(host.textContent).toContain("fragmento 1");
   mocks.sparkIconRender.mockClear();
 
-  streamingContentRef.current = "fragmento 2";
+  streamingContentRef.current.clear();
+  streamingContentRef.current.append("fragmento 2");
   await act(async () => root!.render(<ChatMessageItem message={{ ...message, content: "fragmento 2" }} isStreaming streamingContentRef={streamingContentRef} />));
   expect(host.textContent).toContain("fragmento 1");
   expect(mocks.sparkIconRender).not.toHaveBeenCalled();
