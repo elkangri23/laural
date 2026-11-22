@@ -1921,6 +1921,64 @@ fn external_tool_is_high_risk(command: &str, executable: &str) -> bool {
                     && arguments.any(|argument| matches!(argument, "/add" | "/delete")))
         }
         "wevtutil" => matches!(subcommand, "cl" | "clear-log" | "dl" | "delete-log" | "sl"),
+        "winget" => matches!(
+            subcommand,
+            "install"
+                | "add"
+                | "uninstall"
+                | "remove"
+                | "upgrade"
+                | "update"
+                | "import"
+                | "configure"
+        ),
+        "choco" => matches!(subcommand, "install" | "upgrade" | "uninstall" | "update"),
+        "scoop" => matches!(subcommand, "install" | "update" | "uninstall" | "reset"),
+        "conda" => {
+            matches!(
+                subcommand,
+                "create" | "install" | "update" | "remove" | "uninstall"
+            ) || (subcommand == "env"
+                && matches!(arguments.next(), Some("create" | "update" | "remove")))
+        }
+        "pip" | "pip3" => matches!(subcommand, "install" | "uninstall"),
+        "apt" | "apt-get" => matches!(
+            subcommand,
+            "install"
+                | "remove"
+                | "purge"
+                | "upgrade"
+                | "full-upgrade"
+                | "dist-upgrade"
+                | "autoremove"
+        ),
+        "dnf" | "yum" => matches!(
+            subcommand,
+            "install"
+                | "remove"
+                | "erase"
+                | "update"
+                | "upgrade"
+                | "downgrade"
+                | "groupinstall"
+                | "groupremove"
+        ),
+        "pacman" => std::iter::once(subcommand)
+            .chain(arguments)
+            .any(|argument| {
+                matches!(argument, "--sync" | "--remove" | "--upgrade")
+                    || (argument.starts_with("-s")
+                        && (argument.len() == 2
+                            || argument
+                                .chars()
+                                .skip(2)
+                                .any(|flag| matches!(flag, 'y' | 'u' | 'w' | 'c'))))
+                    || argument.starts_with("-r")
+                    || argument.starts_with("-u")
+            }),
+        "go" => matches!(subcommand, "install" | "get"),
+        "gem" => matches!(subcommand, "install" | "uninstall" | "update"),
+        "brew" => matches!(subcommand, "install" | "uninstall" | "upgrade"),
         _ => false,
     }
 }
@@ -2967,6 +3025,45 @@ mod tests {
             "Get-NetFirewallRule",
         ] {
             assert!(!command_is_high_risk("powershell", command), "{command}");
+        }
+    }
+
+    #[test]
+    fn exige_revision_para_instalar_o_modificar_paquetes() {
+        for (shell, command) in [
+            ("powershell", "winget install Git.Git"),
+            ("cmd", "choco upgrade git"),
+            ("powershell", "scoop uninstall git"),
+            ("git-bash", "conda env update -n desarrollo"),
+            ("powershell", "pip.exe install requests"),
+            ("wsl", "apt-get purge paquete"),
+            ("wsl", "dnf upgrade paquete"),
+            ("wsl", "pacman -Syu"),
+            ("wsl", "pacman --noconfirm -Rns paquete"),
+            ("wsl", "go install example.com/herramienta"),
+            ("git-bash", "gem uninstall bundler"),
+            ("wsl", "brew install jq"),
+        ] {
+            assert!(command_is_high_risk(shell, command), "{shell}: {command}");
+        }
+
+        for (shell, command) in [
+            ("powershell", "winget search git"),
+            ("cmd", "choco list"),
+            ("powershell", "scoop list"),
+            ("git-bash", "conda env list"),
+            ("powershell", "pip list"),
+            ("wsl", "apt list --installed"),
+            ("wsl", "dnf list installed"),
+            ("wsl", "pacman -Ss jq"),
+            ("wsl", "go version"),
+            ("git-bash", "gem list"),
+            ("wsl", "brew list"),
+        ] {
+            assert!(
+                !command_is_high_risk(shell, command),
+                "falso positivo: {shell}: {command}"
+            );
         }
     }
 
