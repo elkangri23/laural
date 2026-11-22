@@ -319,6 +319,7 @@ test("limita a 16 las terminales abiertas", async () => {
 });
 
 test("agrupa deltas del chat y conserva el contenido final", async () => {
+  vi.useFakeTimers();
   let finishRequest: (() => void) | undefined;
   mocks.invoke.mockImplementation(async (command: string) => {
     if (command === "get_provider") return { id: "local", name: "Local", model: "test" };
@@ -343,14 +344,57 @@ test("agrupa deltas del chat y conserva el contenido final", async () => {
   await act(async () => Promise.resolve());
   const requestId = mocks.invoke.mock.calls.find(([command]) => command === "send_chat_stream")?.[1]?.requestId as string;
   expect(onDelta).toBeTypeOf("function");
-  await act(async () => {
-    onDelta?.({ payload: { requestId, delta: "Hola " } });
-    onDelta?.({ payload: { requestId, delta: "mundo" } });
-  });
-  await act(async () => new Promise((resolve) => window.setTimeout(resolve, 60)));
+  await act(async () => onDelta?.({ payload: { requestId, delta: "Hola mundo" } }));
+  await act(async () => { await vi.advanceTimersByTimeAsync(50); });
   const assistantMessages = host.querySelectorAll(".chat-message.assistant");
   expect(assistantMessages[assistantMessages.length - 1]?.textContent).toContain("Hola mundo");
+  await act(async () => onDelta?.({ payload: { requestId, delta: " y más" } }));
+  await act(async () => { await vi.advanceTimersByTimeAsync(50); });
+  expect(assistantMessages[assistantMessages.length - 1]?.textContent).toContain("Hola mundo");
+  await act(async () => { await vi.advanceTimersByTimeAsync(99); });
+  expect(assistantMessages[assistantMessages.length - 1]?.textContent).toContain("Hola mundo");
+  await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+  expect(assistantMessages[assistantMessages.length - 1]?.textContent).toContain("Hola mundo y más");
   await act(async () => { finishRequest?.(); await Promise.resolve(); });
+  expect(host.querySelectorAll(".chat-message.assistant").item(0)?.textContent).toContain("Hola mundo y más");
+});
+
+test("conserva los deltas pendientes cuando falla el streaming", async () => {
+  vi.useFakeTimers();
+  let rejectRequest: ((error: Error) => void) | undefined;
+  mocks.invoke.mockImplementation(async (command: string) => {
+    if (command === "get_provider") return { id: "local", name: "Local", model: "test" };
+    if (command === "get_providers") return [{ id: "local", name: "Local", model: "test" }];
+    if (command === "get_agent_settings") return { mode: "review", allowedPrefixes: ["git status", "git diff"], backupRetention: null };
+    if (command === "send_chat_stream") return new Promise<void>((_resolve, reject) => { rejectRequest = reject; });
+    return undefined;
+  });
+  let onDelta: ((event: { payload: { requestId: string; delta: string } }) => void) | undefined;
+  mocks.listen.mockImplementation(async (_topic: string, callback: typeof onDelta) => {
+    onDelta = callback;
+    return () => undefined;
+  });
+  await act(async () => root!.render(<App />));
+  const composer = host.querySelector<HTMLTextAreaElement>(".composer textarea")!;
+  await act(async () => {
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+    setter?.call(composer, "Pregunta");
+    composer.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => host.querySelector<HTMLButtonElement>(".send-button")!.click());
+  await act(async () => Promise.resolve());
+  const requestId = mocks.invoke.mock.calls.find(([command]) => command === "send_chat_stream")?.[1]?.requestId as string;
+  await act(async () => onDelta?.({ payload: { requestId, delta: "respuesta visible" } }));
+  await act(async () => { await vi.advanceTimersByTimeAsync(50); });
+  await act(async () => onDelta?.({ payload: { requestId, delta: " pendiente" } }));
+  await act(async () => { await vi.advanceTimersByTimeAsync(50); });
+
+  await act(async () => { rejectRequest?.(new Error("fallo de red")); await Promise.resolve(); });
+  const message = host.querySelector(".chat-message.assistant")?.textContent ?? "";
+  expect(message).toContain("respuesta visible pendiente");
+  expect(message).toContain("fallo de red");
+  await act(async () => { await vi.advanceTimersByTimeAsync(200); });
+  expect(host.querySelector(".chat-message.assistant")?.textContent).toContain("respuesta visible pendiente");
 });
 
 test("agrupa fragmentos de salida y vacía el último lote al cerrar el bloque", async () => {

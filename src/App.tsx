@@ -40,6 +40,7 @@ const MAX_COMMAND_BLOCKS = 80;
 const MAX_COMMAND_HISTORY = 100;
 const MAX_OPEN_TERMINALS = 16;
 const CHAT_DELTA_BATCH_MS = 50;
+const CHAT_UI_REFRESH_MS = 200;
 const SYNC_RISK_ACK_KEY = "laural.sync-risk-ack.v1";
 
 const shellNames: Record<Shell, string> = {
@@ -670,16 +671,47 @@ function App() {
     let unlisten: (() => void) | undefined;
     let pendingDelta = "";
     let deltaTimer: number | undefined;
-    const flushDelta = () => {
+    let uiFlushTimer: number | undefined;
+    let streamFailed = false;
+    let lastUiFlushAt = performance.now();
+    let hasPublishedStreamContent = false;
+    const publishStreamContent = () => {
+      if (uiFlushTimer !== undefined) {
+        window.clearTimeout(uiFlushTimer);
+        uiFlushTimer = undefined;
+      }
+      lastUiFlushAt = performance.now();
+      hasPublishedStreamContent = true;
+      const content = streamingContentRef.current;
+      setChatMessages((current) => {
+        let changed = false;
+        const next = current.map((message) => {
+          if (message.id !== assistantMessageId || message.content === content) return message;
+          changed = true;
+          return { ...message, content };
+        });
+        return changed ? next : current;
+      });
+    };
+    const flushDelta = (forceUiFlush = false) => {
       if (deltaTimer !== undefined) {
         window.clearTimeout(deltaTimer);
         deltaTimer = undefined;
       }
-      if (!pendingDelta) return;
-      const delta = pendingDelta;
-      pendingDelta = "";
-      streamingContentRef.current += delta;
-      setChatMessages((current) => current.map((message) => message.id === assistantMessageId ? { ...message, content: message.content + delta } : message));
+      if (pendingDelta) {
+        streamingContentRef.current += pendingDelta;
+        pendingDelta = "";
+      }
+      if (forceUiFlush) {
+        publishStreamContent();
+        return;
+      }
+      const elapsed = performance.now() - lastUiFlushAt;
+      if (!hasPublishedStreamContent || elapsed >= CHAT_UI_REFRESH_MS) {
+        publishStreamContent();
+      } else if (uiFlushTimer === undefined) {
+        uiFlushTimer = window.setTimeout(publishStreamContent, CHAT_UI_REFRESH_MS - elapsed);
+      }
     };
     const queueDelta = (delta: string) => {
       pendingDelta += delta;
@@ -699,11 +731,12 @@ function App() {
       gitDiffContext,
       });
     }).catch((error) => {
-      flushDelta();
+      flushDelta(true);
+      streamFailed = true;
       const message = String(error);
       setChatMessages((current) => current.map((item) => item.id === assistantMessageId ? { ...item, content: item.content ? `${item.content}\n\n[${message}]` : `No se pudo completar la consulta: ${message}` } : item));
     }).finally(() => {
-      flushDelta();
+      if (!streamFailed) flushDelta(true);
       unlisten?.();
       activeChatRequestRef.current = null;
       setChatBusy(false);
