@@ -2733,6 +2733,7 @@ mod tests {
         assert_eq!(read.flatten().as_deref(), Some(value));
         assert!(cleanup.is_ok());
         assert_eq!(read_api_key(&id).unwrap(), None);
+        assert!(delete_api_key(&id).is_ok());
     }
 
     #[test]
@@ -2797,6 +2798,87 @@ mod tests {
         let error = result.unwrap_err();
         assert!(error.contains("no se pudo completar el rollback"));
         assert!(error.contains("copia.laural"));
+    }
+
+    #[test]
+    fn restaura_una_clave_eliminada_si_falla_el_guardado_del_perfil() {
+        let credentials = std::cell::RefCell::new(HashMap::from([(
+            "perfil".to_string(),
+            "clave-anterior".to_string(),
+        )]));
+        let updates = HashMap::from([("perfil".to_string(), None)]);
+        let previous = HashMap::from([(
+            "perfil".to_string(),
+            Some(zeroize::Zeroizing::new("clave-anterior".to_string())),
+        )]);
+
+        let result = apply_import_transaction_with(
+            &updates,
+            &previous,
+            "copia.laural",
+            |id, value| {
+                credentials
+                    .borrow_mut()
+                    .insert(id.to_string(), value.to_string());
+                Ok(())
+            },
+            |id| {
+                credentials.borrow_mut().remove(id);
+                Ok(())
+            },
+            || Err("fallo simulado de providers.json".into()),
+        );
+
+        assert!(result.is_err());
+        assert_eq!(
+            credentials.borrow().get("perfil").map(String::as_str),
+            Some("clave-anterior")
+        );
+    }
+
+    #[test]
+    fn informa_la_copia_si_falla_el_rollback_tras_un_error_de_providers_json() {
+        let credentials = std::cell::RefCell::new(HashMap::from([(
+            "perfil".to_string(),
+            "clave-anterior".to_string(),
+        )]));
+        let updates = HashMap::from([(
+            "perfil".to_string(),
+            Some(zeroize::Zeroizing::new("clave-nueva".to_string())),
+        )]);
+        let previous = HashMap::from([(
+            "perfil".to_string(),
+            Some(zeroize::Zeroizing::new("clave-anterior".to_string())),
+        )]);
+        let backup_path = "C:\\Laural\\transfer-backups\\recuperacion.laural";
+
+        let result = apply_import_transaction_with(
+            &updates,
+            &previous,
+            backup_path,
+            |id, value| {
+                if value == "clave-anterior" {
+                    return Err("fallo simulado del almacén".into());
+                }
+                credentials
+                    .borrow_mut()
+                    .insert(id.to_string(), value.to_string());
+                Ok(())
+            },
+            |id| {
+                credentials.borrow_mut().remove(id);
+                Ok(())
+            },
+            || Err("fallo simulado de providers.json".into()),
+        );
+
+        let error = result.unwrap_err();
+        assert!(error.contains("rollback de claves"));
+        assert!(error.contains(backup_path));
+        assert_eq!(
+            credentials.borrow().get("perfil").map(String::as_str),
+            Some("clave-nueva")
+        );
     }
 
     #[test]
