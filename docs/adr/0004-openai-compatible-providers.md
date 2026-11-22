@@ -25,3 +25,4 @@ Usar endpoints de estilo OpenAI: obtener modelos en `/models` y solicitar chat e
 - HTTP queda limitado a loopback; para hosts remotos se exige HTTPS.
 - Las solicitudes de modelos y chat no siguen redirecciones HTTP. Cada perfil queda ligado a su destino configurado y una respuesta 3xx no debe reenviar claves ni contexto a otro host.
 - Chat normal y streaming construyen la solicitud con el mismo adaptador para evitar divergencias de URL, modelo, mensajes y autenticación; solo difiere el indicador `stream`. Las pruebas inspeccionan el contrato serializado y rechazan HTTP fuera de loopback.
+- El decodificador SSE se ejecuta desde el flujo Tauri y se integra en pruebas con HTTP efímero de loopback; se verifica UTF-8, deltas y terminación `[DONE]` sin depender de un proveedor externo.

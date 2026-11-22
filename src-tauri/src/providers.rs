@@ -624,6 +624,28 @@ fn chat_request(
     Ok(request)
 }
 
+async fn stream_chat_response(
+    response: reqwest::Response,
+    cancelled: &AtomicBool,
+    emit: &mut impl FnMut(&str) -> Result<(), String>,
+) -> Result<(), String> {
+    let mut stream = response.bytes_stream();
+    let mut decoder = crate::chat_stream::ChatStream::default();
+    let mut ticker = tokio::time::interval(Duration::from_millis(100));
+    loop {
+        tokio::select! {
+            _ = ticker.tick() => if cancelled.load(Ordering::Relaxed) {
+                return Err("Consulta cancelada.".to_string());
+            },
+            chunk = stream.next() => match chunk {
+                Some(Ok(bytes)) => if decoder.push(&bytes, emit)? { return Ok(()); },
+                Some(Err(error)) => return Err(format!("Se interrumpió la respuesta del proveedor: {error}")),
+                None => return decoder.eof(emit),
+            }
+        }
+    }
+}
+
 fn client() -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
         .timeout(Duration::from_secs(35))
@@ -1457,14 +1479,22 @@ pub async fn send_chat_stream(
     register_ai_request(&registry, &request_id, cancelled.clone())?;
     let result = async {
         let store = read_provider_store(&app)?;
-        let provider = active_provider(&store).cloned()
-            .ok_or_else(|| "Configura un proveedor de modelos antes de enviar mensajes.".to_string())?;
-        if !messages.iter().any(|message| message.role == "user" && !message.content.trim().is_empty()) {
+        let provider = active_provider(&store).cloned().ok_or_else(|| {
+            "Configura un proveedor de modelos antes de enviar mensajes.".to_string()
+        })?;
+        if !messages
+            .iter()
+            .any(|message| message.role == "user" && !message.content.trim().is_empty())
+        {
             return Err("Escribe una pregunta antes de enviarla.".to_string());
         }
         let key = read_api_key(&provider.id)?;
         let context = recent_terminal_context(&terminal_context);
-        let project_context = project_path.as_deref().map(collect_project_context).transpose()?.unwrap_or_default();
+        let project_context = project_path
+            .as_deref()
+            .map(collect_project_context)
+            .transpose()?
+            .unwrap_or_default();
         let selected_context = read_selected_files(&selected_files)?;
         let request_messages = build_chat_messages(
             &messages,
@@ -1500,25 +1530,24 @@ pub async fn send_chat_stream(
                 "Consulta cancelada.",
             )
             .await?;
-            return Err(format!("El proveedor respondió HTTP {status}: {}", short_body(&body)));
+            return Err(format!(
+                "El proveedor respondió HTTP {status}: {}",
+                short_body(&body)
+            ));
         }
-        let mut stream = response.bytes_stream();
-        let mut decoder = crate::chat_stream::ChatStream::default();
-        let mut emit = |text: &str| app.emit("chat-stream-delta", ChatStreamEvent {
-            request_id: request_id.clone(), delta: text.to_owned()
-        }).map_err(|error| format!("No se pudo mostrar la respuesta: {error}"));
-        let mut ticker = tokio::time::interval(Duration::from_millis(100));
-        loop {
-            tokio::select! {
-                _ = ticker.tick() => if cancelled.load(Ordering::Relaxed) { return Err("Consulta cancelada.".to_string()); },
-                chunk = stream.next() => match chunk {
-                    Some(Ok(bytes)) => if decoder.push(&bytes, &mut emit)? { return Ok(()); },
-                    Some(Err(error)) => return Err(format!("Se interrumpió la respuesta del proveedor: {error}")),
-                    None => return decoder.eof(&mut emit),
-                }
-            }
-        }
-    }.await;
+        let mut emit = |text: &str| {
+            app.emit(
+                "chat-stream-delta",
+                ChatStreamEvent {
+                    request_id: request_id.clone(),
+                    delta: text.to_owned(),
+                },
+            )
+            .map_err(|error| format!("No se pudo mostrar la respuesta: {error}"))
+        };
+        stream_chat_response(response, &cancelled, &mut emit).await
+    }
+    .await;
     registry
         .0
         .lock()
@@ -3834,6 +3863,89 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[tokio::test]
+    async fn recibe_y_decodifica_stream_sse_desde_un_proveedor_local() {
+        use std::{
+            io::{BufRead, BufReader, Read, Write},
+            net::TcpListener,
+        };
+
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let base_url = format!("http://{}/v1", listener.local_addr().unwrap());
+        let server = std::thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+            let mut reader = BufReader::new(socket.try_clone().unwrap());
+            let mut line = String::new();
+            reader.read_line(&mut line).unwrap();
+            assert_eq!(line.trim_end(), "POST /v1/chat/completions HTTP/1.1");
+
+            let mut content_length = 0;
+            let mut authenticated = false;
+            loop {
+                line.clear();
+                reader.read_line(&mut line).unwrap();
+                if line == "\r\n" || line == "\n" {
+                    break;
+                }
+                if let Some((name, value)) = line.split_once(':') {
+                    if name.eq_ignore_ascii_case("content-length") {
+                        content_length = value.trim().parse::<usize>().unwrap();
+                    }
+                    authenticated |= name.eq_ignore_ascii_case("authorization")
+                        && value.trim() == "Bearer clave-prueba";
+                }
+            }
+            let mut body = vec![0; content_length];
+            reader.read_exact(&mut body).unwrap();
+            let payload: Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(payload["model"], "modelo-local");
+            assert_eq!(payload["stream"], true);
+            assert_eq!(payload["messages"][0]["content"], "pregunta local");
+            assert!(authenticated, "La petición no llevaba la clave esperada.");
+
+            let response = concat!(
+                "data: {\"choices\":[{\"delta\":{\"content\":\"Hola \"}}]}\n\n",
+                "data: {\"choices\":[{\"delta\":{\"content\":\"🌍\"}}]}\n\n",
+                "data: [DONE]\n\n"
+            );
+            write!(
+                socket,
+                "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\nContent-Length: {}\r\n\r\n",
+                response.len()
+            )
+            .unwrap();
+            for chunk in response.as_bytes().chunks(5) {
+                socket.write_all(chunk).unwrap();
+                std::thread::sleep(Duration::from_millis(2));
+            }
+        });
+
+        let messages = vec![json!({ "role": "user", "content": "pregunta local" })];
+        let response = chat_request(
+            &client().unwrap(),
+            &base_url,
+            "modelo-local",
+            &messages,
+            Some("clave-prueba"),
+            true,
+        )
+        .unwrap()
+        .send()
+        .await
+        .unwrap();
+        assert!(response.status().is_success());
+
+        let mut deltas = Vec::new();
+        stream_chat_response(response, &AtomicBool::new(false), &mut |delta| {
+            deltas.push(delta.to_string());
+            Ok(())
+        })
+        .await
+        .unwrap();
+        assert_eq!(deltas.concat(), "Hola 🌍");
+        server.join().unwrap();
     }
 
     #[tokio::test]
