@@ -4,6 +4,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { terminalTheme, type AppearanceMode, type ThemeDefinition } from "../themes";
+import { createTerminalTextBatcher } from "../terminalOutput";
 import "@xterm/xterm/css/xterm.css";
 
 type Shell = "powershell" | "cmd" | "wsl" | "git-bash";
@@ -49,6 +50,7 @@ function TerminalPane({ terminalId, shell, cwd, visible, active, copyRequest, cl
     let exited = false;
     const subscriptions: (() => void)[] = [];
     const decoder = new TextDecoder();
+    const textBatcher = createTerminalTextBatcher((text) => onTextOutput(terminalId, text));
     const commandOsc = terminal.parser.registerOscHandler(133, (payload) => {
       const [mark, rawCode] = payload.split(";", 2);
       if (mark === "D") {
@@ -62,7 +64,7 @@ function TerminalPane({ terminalId, shell, cwd, visible, active, copyRequest, cl
       if (!disposed) {
         const bytes = new Uint8Array(event.payload.data);
         terminal.write(bytes);
-        onTextOutput(terminalId, decoder.decode(bytes, { stream: true }));
+        textBatcher.push(decoder.decode(bytes, { stream: true }));
       }
     };
     let commandLine: string | null = "";
@@ -115,6 +117,8 @@ function TerminalPane({ terminalId, shell, cwd, visible, active, copyRequest, cl
       subscriptions.push(output);
       const exit = await listen<void>(`terminal-exit-${terminalId}`, () => {
         if (disposed) return;
+        textBatcher.push(decoder.decode());
+        textBatcher.flush();
         exited = true;
         isReady = false;
         setEnded(true);
@@ -137,6 +141,8 @@ function TerminalPane({ terminalId, shell, cwd, visible, active, copyRequest, cl
     });
     return () => {
       disposed = true;
+      textBatcher.push(decoder.decode());
+      textBatcher.flush();
       observer.disconnect();
       inputSubscription.dispose();
       commandOsc.dispose();

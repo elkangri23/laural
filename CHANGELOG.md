@@ -5,6 +5,7 @@
 - El historial del chat agrupa escrituras locales cada 500 ms durante streaming, hasta diez veces menos frecuentes, y fuerza el guardado al ocultar la ventana.
 - Las filas del chat ya no se vuelven a renderizar cuando un delta solo actualiza otra respuesta.
 - El Markdown de la respuesta activa se actualiza como máximo cada 200 ms durante el streaming; el primer fragmento y el resultado final aparecen de inmediato.
+- La captura de texto de la terminal para contexto y bloques se agrupa durante 16 ms; la salida visible sigue inmediata y el lote pendiente se vacía al cerrar la sesión.
 - La limpieza de contadores del limitador ahora trabaja en lotes de hasta 1.000 filas y evita consultas de purga simultáneas dentro de una misma instancia; una regresión PostgreSQL verifica el tamaño real del lote.
 - Nueva medición de recursos del proceso release abierto: durante 62 s y con PowerShell presente sin salida/chat, el árbol se mantuvo en 9 procesos, 108,2–108,3 MiB de working set y añadió 0,07 s de CPU. Arranque frío e instalación limpia siguen sin medirse.
 - Añadido un runbook de respuesta a incidentes del servicio de sync y actualizado el de recuperación de cuenta para reflejar TOTP/códigos implementados localmente. Se registró una segunda muestra de memoria en reposo de la app Windows y sus límites.

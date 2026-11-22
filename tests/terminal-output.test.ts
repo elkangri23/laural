@@ -1,5 +1,7 @@
-import { expect, test } from "vitest";
-import { appendTerminalOutput } from "../src/terminalOutput";
+import { afterEach, expect, test, vi } from "vitest";
+import { appendTerminalOutput, createTerminalTextBatcher } from "../src/terminalOutput";
+
+afterEach(() => vi.useRealTimers());
 
 test("conserva la cola de una ráfaga grande aunque llegue en fragmentos", () => {
   const raw = Array.from({ length: 1500 }, (_, i) => `línea ${i} — abcdefghijklmnopqrstuvwxyz\n`).join("");
@@ -26,4 +28,32 @@ test("mantiene una cola menor para los bloques visuales de comandos", () => {
 
   expect(output).toHaveLength(limit);
   expect(output).toBe(`${"a".repeat(limit - 3)}fin`);
+});
+
+test("agrupa la captura de texto PTY y limita la cola al sufijo útil", () => {
+  vi.useFakeTimers();
+  const onText = vi.fn();
+  const batcher = createTerminalTextBatcher(onText, 16);
+  batcher.push("primero");
+  batcher.push(" segundo");
+
+  vi.advanceTimersByTime(15);
+  expect(onText).not.toHaveBeenCalled();
+  vi.advanceTimersByTime(1);
+  expect(onText).toHaveBeenCalledWith("primero segundo");
+
+  batcher.push("x".repeat(24_001));
+  batcher.flush();
+  expect(onText).toHaveBeenLastCalledWith("x".repeat(24_000));
+});
+
+test("cancelar descarta la captura pendiente", () => {
+  vi.useFakeTimers();
+  const onText = vi.fn();
+  const batcher = createTerminalTextBatcher(onText);
+  batcher.cancel();
+  batcher.push("pendiente");
+  batcher.cancel();
+  vi.advanceTimersByTime(16);
+  expect(onText).not.toHaveBeenCalled();
 });
