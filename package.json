@@ -11,8 +11,9 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "test": "vitest run --coverage",
+    "test:coverage-policy": "node --test scripts/check-critical-rust-coverage.test.mjs",
     "test:rust": "cargo llvm-cov --manifest-path src-tauri/Cargo.toml --lib --html",
-    "test:coverage": "npm test && npm run test:rust"
+    "test:coverage": "npm test && npm run test:coverage-policy && npm run test:rust"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

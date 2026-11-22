@@ -97,3 +97,5 @@ Ampliación M3: el shell interactivo permite cargar alias y funciones desde perf
 Verificación: 112 pruebas Rust pasan y 1 queda ignorada; UI 126/126, con 74,81 % de cobertura de líneas en CI. Cobertura Rust CI: 65,03 % total y 68,73 % en `providers.rs`. `npm run build`, `cargo fmt --check` y `git diff --check` pasan. El workflow `45041150979` terminó en verde. La cobertura Rust local sigue limitada por Windows/MSVC.
 
 Regresión M3: una macro `doskey` que coincida con una regla permitida continúa exigiendo aprobación manual. Esto verifica que la clasificación de comandos de riesgo prevalezca sobre reglas exactas.
+
+M11: añadí una barrera CI de cobertura mínima del 85 % de líneas para `agent_files.rs`, `configuration_transfer.rs` y `git_panel.rs`. El verificador falla ante archivos ausentes, duplicados, porcentajes no válidos o regresiones; cuatro pruebas unitarias cubren esos casos. La cobertura de ramas queda pendiente porque `llvm-cov` informa cero ramas instrumentadas para la biblioteca Rust actual.

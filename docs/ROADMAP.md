@@ -125,7 +125,8 @@ Las regresiones Rust cubren fallo de formato/versión/secciones, parámetros y c
 - La integración aislada aplica siete migraciones en PostgreSQL real y verifica límites concurrentes compartidos, renovación de ventana, autenticación, restablecimiento, MFA, outbox de seguridad y reintento idempotente. CI ejecuta esa suite con PostgreSQL temporal. Falta validar cabeceras de IP detrás de Caddy en el VPS.
 - Runbook de recuperación documentado: código de un uso o revisión manual del administrador con PIN de buzón más prueba de titularidad preexistente e independiente; sin ella se deniega la retirada de factores. TOTP, códigos y cola de avisos integrados localmente; siguen faltando passkeys, el mecanismo administrativo local al VPS y ensayo del procedimiento.
 - Fijar límites de cuenta/dispositivo/solicitud, monitorización y procedimiento de incidentes.
-- Completar revisión de seguridad, cobertura de líneas y ramas (mínimo 85 % para lógica crítica), instalación/actualización Windows y plan de incidentes.
+- CI exige ahora al menos 85 % de cobertura de líneas en `agent_files.rs`, `configuration_transfer.rs` y `git_panel.rs`; pruebas del verificador comprueban módulos ausentes, datos inválidos y regresiones bajo el umbral. Pendiente establecer y cumplir un umbral de ramas para lógica crítica; la instrumentación actual de Rust no informa ramas.
+- Continúan pendientes la revisión de seguridad, instalación/actualización Windows y plan de incidentes.
 
 ## M12 — Carga progresiva (implementación inicial)
 

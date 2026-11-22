@@ -51,9 +51,9 @@ WSL, Git Bash, Ollama, LM Studio y proveedores remotos son programas/servicios e
 
 ## Pruebas con cobertura
 
-En Windows, instala el instrumental Rust una vez con `rustup component add llvm-tools-preview` y `cargo install cargo-llvm-cov --version 0.9.1 --locked`. Tras `npm ci` y `npm run build`, ejecuta `npm run test:coverage`. Para trabajar por separado, `npm test` mide TypeScript y TSX con Vitest/V8 y `npm run test:rust` instrumenta la biblioteca Rust.
+En Windows, instala el instrumental Rust una vez con `rustup component add llvm-tools-preview` y `cargo install cargo-llvm-cov --version 0.9.1 --locked`. Tras `npm ci` y `npm run build`, ejecuta `npm run test:coverage`. El comando incluye las pruebas Vitest, cuatro pruebas del verificador de umbral y la instrumentación Rust. `npm run test:coverage-policy` ejecuta por separado los casos del verificador; `npm test` mide TypeScript y TSX con Vitest/V8 y `npm run test:rust` instrumenta la biblioteca Rust.
 
-Abre `coverage/index.html` para la interfaz y `src-tauri/target/llvm-cov/html/index.html` para Rust. GitHub Actions publica ambos informes en el artefacto informes-cobertura. Interpreta los porcentajes por capa. Las pruebas de instalación, PTY y conexión con proveedores requieren validación adicional.
+Abre `coverage/index.html` para la interfaz y `src-tauri/target/llvm-cov/html/index.html` para Rust. GitHub Actions publica ambos informes en el artefacto informes-cobertura y falla si la cobertura de líneas de `agent_files.rs`, `configuration_transfer.rs` o `git_panel.rs` baja del 85 %. El verificador también falla si falta un módulo o su cobertura es ambigua o inválida. Interpreta los porcentajes por capa. Las pruebas de instalación, PTY y conexión con proveedores requieren validación adicional.
 
 ## Publicar una release con actualizador
 
