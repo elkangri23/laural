@@ -169,6 +169,34 @@ test("conserva pasos pegados por encima del límite y no guarda hasta corregirlo
   expect(JSON.parse(localStorage.getItem("laural.task-recipes.v1") ?? "{}").recipes.at(-1).steps).toHaveLength(12);
 });
 
+test("conserva campos pegados por encima de sus límites y bloquea el guardado", async () => {
+  await act(async () => root!.render(<TaskRecipes onClose={onClose} onUse={onUse} />));
+  await act(async () => button("Crear receta").click());
+  const fields = host.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(".recipe-editor input, .recipe-editor textarea");
+  const longName = "n".repeat(61);
+  const longObjective = "o".repeat(1201);
+  const longStep = "p".repeat(241);
+  await setValue(fields[0], longName);
+  await setValue(fields[1], longObjective);
+  await setValue(fields[2], longStep);
+  await act(async () => button("Guardar receta").click());
+
+  expect(fields[0].value).toBe(longName);
+  expect(fields[1].value).toBe(longObjective);
+  expect(fields[2].value).toBe(longStep);
+  expect(host.querySelector('[role="alert"]')?.textContent).toContain("Respeta los límites indicados");
+  expect(localStorage.getItem("laural.task-recipes.v1")).toBeNull();
+
+  await setValue(fields[0], longName.slice(0, 60));
+  await setValue(fields[1], longObjective.slice(0, 1200));
+  await setValue(fields[2], longStep.slice(0, 240));
+  await act(async () => button("Guardar receta").click());
+  const saved = JSON.parse(localStorage.getItem("laural.task-recipes.v1") ?? "{}").recipes.at(-1);
+  expect(saved.name).toHaveLength(60);
+  expect(saved.objective).toHaveLength(1200);
+  expect(saved.steps[0]).toHaveLength(240);
+});
+
 test("edita y elimina una receta con confirmación", async () => {
   await act(async () => root!.render(<TaskRecipes onClose={onClose} onUse={onUse} />));
   await act(async () => button("Editar").click());
