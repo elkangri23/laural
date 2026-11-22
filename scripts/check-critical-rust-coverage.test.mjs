@@ -1,14 +1,19 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CRITICAL_RUST_FILES, MINIMUM_LINE_COVERAGE, checkCriticalCoverage } from "./check-critical-rust-coverage.mjs";
+import {
+  CRITICAL_RUST_FILES,
+  MINIMUM_BRANCH_COVERAGE,
+  MINIMUM_LINE_COVERAGE,
+  checkCriticalCoverage,
+} from "./check-critical-rust-coverage.mjs";
 
-function reportWithCoverage(coverageByName) {
+function reportWithCoverage(coverageByName, metric = "lines") {
   return {
     data: [
       {
         files: Object.entries(coverageByName).map(([name, percent]) => ({
           filename: `C:/workspace/src-tauri/src/${name}`,
-          summary: { lines: { percent } },
+          summary: { [metric]: { percent } },
         })),
       },
     ],
@@ -40,7 +45,7 @@ test("falla si la cobertura queda por debajo del mínimo", () => {
   });
 
   assert.deepEqual(checkCriticalCoverage(report), [
-    "configuration_transfer.rs: 84.99 % es inferior al mínimo de 85 %",
+    "configuration_transfer.rs: 84.99 % es inferior al mínimo de 85 % de líneas",
   ]);
 });
 
@@ -59,5 +64,36 @@ test("falla con porcentajes inválidos o archivos ambiguos", () => {
     "agent_files.rs: se esperaba un archivo en el informe y se encontraron 2",
     "configuration_transfer.rs: el informe no contiene una cobertura de líneas válida",
     "git_panel.rs: el informe no contiene una cobertura de líneas válida",
+  ]);
+});
+
+test("acepta cada módulo crítico en el umbral de ramas", () => {
+  const report = reportWithCoverage(
+    Object.fromEntries(CRITICAL_RUST_FILES.map((name) => [name, MINIMUM_BRANCH_COVERAGE])),
+    "branches",
+  );
+
+  assert.deepEqual(checkCriticalCoverage(report, "branches"), []);
+});
+
+test("falla si faltan ramas, hay datos inválidos o se baja del mínimo", () => {
+  const report = reportWithCoverage(
+    {
+      "agent_files.rs": MINIMUM_BRANCH_COVERAGE - 0.01,
+      "configuration_transfer.rs": Number.NaN,
+    },
+    "branches",
+  );
+
+  assert.deepEqual(checkCriticalCoverage(report, "branches"), [
+    "agent_files.rs: 69.99 % es inferior al mínimo de 70 % de ramas",
+    "configuration_transfer.rs: el informe no contiene una cobertura de ramas válida",
+    "git_panel.rs: se esperaba un archivo en el informe y se encontraron 0",
+  ]);
+});
+
+test("rechaza métricas desconocidas", () => {
+  assert.deepEqual(checkCriticalCoverage(reportWithCoverage({}), "funciones"), [
+    "Métrica de cobertura no admitida: funciones",
   ]);
 });

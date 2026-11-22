@@ -41,6 +41,31 @@ jobs:
             coverage/
             src-tauri/target/llvm-cov/html/
           if-no-files-found: error
+  cobertura-ramas-rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Instalar dependencias nativas de Tauri
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes build-essential curl wget file libxdo-dev libssl-dev libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-11-21
+          components: llvm-tools-preview
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov@0.9.1
+      - name: Medir ramas Rust en nightly
+        run: cargo llvm-cov --manifest-path src-tauri/Cargo.toml --lib --branch --json --summary-only --output-path src-tauri/target/critical-rust-branch-coverage.json
+      - name: Exigir cobertura de ramas crítica del 70 %
+        run: node scripts/check-critical-rust-coverage.mjs src-tauri/target/critical-rust-branch-coverage.json --branches
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: cobertura-ramas-rust
+          path: src-tauri/target/critical-rust-branch-coverage.json
+          if-no-files-found: warn
   cobertura-servicio-sync:
     runs-on: ubuntu-latest
     services:

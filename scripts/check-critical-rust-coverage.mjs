@@ -3,6 +3,12 @@ import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 
 export const MINIMUM_LINE_COVERAGE = 85;
+export const MINIMUM_BRANCH_COVERAGE = 70;
+
+const COVERAGE_THRESHOLDS = {
+  lines: { label: "líneas", minimum: MINIMUM_LINE_COVERAGE },
+  branches: { label: "ramas", minimum: MINIMUM_BRANCH_COVERAGE },
+};
 
 export const CRITICAL_RUST_FILES = [
   "agent_files.rs",
@@ -10,7 +16,12 @@ export const CRITICAL_RUST_FILES = [
   "git_panel.rs",
 ];
 
-export function checkCriticalCoverage(report) {
+export function checkCriticalCoverage(report, metric = "lines") {
+  const threshold = COVERAGE_THRESHOLDS[metric];
+  if (!threshold) {
+    return [`Métrica de cobertura no admitida: ${metric}`];
+  }
+
   const files = report?.data?.flatMap((unit) => unit.files ?? []) ?? [];
   const failures = [];
 
@@ -21,11 +32,11 @@ export function checkCriticalCoverage(report) {
       continue;
     }
 
-    const percent = matches[0].summary?.lines?.percent;
+    const percent = matches[0].summary?.[metric]?.percent;
     if (typeof percent !== "number" || !Number.isFinite(percent) || percent < 0 || percent > 100) {
-      failures.push(`${name}: el informe no contiene una cobertura de líneas válida`);
-    } else if (percent < MINIMUM_LINE_COVERAGE) {
-      failures.push(`${name}: ${percent.toFixed(2)} % es inferior al mínimo de ${MINIMUM_LINE_COVERAGE} %`);
+      failures.push(`${name}: el informe no contiene una cobertura de ${threshold.label} válida`);
+    } else if (percent < threshold.minimum) {
+      failures.push(`${name}: ${percent.toFixed(2)} % es inferior al mínimo de ${threshold.minimum} % de ${threshold.label}`);
     }
   }
 
@@ -39,12 +50,19 @@ async function main() {
   }
 
   const report = JSON.parse(await readFile(reportPath, "utf8"));
-  const failures = checkCriticalCoverage(report);
+  const option = process.argv[3];
+  const metric = option === undefined ? "lines" : option === "--branches" ? "branches" : null;
+  const threshold = COVERAGE_THRESHOLDS[metric];
+  if (!threshold) {
+    throw new Error("Usa --branches para medir ramas o deja la opción vacía para líneas.");
+  }
+
+  const failures = checkCriticalCoverage(report, metric);
   if (failures.length > 0) {
     throw new Error(failures.join("\n"));
   }
 
-  console.log(`Cobertura de líneas ≥ ${MINIMUM_LINE_COVERAGE} % en: ${CRITICAL_RUST_FILES.join(", ")}`);
+  console.log(`Cobertura de ${threshold.label} ≥ ${threshold.minimum} % en: ${CRITICAL_RUST_FILES.join(", ")}`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
