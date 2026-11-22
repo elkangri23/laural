@@ -100,6 +100,55 @@ test("valida la receta antes de guardarla", async () => {
   expect(localStorage.getItem("laural.task-recipes.v1")).toBeNull();
 });
 
+test("anuncia la receta seleccionada y los límites de edición", async () => {
+  await act(async () => root!.render(<TaskRecipes onClose={onClose} onUse={onUse} />));
+  const recipes = host.querySelectorAll<HTMLButtonElement>(".recipes-list button:not(.recipes-add)");
+  expect(recipes[0].getAttribute("aria-pressed")).toBe("true");
+  expect(recipes[1].getAttribute("aria-pressed")).toBe("false");
+  await act(async () => recipes[1].click());
+  expect(recipes[0].getAttribute("aria-pressed")).toBe("false");
+  expect(recipes[1].getAttribute("aria-pressed")).toBe("true");
+
+  await act(async () => button("Crear receta").click());
+  const fields = host.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(".recipe-editor input, .recipe-editor textarea");
+  expect(fields[0].getAttribute("aria-describedby")).toBe("recipe-name-limit");
+  expect(host.querySelector("#recipe-name-limit")?.textContent).toContain("60 caracteres");
+  expect(fields[1].getAttribute("aria-describedby")).toBe("recipe-objective-limit");
+  expect(host.querySelector("#recipe-objective-limit")?.textContent).toContain("1.200 caracteres");
+  expect(fields[2].getAttribute("aria-describedby")).toBe("recipe-steps-limit");
+  expect(host.querySelector("#recipe-steps-limit")?.textContent).toContain("240 caracteres por paso");
+});
+
+test("acepta todos los límites máximos documentados", async () => {
+  await act(async () => root!.render(<TaskRecipes onClose={onClose} onUse={onUse} />));
+  await act(async () => button("Crear receta").click());
+  const fields = host.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(".recipe-editor input, .recipe-editor textarea");
+  const steps = Array.from({ length: 12 }, () => "p".repeat(240)).join("\n");
+  await setValue(fields[0], "n".repeat(60));
+  await setValue(fields[1], "o".repeat(1200));
+  await setValue(fields[2], steps);
+  await act(async () => button("Guardar receta").click());
+
+  const saved = JSON.parse(localStorage.getItem("laural.task-recipes.v1") ?? "{}").recipes.at(-1);
+  expect(saved.name).toHaveLength(60);
+  expect(saved.objective).toHaveLength(1200);
+  expect(saved.steps).toHaveLength(12);
+  expect(saved.steps[11]).toHaveLength(240);
+  expect(host.querySelector('[role="alert"]')).toBeNull();
+});
+
+test("rechaza pasos que superan el límite de caracteres", async () => {
+  await act(async () => root!.render(<TaskRecipes onClose={onClose} onUse={onUse} />));
+  await act(async () => button("Crear receta").click());
+  const fields = host.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(".recipe-editor input, .recipe-editor textarea");
+  await setValue(fields[0], "Paso demasiado largo");
+  await setValue(fields[1], "Objetivo de prueba.");
+  await setValue(fields[2], "p".repeat(241));
+  await act(async () => button("Guardar receta").click());
+  expect(host.querySelector('[role="alert"]')?.textContent).toContain("entre 1 y 12 pasos");
+  expect(localStorage.getItem("laural.task-recipes.v1")).toBeNull();
+});
+
 test("edita y elimina una receta con confirmación", async () => {
   await act(async () => root!.render(<TaskRecipes onClose={onClose} onUse={onUse} />));
   await act(async () => button("Editar").click());
@@ -116,6 +165,17 @@ test("edita y elimina una receta con confirmación", async () => {
   vi.stubGlobal("confirm", vi.fn(() => true));
   await act(async () => button("Eliminar").click());
   expect(host.textContent).not.toContain("Revisión de proyecto actualizada");
+});
+
+test("devuelve el foco a crear receta al eliminar la última receta", async () => {
+  localStorage.setItem("laural.task-recipes.v1", JSON.stringify({
+    version: 1,
+    recipes: [{ id: "only", name: "Única", objective: "Objetivo.", steps: ["Paso."] }],
+  }));
+  await act(async () => root!.render(<TaskRecipes onClose={onClose} onUse={onUse} />));
+  await act(async () => button("Eliminar").click());
+  expect(host.textContent).toContain("No hay recetas guardadas");
+  expect(document.activeElement).toBe(button("Crear receta"));
 });
 
 test("restaura las recetas iniciales ante JSON corrupto o demasiado grande", async () => {

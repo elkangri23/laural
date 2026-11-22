@@ -61,7 +61,7 @@ export function TaskRecipes({ onClose, onUse }: { onClose: () => void; onUse: (p
     if (!dialog) return;
     if (isEditing) dialog.querySelector<HTMLInputElement>(".recipe-editor input")?.focus();
     else (dialog.querySelector<HTMLButtonElement>(".recipes-list button.selected") ?? dialog.querySelector<HTMLButtonElement>(".recipes-add"))?.focus();
-  }, [isEditing]);
+  }, [isEditing, recipes.length, selectedId]);
 
   function handleDialogKeyDown(event: KeyboardEvent<HTMLElement>) {
     if (event.key === "Escape") {
@@ -134,13 +134,13 @@ export function TaskRecipes({ onClose, onUse }: { onClose: () => void; onUse: (p
       <p className="dialog-copy">Plantillas para preparar planes repetibles. La receta no ejecuta acciones; cada cambio sigue sujeto a los permisos del agente.</p>
       <div className="recipes-layout">
         <nav className="recipes-list" aria-label="Recetas guardadas">
-          {recipes.map((recipe) => <button className={recipe.id === selected?.id ? "selected" : ""} key={recipe.id} onClick={() => { setSelectedId(recipe.id); setEditing(null); setError(""); }}>{recipe.name}</button>)}
+          {recipes.map((recipe) => <button aria-pressed={recipe.id === selected?.id} className={recipe.id === selected?.id ? "selected" : ""} key={recipe.id} onClick={() => { setSelectedId(recipe.id); setEditing(null); setError(""); }}>{recipe.name}</button>)}
           <button className="recipes-add" onClick={() => { setEditing({ id: newId(), name: "", objective: "", steps: [""] }); setError(""); }}>＋ Crear receta</button>
         </nav>
         {editing ? <div className="recipe-editor">
-          <label className="form-label">Nombre<input maxLength={60} value={editing.name} onChange={(event) => setEditing({ ...editing, name: event.currentTarget.value })} /></label>
-          <label className="form-label">Objetivo<textarea maxLength={1200} rows={3} value={editing.objective} onChange={(event) => setEditing({ ...editing, objective: event.currentTarget.value })} /></label>
-          <label className="form-label">Pasos <span className="optional-label">uno por línea, hasta 12</span><textarea maxLength={3000} rows={7} value={editing.steps.join("\n")} onChange={(event) => setEditing({ ...editing, steps: event.currentTarget.value.split("\n").slice(0, 12) })} /></label>
+          <label className="form-label">Nombre <span id="recipe-name-limit" className="optional-label">máximo 60 caracteres</span><input aria-describedby="recipe-name-limit" maxLength={60} value={editing.name} onChange={(event) => setEditing({ ...editing, name: event.currentTarget.value })} /></label>
+          <label className="form-label">Objetivo <span id="recipe-objective-limit" className="optional-label">máximo 1.200 caracteres</span><textarea aria-describedby="recipe-objective-limit" maxLength={1200} rows={3} value={editing.objective} onChange={(event) => setEditing({ ...editing, objective: event.currentTarget.value })} /></label>
+          <label className="form-label">Pasos <span id="recipe-steps-limit" className="optional-label">uno por línea, hasta 12 pasos y 240 caracteres por paso</span><textarea aria-describedby="recipe-steps-limit" maxLength={3000} rows={7} value={editing.steps.join("\n")} onChange={(event) => setEditing({ ...editing, steps: event.currentTarget.value.split("\n").slice(0, 12) })} /></label>
           <div className="recipes-actions"><button className="secondary-button" onClick={() => { setEditing(null); setError(""); }}>Cancelar</button><button className="primary-button" onClick={saveRecipe}>Guardar receta</button></div>
         </div> : selected ? <div className="recipe-preview">
           <h3>{selected.name}</h3><p>{selected.objective}</p><ol>{selected.steps.map((step, index) => <li key={`${selected.id}-${index}`}>{step}</li>)}</ol>
