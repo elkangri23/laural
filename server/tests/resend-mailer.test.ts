@@ -37,6 +37,24 @@ describe("envío transaccional mediante Resend", () => {
     expect(payload.text).toContain("no inicia sesión ni elimina factores");
   });
 
+  it("envía avisos de seguridad en español con clave de idempotencia", async () => {
+    const fetch = vi.fn(async () => new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetch);
+    const mailer = new ResendMailer({ apiKey: "server-only-key", from: "auth@example.test" });
+    await mailer.sendSecurityNotice({
+      email: "user@example.test",
+      eventType: "totp_enabled",
+      notificationId: "security-event-id",
+    });
+
+    const [, options] = fetch.mock.calls[0] as unknown as [string, RequestInit];
+    expect(new Headers(options.headers).get("idempotency-key")).toBe("security/security-event-id");
+    const payload = JSON.parse(String(options.body)) as { subject: string; text: string; to: string[] };
+    expect(payload.to).toEqual(["user@example.test"]);
+    expect(payload.subject).toContain("dos pasos");
+    expect(payload.text).toContain("no reconoces este cambio");
+  });
+
   it("convierte los errores del proveedor en un error genérico", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("private provider detail", { status: 401 })));
     const mailer = new ResendMailer({ apiKey: "server-only-key", from: "auth@example.test" });

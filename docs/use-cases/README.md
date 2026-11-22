@@ -26,6 +26,7 @@ Los casos describen el comportamiento esperado del producto. Los estados disting
 | UC-23 | Consultar rama, cambios y diff Git | Desarrollador | Implementación inicial de solo lectura |
 | UC-24 | Preparar una tarea repetible con una receta del agente | Desarrollador | Implementación inicial; se guarda localmente |
 | UC-25 | Restablecer contraseña mediante PIN de correo | Titular de cuenta | Implementado localmente; despliegue Resend/VPS pendiente |
+| UC-26 | Recibir avisos por cambios de MFA | Titular de cuenta | Outbox transaccional e integración Resend iniciales; entrega VPS pendiente |
 
 Los casos UC-17 y UC-18 están disponibles en Configuración en su implementación inicial. UC-19 y UC-20 tienen un cliente inicial, pero requieren un servicio desplegado para su validación real. UC-21 permite usar códigos de recuperación TOTP; la revisión administrativa tras perder todos los factores sigue pendiente. UC-22 tiene una implementación local que requiere operación del VPS. UC-25 implementa restablecimiento de contraseña, independiente de recuperar factores. Los flujos de sincronización están detallados en [portabilidad y sincronización](sincronizacion-preferencias.md).
 

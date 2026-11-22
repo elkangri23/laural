@@ -1,8 +1,9 @@
 import type { VerificationMailer } from "./email-auth.js";
+import type { SecurityEmailEvent, SecurityEmailSender } from "./security-email-outbox.js";
 
 export type ResendConfig = { apiKey: string; from: string };
 
-export class ResendMailer implements VerificationMailer {
+export class ResendMailer implements VerificationMailer, SecurityEmailSender {
   constructor(private readonly config: ResendConfig) {}
 
   async sendVerification(input: { email: string; displayName: string; pin: string; challengeId: string }): Promise<void> {
@@ -49,6 +50,40 @@ export class ResendMailer implements VerificationMailer {
     });
     await response.body?.cancel();
     if (!response.ok) throw new Error("No se pudo entregar el correo de restablecimiento.");
+  }
+
+  async sendSecurityNotice(input: { email: string; eventType: SecurityEmailEvent; notificationId: string }): Promise<void> {
+    const message = securityNoticeMessage(input.eventType);
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${this.config.apiKey}`,
+        "Content-Type": "application/json",
+        "Idempotency-Key": `security/${input.notificationId}`,
+      },
+      body: JSON.stringify({
+        from: this.config.from,
+        to: [input.email],
+        subject: message.subject,
+        text: `${message.body}\n\nSi no reconoces este cambio, cambia tu contraseña y ponte en contacto con el administrador de Laural.`,
+        html: `<p>${message.body}</p><p>Si no reconoces este cambio, cambia tu contraseña y ponte en contacto con el administrador de Laural.</p>`,
+      }),
+      signal: AbortSignal.timeout(10_000),
+      redirect: "error",
+    });
+    await response.body?.cancel();
+    if (!response.ok) throw new Error("No se pudo entregar el aviso de seguridad.");
+  }
+}
+
+function securityNoticeMessage(eventType: SecurityEmailEvent): { subject: string; body: string } {
+  switch (eventType) {
+    case "totp_enabled":
+      return { subject: "Se activó la verificación en dos pasos de Laural", body: "Se activó la verificación TOTP en tu cuenta de Laural." };
+    case "recovery_codes_rotated":
+      return { subject: "Se renovaron los códigos de recuperación de Laural", body: "Se renovaron los códigos de recuperación de tu cuenta de Laural." };
+    case "totp_disabled":
+      return { subject: "Se desactivó la verificación en dos pasos de Laural", body: "Se desactivó la verificación TOTP en tu cuenta de Laural." };
   }
 }
 

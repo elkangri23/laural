@@ -12,6 +12,7 @@ import { PostgresNativeAuthStore } from "../src/postgres-native-auth-store.js";
 import { PostgresPreferenceStore } from "../src/postgres-store.js";
 import { PostgresRequestRateLimiter } from "../src/request-rate-limit.js";
 import { cleanupExpiredRecords } from "../src/retention.js";
+import { deliverSecurityEmailBatch } from "../src/security-email-outbox.js";
 import { totpCode } from "../src/totp.js";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
@@ -43,7 +44,7 @@ describePostgres("integración real de PostgreSQL para rate limits", () => {
     }
   });
 
-  it("aplica las seis migraciones y comparte límites atómicos entre instancias", async () => {
+  it("aplica migraciones idempotentes y comparte límites atómicos entre instancias", async () => {
     const applied = await isolatedPool.query<{ version: string }>("SELECT version FROM schema_migrations ORDER BY version");
     expect(applied.rows.map(({ version }) => version)).toEqual([...MIGRATION_FILES]);
     const firstInstance = new PostgresRequestRateLimiter(isolatedPool, "integracion-rate-limit-pepper-32-bytes-minimo");
@@ -68,6 +69,64 @@ describePostgres("integración real de PostgreSQL para rate limits", () => {
     expect(stored.rows).toHaveLength(2);
     expect(stored.rows.every(({ key_digest }) => /^[a-f0-9]{64}$/.test(key_digest))).toBe(true);
     expect(stored.rows.every(({ request_count }) => request_count >= 1)).toBe(true);
+  });
+
+  it("reintenta avisos de seguridad pendientes y usa una entrega idempotente", async () => {
+    const accountId = randomUUID();
+    await isolatedPool.query(
+      "INSERT INTO accounts (id, email, display_name, email_verified_at) VALUES ($1, $2, 'Avisos', now())",
+      [accountId, `${accountId}@example.test`],
+    );
+    await isolatedPool.query(
+      "INSERT INTO account_security_email_outbox (account_id, recipient_email, event_type) VALUES ($1, $2, 'totp_enabled')",
+      [accountId, `${accountId}@example.test`],
+    );
+    let attempts = 0;
+    const sender = {
+      sendSecurityNotice: async (input: { email: string; eventType: string; notificationId: string }) => {
+        attempts += 1;
+        expect(input).toMatchObject({ email: `${accountId}@example.test`, eventType: "totp_enabled" });
+        expect(input.notificationId).toMatch(/^[0-9a-f-]{36}$/);
+        if (attempts === 1) throw new Error("simulated temporary provider failure");
+      },
+    };
+
+    await expect(deliverSecurityEmailBatch(isolatedPool, sender)).resolves.toEqual({ delivered: 0, deferred: 1 });
+    const waiting = await isolatedPool.query<{ attempts: number; claimed_at: Date | null; delivered_at: Date | null }>(
+      "SELECT attempts, claimed_at, delivered_at FROM account_security_email_outbox WHERE account_id = $1",
+      [accountId],
+    );
+    expect(waiting.rows[0]).toMatchObject({ attempts: 1, claimed_at: null, delivered_at: null });
+    await isolatedPool.query("UPDATE account_security_email_outbox SET available_at = now() WHERE account_id = $1", [accountId]);
+
+    await expect(deliverSecurityEmailBatch(isolatedPool, sender)).resolves.toEqual({ delivered: 1, deferred: 0 });
+    const delivered = await isolatedPool.query<{ attempts: number; delivered_at: Date | null; abandoned_at: Date | null }>(
+      "SELECT attempts, delivered_at, abandoned_at FROM account_security_email_outbox WHERE account_id = $1",
+      [accountId],
+    );
+    expect(delivered.rows[0]).toMatchObject({ attempts: 2, abandoned_at: null });
+    expect(delivered.rows[0]?.delivered_at).toBeInstanceOf(Date);
+
+    await isolatedPool.query(
+      "INSERT INTO account_security_email_outbox (account_id, recipient_email, event_type) VALUES ($1, $2, 'totp_disabled')",
+      [accountId, `${accountId}@example.test`],
+    );
+    const failingSender = { sendSecurityNotice: async () => { throw new Error("simulated persistent provider failure"); } };
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const result = await deliverSecurityEmailBatch(isolatedPool, failingSender);
+      expect(result).toEqual({ delivered: 0, deferred: 1 });
+      await isolatedPool.query(
+        "UPDATE account_security_email_outbox SET available_at = now() WHERE account_id = $1 AND event_type = 'totp_disabled'",
+        [accountId],
+      );
+    }
+    const abandoned = await isolatedPool.query<{ attempts: number; abandoned_at: Date | null }>(
+      "SELECT attempts, abandoned_at FROM account_security_email_outbox WHERE account_id = $1 AND event_type = 'totp_disabled'",
+      [accountId],
+    );
+    expect(abandoned.rows[0]?.attempts).toBe(8);
+    expect(abandoned.rows[0]?.abandoned_at).toBeInstanceOf(Date);
+    await expect(deliverSecurityEmailBatch(isolatedPool, failingSender)).resolves.toEqual({ delivered: 0, deferred: 0 });
   });
 
   it("limpia registros caducados y conserva los que aún están dentro de su retención", async () => {
@@ -109,21 +168,36 @@ describePostgres("integración real de PostgreSQL para rate limits", () => {
               ($1, 'fresh-retention-key', repeat('7', 64), '{}'::jsonb, 2, now())`,
       [accountId],
     );
+    await isolatedPool.query(
+      `INSERT INTO account_security_email_outbox
+         (account_id, recipient_email, event_type, attempts, created_at, delivered_at, abandoned_at)
+       VALUES ($1, $2, 'totp_enabled', 1, now() - interval '31 days', now() - interval '31 days', NULL),
+              ($1, $2, 'totp_disabled', 8, now() - interval '31 days', NULL, now() - interval '31 days'),
+              ($1, $2, 'totp_enabled', 1, now(), now(), NULL),
+              ($1, $2, 'recovery_codes_rotated', 0, now() - interval '31 days', NULL, NULL)`,
+      [accountId, `${accountId}@example.test`],
+    );
 
     await cleanupExpiredRecords(isolatedPool);
 
-    const [emailCodes, authFlows, authCodes, sessions, idempotency] = await Promise.all([
+    const [emailCodes, authFlows, authCodes, sessions, idempotency, securityEmails] = await Promise.all([
       isolatedPool.query("SELECT id FROM email_verification_codes WHERE account_id = $1", [accountId]),
       isolatedPool.query("SELECT id FROM native_auth_flows WHERE id = ANY($1::uuid[])", [[expiredFlow, activeFlow]]),
       isolatedPool.query("SELECT id FROM native_authorization_codes WHERE account_id = $1", [accountId]),
       isolatedPool.query("SELECT id FROM account_sessions WHERE account_id = $1", [accountId]),
       isolatedPool.query("SELECT idempotency_key FROM preference_idempotency WHERE account_id = $1 ORDER BY idempotency_key", [accountId]),
+      isolatedPool.query<{ event_type: string; delivered_at: Date | null; abandoned_at: Date | null }>(
+        "SELECT event_type, delivered_at, abandoned_at FROM account_security_email_outbox WHERE account_id = $1",
+        [accountId],
+      ),
     ]);
     expect(emailCodes.rows).toHaveLength(1);
     expect(authFlows.rows.map(({ id }) => id)).toEqual([activeFlow]);
     expect(authCodes.rows).toHaveLength(0);
     expect(sessions.rows).toHaveLength(1);
     expect(idempotency.rows.map(({ idempotency_key }) => idempotency_key)).toEqual(["fresh-retention-key"]);
+    expect(securityEmails.rows).toHaveLength(2);
+    expect(securityEmails.rows.filter(({ delivered_at, abandoned_at }) => delivered_at || abandoned_at)).toHaveLength(1);
   });
 
   it("sirve snapshots reales de PostgreSQL con aislamiento, revisión e idempotencia", async () => {
@@ -489,6 +563,13 @@ describePostgres("integración real de PostgreSQL para rate limits", () => {
 
       expect((await app.inject({ method: "DELETE", url: "/v1/auth/mfa/totp", headers: { authorization: `Bearer ${sessionToken}` } })).statusCode).toBe(204);
       expect((await mfa.status(accountId))).toMatchObject({ totpEnabled: false, recoveryCodesRemaining: 0 });
+      const securityEvents = await isolatedPool.query<{ event_type: string }>(
+        "SELECT event_type FROM account_security_email_outbox WHERE account_id = $1 ORDER BY created_at, id",
+        [accountId],
+      );
+      expect(securityEvents.rows.map(({ event_type }) => event_type).sort()).toEqual([
+        "totp_enabled", "recovery_codes_rotated", "totp_disabled",
+      ].sort());
       expect((await app.inject({ method: "POST", url: "/v1/auth/mfa/totp/enrollment", headers: { authorization: `Bearer ${sessionToken}` } })).statusCode).toBe(200);
       expect((await mfa.status(accountId)).enrollmentPending).toBe(true);
       expect((await app.inject({ method: "DELETE", url: "/v1/auth/mfa/totp/enrollment", headers: { authorization: `Bearer ${sessionToken}` } })).statusCode).toBe(204);

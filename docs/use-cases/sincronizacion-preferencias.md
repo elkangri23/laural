@@ -1,6 +1,6 @@
 # Casos de uso: portabilidad y sincronización
 
-- **Estado:** UC-17/18 tienen una implementación inicial; login Tauri, revocación de sesiones y cliente manual/automático están implementados. Pendientes pruebas de reconexión, sondeo real y VPS. TOTP, challenge y códigos de recuperación están integrados localmente; UC-21 conserva pendiente la recuperación administrativa tras perder todos los factores. UC-22 tiene sitio y contrato local estático, con operación VPS pendiente. UC-25 implementa restablecimiento de contraseña con PIN, aún sin despliegue VPS/Resend.
+- **Estado:** UC-17/18 tienen una implementación inicial; login Tauri, revocación de sesiones y cliente manual/automático están implementados. Pendientes pruebas de reconexión, sondeo real y VPS. TOTP, challenge, códigos y cola transaccional de avisos están integrados localmente; UC-21 conserva pendiente la recuperación administrativa tras perder todos los factores. UC-22 tiene sitio y contrato local estático, con operación VPS pendiente. UC-25 implementa restablecimiento de contraseña con PIN, aún sin despliegue VPS/Resend.
 - **Especificación:** [plan de sincronización](../plans/sincronizacion-preferencias.md).
 - **Diseño técnico:** [diseño formal](../designs/sincronizacion-preferencias-y-portabilidad.md).
 
@@ -67,3 +67,11 @@
 **Flujo:** solicita el restablecimiento con su correo; Laural responde igual exista o no la cuenta. Si existe, recibe un PIN de seis dígitos válido cinco minutos. Introduce el PIN y una contraseña nueva de 12 a 128 caracteres.
 
 **Aceptación:** el PIN tiene HMAC separado por propósito, cinco intentos, un solo uso y límites por cuenta/IP. PIN incorrecto o cuenta inexistente no inicia sesión. Al cambiar la contraseña se revocan todas las sesiones activas; no se crea sesión ni se retiran/cambian factores MFA. Resend y PostgreSQL reales requieren despliegue/validación antes de habilitar la ruta públicamente.
+
+## UC-26 — Recibir aviso al cambiar un factor de seguridad
+
+**Actor:** titular de una cuenta verificada con TOTP.
+
+**Flujo:** tras confirmar la activación o desactivación de TOTP, o confirmar la rotación de códigos de recuperación, el servicio guarda el evento en PostgreSQL junto al cambio. Un trabajador lo entrega al correo verificado mediante Resend; ante fallos temporales, reintenta con una clave idempotente.
+
+**Aceptación:** no se envía antes de confirmar la operación; el mensaje no contiene códigos de recuperación, IP, ubicación ni datos del dispositivo. Tras ocho fallos el evento queda abandonado y los resultados terminales se eliminan tras 30 días. Entrega y alertas reales en VPS siguen pendientes.

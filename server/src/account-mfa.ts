@@ -200,6 +200,7 @@ export class AccountMfaService {
       );
       await client.query("UPDATE account_totp_factors SET enabled_at = coalesce(enabled_at, now()) WHERE account_id = $1", [accountId]);
       await this.revokeOtherSessions(client, accountId, authorization);
+      await this.queueSecurityEmail(client, accountId, factor.enabled ? "recovery_codes_rotated" : "totp_enabled");
       await client.query("COMMIT");
       return true;
     } catch (error) {
@@ -270,6 +271,7 @@ export class AccountMfaService {
       }
       await client.query("DELETE FROM account_recovery_codes WHERE account_id = $1", [accountId]);
       await this.revokeOtherSessions(client, accountId, authorization);
+      await this.queueSecurityEmail(client, accountId, "totp_disabled");
       await client.query("COMMIT");
       return true;
     } catch (error) {
@@ -430,6 +432,20 @@ export class AccountMfaService {
       [accountId],
     );
     return result.rows.length === 1;
+  }
+
+  private async queueSecurityEmail(
+    client: import("pg").PoolClient,
+    accountId: string,
+    eventType: "totp_enabled" | "recovery_codes_rotated" | "totp_disabled",
+  ): Promise<void> {
+    const result = await client.query(
+      `INSERT INTO account_security_email_outbox (account_id, recipient_email, event_type)
+       SELECT id, email, $2 FROM accounts
+        WHERE id = $1 AND email_verified_at IS NOT NULL AND deleted_at IS NULL`,
+      [accountId, eventType],
+    );
+    if (result.rowCount !== 1) throw new Error("No se pudo registrar el aviso de seguridad.");
   }
 
   private async revokeOtherSessions(client: import("pg").PoolClient, accountId: string, authorization: string | undefined): Promise<void> {

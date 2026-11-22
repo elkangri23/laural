@@ -1,6 +1,6 @@
 # ADR-0038: Fundamentos de TOTP y recuperación
 
-- **Estado:** Aceptada; backend y UI TOTP integrados localmente; despliegue y avisos pendientes
+- **Estado:** Aceptada; backend/UI e integración PostgreSQL local; entrega Resend y despliegue pendientes
 - **Fecha:** 2026-11-22
 - **Decisores:** Antonio Moles
 
@@ -15,14 +15,14 @@ El plan de sincronización exige TOTP y códigos de recuperación antes de habil
 - Generar secretos aleatorios de 160 bits y presentarlos como URI `otpauth://` para aplicaciones autenticadoras compatibles.
 - Cifrar semillas con AES-256-GCM, nonce aleatorio de 96 bits y etiqueta íntegra de 128 bits. Asociar el account ID como AAD para impedir intercambiar ciphertexts entre cuentas. La llave de cifrado será un secreto dedicado del servicio y no se compartirá con el pepper de PINes.
 - Generar diez códigos de recuperación aleatorios de 64 bits; mostrar cada código una sola vez y almacenar solo HMAC por cuenta con un pepper dedicado. Cada código será de un solo uso.
-- La configuración/cambio de factores exigirá una autenticación reciente. El backend debe crear códigos de recuperación y hacer que el usuario confirme que los guardó antes de activar el factor. Los cambios de factor revocarán las demás sesiones y notificarán al correo de la cuenta.
+- La configuración/cambio de factores exigirá una autenticación reciente. El backend debe crear códigos de recuperación y hacer que el usuario confirme que los guardó antes de activar el factor. Los cambios de factor revocarán las demás sesiones y registrarán un aviso de correo en la cola transaccional descrita en [ADR-0039](0039-outbox-de-avisos-de-seguridad.md).
 - La contraseña y el PIN de correo no sustituyen el TOTP ni permiten quitar el factor por sí solos. La recuperación administrativa de factores seguirá el runbook y no tendrá endpoint público.
 
 ## Consecuencias
 
 - Se añadieron vectores RFC, ventana temporal, protección frente a repetición, URI, cifrado autenticado asociado a cuenta y generación/digest de códigos en `server/src/totp.ts`.
 - La migración, challenge después de contraseña, gestión de factores, enrolamiento y rotación de códigos están implementados localmente. Los códigos nuevos permanecen inactivos hasta confirmar su guardado; la rotación conserva los anteriores hasta ese punto. Las sesiones no recientes no pueden modificar factores y la transacción vuelve a validar la sesión actual antes de revocar otras sesiones.
-- MFA todavía no está lista para producción: faltan pruebas PostgreSQL específicas en CI, avisos por correo de cambios, Google/passkeys, recuperación administrativa, validación Tauri y ensayo en VPS. Las cuentas siguen deshabilitadas por defecto.
+- MFA todavía no está lista para producción: falta validar la entrega Resend y operación de la cola, Google/passkeys, recuperación administrativa, validación Tauri y ensayo en VPS. Las cuentas siguen deshabilitadas por defecto.
 - La llave AES y el pepper de recuperación requieren variables separadas, despliegue seguro, rotación/migración planificadas y nunca deben aparecer en logs o Git.
 - La recuperación por correo sigue permitiendo cambiar contraseña, pero el login posterior exige el factor inscrito.
 

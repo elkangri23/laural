@@ -7,6 +7,7 @@ const RETENTION_POLICIES = [
   "DELETE FROM native_auth_flows WHERE created_at < now() - interval '24 hours'",
   "DELETE FROM account_sessions WHERE expires_at <= now() OR revoked_at IS NOT NULL",
   "DELETE FROM preference_idempotency WHERE created_at < now() - interval '30 days'",
+  "DELETE FROM account_security_email_outbox WHERE created_at < now() - interval '30 days' AND (delivered_at IS NOT NULL OR abandoned_at IS NOT NULL)",
 ] as const;
 
 export async function cleanupExpiredRecords(pool: Pick<Pool, "connect">): Promise<void> {
