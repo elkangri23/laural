@@ -6,6 +6,7 @@ import { createApp } from "../src/app.js";
 import { EmailAuthService } from "../src/email-auth.js";
 import { NativeAuthService, type NativeAuthStore } from "../src/native-auth.js";
 import type { AccountMfaService } from "../src/account-mfa.js";
+import type { AccountDeletionService } from "../src/account-deletion.js";
 import type { RequestRateLimiter } from "../src/request-rate-limit.js";
 
 const snapshot: PreferenceSnapshot = {
@@ -39,7 +40,7 @@ class MemoryStore implements PreferenceStore {
 }
 
 const instances: Array<ReturnType<typeof createApp>> = [];
-function createTestApp(options: { store?: PreferenceStore; checkReadiness?: () => Promise<void>; emailAuth?: EmailAuthService; nativeAuth?: NativeAuthService; accountMfa?: AccountMfaService; requestRateLimiter?: RequestRateLimiter; revokeSession?: (accountId: string, authorization: string | undefined) => Promise<boolean>; listAccountSessions?: (accountId: string, authorization: string | undefined) => Promise<{ id: string; createdAt: string; expiresAt: string; current: boolean }[]>; revokeAccountSession?: (accountId: string, authorization: string | undefined, sessionId: string) => Promise<boolean>; revokeOtherSessions?: (accountId: string, authorization: string | undefined) => Promise<number> } = {}): ReturnType<typeof createApp> {
+function createTestApp(options: { store?: PreferenceStore; checkReadiness?: () => Promise<void>; emailAuth?: EmailAuthService; nativeAuth?: NativeAuthService; accountMfa?: AccountMfaService; accountDeletion?: AccountDeletionService; requestRateLimiter?: RequestRateLimiter; revokeSession?: (accountId: string, authorization: string | undefined) => Promise<boolean>; listAccountSessions?: (accountId: string, authorization: string | undefined) => Promise<{ id: string; createdAt: string; expiresAt: string; current: boolean }[]>; revokeAccountSession?: (accountId: string, authorization: string | undefined, sessionId: string) => Promise<boolean>; revokeOtherSessions?: (accountId: string, authorization: string | undefined) => Promise<number> } = {}): ReturnType<typeof createApp> {
   const store = options.store ?? new MemoryStore();
   const requestRateLimiter = options.requestRateLimiter ?? new TestRateLimiter();
   const app = createApp({
@@ -57,6 +58,7 @@ function createTestApp(options: { store?: PreferenceStore; checkReadiness?: () =
     ...(options.emailAuth ? { emailAuth: options.emailAuth } : {}),
     ...(options.nativeAuth ? { nativeAuth: options.nativeAuth } : {}),
     ...(options.accountMfa ? { accountMfa: options.accountMfa } : {}),
+    ...(options.accountDeletion ? { accountDeletion: options.accountDeletion } : {}),
   });
   instances.push(app);
   return app;
@@ -97,6 +99,31 @@ describe("rutas MFA de cuenta", () => {
     const valid = await app.inject({ method: "POST", url: "/v1/auth/mfa/totp/enrollment/confirm", headers: { authorization: "Bearer account-user1" }, payload: { code: "123456" } });
     expect(valid.statusCode).toBe(200);
     expect(valid.json()).toEqual({ recoveryCodes: ["AAAA-BBBB-CCCC-DDDD"] });
+  });
+});
+
+describe("ruta de borrado de cuenta", () => {
+  it("valida autenticación y texto exacto antes de borrar", async () => {
+    const deletion = { deleteAccount: vi.fn(async () => "deleted" as const) } as unknown as AccountDeletionService;
+    const app = createTestApp({ accountDeletion: deletion });
+    const anonymous = await app.inject({ method: "DELETE", url: "/v1/auth/account", payload: { confirmation: "ELIMINAR" } });
+    expect(anonymous.statusCode).toBe(401);
+
+    const invalid = await app.inject({ method: "DELETE", url: "/v1/auth/account", headers: { authorization: "Bearer account-user1" }, payload: { confirmation: "borrar" } });
+    expect(invalid.statusCode).toBe(400);
+    expect(deletion.deleteAccount).not.toHaveBeenCalled();
+
+    const deleted = await app.inject({ method: "DELETE", url: "/v1/auth/account", headers: { authorization: "Bearer account-user1" }, payload: { confirmation: "ELIMINAR" } });
+    expect(deleted.statusCode).toBe(204);
+    expect(deletion.deleteAccount).toHaveBeenCalledWith("user1", "Bearer account-user1");
+  });
+
+  it("solicita autenticación reciente y no disfraza otros errores", async () => {
+    const deletion = { deleteAccount: vi.fn(async () => "recent_auth_required" as const) } as unknown as AccountDeletionService;
+    const app = createTestApp({ accountDeletion: deletion });
+    const response = await app.inject({ method: "DELETE", url: "/v1/auth/account", headers: { authorization: "Bearer account-user1" }, payload: { confirmation: "ELIMINAR" } });
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toEqual({ error: "recent_auth_required" });
   });
 });
 

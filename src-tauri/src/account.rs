@@ -95,6 +95,13 @@ pub struct TotpEnrollment {
     pub provisioning_uri: String,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AccountDeletionResult {
+    pub session_credential_cleared: bool,
+    pub sync_state_cleared: bool,
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct RecoveryCodesResponse {
@@ -160,6 +167,64 @@ pub async fn clear_account_session() -> Result<bool, String> {
         Ok(()) | Err(keyring::Error::NoEntry) => Ok(remotely_revoked),
         Err(_) => Err("No se pudo borrar la sesión del almacén seguro de Windows.".into()),
     }
+}
+
+#[tauri::command]
+pub async fn delete_account(
+    app: AppHandle,
+    confirmation: String,
+) -> Result<AccountDeletionResult, String> {
+    if !valid_account_deletion_confirmation(&confirmation) {
+        return Err("Escribe ELIMINAR para confirmar el borrado definitivo.".into());
+    }
+    let token = session_token()?;
+    let response = account_api_client()?
+        .delete(format!("{SYNC_ORIGIN}/v1/auth/account"))
+        .bearer_auth(token.as_str())
+        .json(&serde_json::json!({ "confirmation": confirmation }))
+        .send()
+        .await
+        .map_err(|_| "No se pudo confirmar el borrado de la cuenta. Comprueba la conexión antes de volver a intentarlo.".to_string())?;
+    if response.status() == reqwest::StatusCode::FORBIDDEN {
+        return Err("La sesión ya no es reciente. Vuelve a iniciar sesión y confirma el borrado dentro de los diez minutos siguientes.".into());
+    }
+    if response.status() != reqwest::StatusCode::NO_CONTENT {
+        return Err(
+            "No se pudo borrar la cuenta. Comprueba la sesión e inténtalo de nuevo.".into(),
+        );
+    }
+
+    clear_deleted_account_local_data_inner(&app).await
+}
+
+#[tauri::command]
+pub async fn clear_deleted_account_local_data(
+    app: AppHandle,
+) -> Result<AccountDeletionResult, String> {
+    clear_deleted_account_local_data_inner(&app).await
+}
+
+async fn clear_deleted_account_local_data_inner(
+    app: &AppHandle,
+) -> Result<AccountDeletionResult, String> {
+    let session_credential_cleared = match session_entry() {
+        Ok(entry) => matches!(
+            entry.delete_credential(),
+            Ok(()) | Err(keyring::Error::NoEntry)
+        ),
+        Err(_) => false,
+    };
+    let sync_state_cleared = crate::sync::forget_local_preference_sync_state(app)
+        .await
+        .is_ok();
+    Ok(AccountDeletionResult {
+        session_credential_cleared,
+        sync_state_cleared,
+    })
+}
+
+fn valid_account_deletion_confirmation(value: &str) -> bool {
+    value == "ELIMINAR"
 }
 
 #[tauri::command]
@@ -621,6 +686,14 @@ mod tests {
 
     fn request(target: &str) -> Vec<u8> {
         format!("GET {target} HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n").into_bytes()
+    }
+
+    #[test]
+    fn solo_acepta_la_confirmacion_explicita_de_borrado() {
+        assert!(valid_account_deletion_confirmation("ELIMINAR"));
+        assert!(!valid_account_deletion_confirmation("eliminar"));
+        assert!(!valid_account_deletion_confirmation("ELIMINAR "));
+        assert!(!valid_account_deletion_confirmation(""));
     }
 
     #[test]

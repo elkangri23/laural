@@ -36,6 +36,9 @@ export function AccountSettings({ onClose, preferences, onImported, onSyncSettle
   const [mfaCode, setMfaCode] = useState("");
   const [recoverySaved, setRecoverySaved] = useState(false);
   const [mfaMessage, setMfaMessage] = useState("");
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [deleteMessage, setDeleteMessage] = useState("");
+  const [deleteCleanupPending, setDeleteCleanupPending] = useState(false);
 
   useEffect(() => setRiskAcknowledged(syncRiskAcknowledged), [syncRiskAcknowledged]);
 
@@ -274,6 +277,47 @@ export function AccountSettings({ onClose, preferences, onImported, onSyncSettle
     }
   }
 
+  async function deleteAccount() {
+    if (deleteConfirmation !== "ELIMINAR") return;
+    if (!window.confirm("Se borrarán definitivamente la cuenta, sus preferencias en la nube, las sesiones y los factores. La configuración local y las claves de proveedores se conservarán. ¿Quieres continuar?")) return;
+    setBusy(true);
+    setDeleteMessage("");
+    try {
+      const result = await invoke<{ sessionCredentialCleared: boolean; syncStateCleared: boolean }>("delete_account", { confirmation: deleteConfirmation });
+      setConnected(false);
+      setSessions([]);
+      setMfaStatus(null);
+      setEnrollment(null);
+      setRecoveryCodes([]);
+      setDeleteConfirmation("");
+      window.dispatchEvent(new Event("laural:account-disconnected"));
+      setDeleteCleanupPending(!result.sessionCredentialCleared || !result.syncStateCleared);
+      setDeleteMessage(result.sessionCredentialCleared && result.syncStateCleared
+        ? "La cuenta y sus datos sincronizados se borraron. La configuración local y las claves de proveedores se conservaron."
+        : "La cuenta ya se borró del servidor. No se pudo limpiar todo el estado local; puedes volver a intentarlo aquí.");
+    } catch (error) {
+      setDeleteMessage(typeof error === "string" ? error : "No se pudo confirmar el borrado. Comprueba la conexión antes de volver a intentarlo.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function retryDeletedAccountCleanup() {
+    setBusy(true);
+    try {
+      const result = await invoke<{ sessionCredentialCleared: boolean; syncStateCleared: boolean }>("clear_deleted_account_local_data");
+      const pending = !result.sessionCredentialCleared || !result.syncStateCleared;
+      setDeleteCleanupPending(pending);
+      setDeleteMessage(pending
+        ? "Aún queda algún dato local pendiente de limpieza. Vuelve a intentarlo o revisa el almacén seguro de Windows."
+        : "Limpieza local completada. La configuración y las claves de proveedores se conservaron.");
+    } catch {
+      setDeleteMessage("No se pudo completar la limpieza local. Vuelve a intentarlo.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function snapshotPreferences(): Preferences {
     return {
       themeId: localStorage.getItem("laural.theme") ?? preferences.themeId,
@@ -453,6 +497,17 @@ export function AccountSettings({ onClose, preferences, onImported, onSyncSettle
         : <button className="primary-button" onClick={() => void beginLogin()} disabled={busy || !listenerReady || !sessionReady}>{busy ? "Esperando en el navegador…" : "Iniciar sesión"}</button>}
       {connected && <p className="dialog-copy account-note">Solo se sincronizan las preferencias permitidas y los perfiles de proveedor. Las claves API permanecen en el almacén seguro de este equipo. Los endpoints personalizados solo se incluyen si activaste compartirlos en cada perfil.</p>}
       {connected && <p className="dialog-copy account-note">Al quitar la cuenta, Laural intenta revocar la sesión del servidor y borra siempre la credencial de este equipo. Si no hay conexión, la sesión remota puede seguir válida hasta su vencimiento.</p>}
+      {connected && <section className="account-delete" aria-labelledby="account-delete-title">
+        <h4 id="account-delete-title">Eliminar cuenta y datos sincronizados</h4>
+        <p className="dialog-copy">El borrado es definitivo. Elimina tu cuenta, su configuración en la nube, sesiones y factores de seguridad. No elimina la configuración ni las claves guardadas en este equipo. Para confirmar, inicia sesión de nuevo dentro de los diez minutos anteriores y escribe <strong>ELIMINAR</strong>.</p>
+        <div className="account-sync-actions">
+          <button className="secondary-button" disabled={busy} onClick={() => void beginLogin()}>Volver a iniciar sesión</button>
+        </div>
+        <label>Escribe ELIMINAR para confirmar<input value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.currentTarget.value)} autoComplete="off" maxLength={8} /></label>
+        <button className="danger-button" disabled={busy || deleteConfirmation !== "ELIMINAR"} onClick={() => void deleteAccount()}>Eliminar definitivamente mi cuenta</button>
+      </section>}
+      {deleteMessage && <p className="form-message" role="status" aria-live="polite">{deleteMessage}</p>}
+      {deleteCleanupPending && <button className="secondary-button" disabled={busy} onClick={() => void retryDeletedAccountCleanup()}>Reintentar limpieza local</button>}
     </section>
   </SettingsDialog>;
 }

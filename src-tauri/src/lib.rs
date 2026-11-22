@@ -480,6 +480,8 @@ pub fn run() {
             account::account_session_status,
             account::start_account_login,
             account::clear_account_session,
+            account::delete_account,
+            account::clear_deleted_account_local_data,
             account::list_account_sessions,
             account::revoke_account_session,
             account::revoke_other_account_sessions,

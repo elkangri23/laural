@@ -43,6 +43,7 @@ Los ADR registran por qué se eligió una opción y qué costes trae. Un ADR ace
 | [0037](0037-restablecimiento-de-contrasena-por-pin.md) | Cambiar la contraseña con PIN de correo, sin crear sesión ni quitar MFA | Aceptada; servicio implementado, Resend/VPS pendiente |
 | [0038](0038-fundamentos-de-mfa-totp.md) | TOTP RFC 6238, semilla cifrada y códigos de recuperación | Aceptada; integración y avisos en cola locales, entrega VPS pendiente |
 | [0039](0039-outbox-de-avisos-de-seguridad.md) | Cola PostgreSQL transaccional para avisos de cambios MFA | Aceptada; entrega Resend real y despliegue pendientes |
+| [0040](0040-borrado-definitivo-de-cuenta.md) | Borrado definitivo en servidor con autenticación reciente | Aceptada; API/cliente iniciales, ensayo VPS pendiente |
 
 ## Crear un ADR
 

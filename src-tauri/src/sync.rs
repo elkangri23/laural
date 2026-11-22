@@ -231,6 +231,16 @@ pub fn get_preference_sync_status(app: AppHandle) -> Result<LocalSyncStatus, Str
     })
 }
 
+pub(crate) async fn forget_local_preference_sync_state(app: &AppHandle) -> Result<(), String> {
+    let _guard = lock_sync().await;
+    let path = sync_state_path(app)?;
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(_) => Err("No se pudo borrar el estado local de sincronización de la cuenta.".into()),
+    }
+}
+
 pub(crate) async fn verify_remote_snapshot(
     snapshot: &PreferenceSnapshot,
     revision: u64,

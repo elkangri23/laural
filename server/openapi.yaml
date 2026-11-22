@@ -281,6 +281,28 @@ paths:
                   revoked: { type: integer, minimum: 0 }
         '401': { description: Sesión actual no válida }
         '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/auth/account:
+    delete:
+      summary: Borra definitivamente la cuenta y los datos asociados en la nube
+      description: Requiere la sesión emitida en los últimos diez minutos y la confirmación literal ELIMINAR. No borra configuración ni credenciales locales del cliente.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [confirmation]
+              properties:
+                confirmation: { type: string, const: ELIMINAR }
+      responses:
+        '204': { description: Cuenta y datos asociados borrados en cascada }
+        '400': { description: Confirmación inválida }
+        '401': { description: Sesión no válida }
+        '403': { description: Se requiere iniciar sesión de nuevo }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /v1/auth/mfa:
     get:
       summary: Consulta estado TOTP y número de códigos de recuperación activos

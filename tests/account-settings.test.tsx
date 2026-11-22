@@ -151,6 +151,74 @@ test("confirma el cierre remoto cuando el servidor revoca la sesión", async () 
   window.removeEventListener("laural:account-disconnected", disconnected);
 });
 
+test("el borrado de cuenta exige la frase exacta y conserva las preferencias locales", async () => {
+  mocks.invoke.mockImplementation(async (command: string) => {
+    if (command === "account_session_status") return true;
+    if (command === "list_account_sessions") return [];
+    if (command === "get_account_mfa_status") return { totpEnabled: false, recoveryCodesRemaining: 0, enrollmentPending: false };
+    if (command === "delete_account") return { sessionCredentialCleared: true, syncStateCleared: true };
+    return undefined;
+  });
+  vi.stubGlobal("confirm", vi.fn(() => true));
+  const disconnected = vi.fn();
+  window.addEventListener("laural:account-disconnected", disconnected);
+  await act(async () => root.render(renderAccountSettings()));
+  await act(async () => new Promise((resolve) => window.setTimeout(resolve, 0)));
+  expect(host.textContent).toContain("No elimina la configuración ni las claves guardadas en este equipo");
+  const deleteButton = [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Eliminar definitivamente mi cuenta");
+  expect(deleteButton?.disabled).toBe(true);
+
+  const input = host.querySelector<HTMLInputElement>(".account-delete input");
+  await act(async () => {
+    if (input) {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, "ELIMINAR");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+  });
+  expect(deleteButton?.disabled).toBe(false);
+  await act(async () => deleteButton?.click());
+
+  expect(mocks.invoke).toHaveBeenCalledWith("delete_account", { confirmation: "ELIMINAR" });
+  expect(host.textContent).toContain("La cuenta y sus datos sincronizados se borraron");
+  expect(disconnected).toHaveBeenCalledOnce();
+  window.removeEventListener("laural:account-disconnected", disconnected);
+});
+
+test("permite reintentar la limpieza local después de borrar la cuenta", async () => {
+  let deletionAttempted = false;
+  mocks.invoke.mockImplementation(async (command: string) => {
+    if (command === "account_session_status") return true;
+    if (command === "list_account_sessions") return [];
+    if (command === "get_account_mfa_status") return { totpEnabled: false, recoveryCodesRemaining: 0, enrollmentPending: false };
+    if (command === "delete_account") return { sessionCredentialCleared: false, syncStateCleared: false };
+    if (command === "clear_deleted_account_local_data") {
+      expect(deletionAttempted).toBe(true);
+      return { sessionCredentialCleared: true, syncStateCleared: true };
+    }
+    return undefined;
+  });
+  vi.stubGlobal("confirm", vi.fn(() => true));
+  await act(async () => root.render(renderAccountSettings()));
+  await act(async () => new Promise((resolve) => window.setTimeout(resolve, 0)));
+  const input = host.querySelector<HTMLInputElement>(".account-delete input");
+  await act(async () => {
+    if (input) {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, "ELIMINAR");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+  });
+  await act(async () => {
+    [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Eliminar definitivamente mi cuenta")?.click();
+  });
+  deletionAttempted = true;
+  expect(host.textContent).toContain("puedes volver a intentarlo aquí");
+  await act(async () => [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Reintentar limpieza local")?.click());
+  expect(mocks.invoke).toHaveBeenCalledWith("clear_deleted_account_local_data");
+  expect(host.textContent).toContain("Limpieza local completada");
+});
+
 test("activa TOTP solo después de verificar el código y confirmar que guardó la recuperación", async () => {
   mocks.invoke.mockImplementation(async (command: string) => {
     if (command === "account_session_status") return true;

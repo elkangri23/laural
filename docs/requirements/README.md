@@ -33,6 +33,7 @@ Los requisitos distinguen el alcance acordado del estado actual del prototipo. �
 | FR-25 | Mostrar disponibilidad, incidentes, acciones en curso y mantenimiento en una página pública sin autenticación. | Diseño aprobado; pendiente implementación en el mismo VPS |
 | FR-26 | Permitir que el administrador revise manualmente una solicitud tras perder todos los factores; el PIN no retira MFA. | Runbook documentado; recuperación administrativa, acción privilegiada y ensayo pendientes; códigos TOTP disponibles localmente |
 | FR-27 | Restablecer la contraseña de una cuenta verificada con un PIN de correo de un solo uso, sin iniciar sesión ni alterar factores MFA. | Implementado localmente; despliegue Resend/VPS y validación PostgreSQL en CI pendientes |
+| FR-28 | Permitir al titular borrar la cuenta de sync y sus datos remotos tras autenticación reciente y confirmación explícita, conservando la configuración local. | API, cascada PostgreSQL y comando Tauri implementados; ensayo en instalación Windows/VPS pendiente |
 
 ## No funcionales
 

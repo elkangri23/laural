@@ -6,6 +6,7 @@ import { Ajv2020 } from "ajv/dist/2020.js";
 import type { PreferenceSnapshot, PreferenceStore, ReadinessCheck, Authenticate, ListAccountSessions, RevokeAccountSession, RevokeOtherSessions, RevokeSession } from "./contracts.js";
 import type { EmailAuthService } from "./email-auth.js";
 import type { AccountMfaService } from "./account-mfa.js";
+import type { AccountDeletionService } from "./account-deletion.js";
 import { NativeAuthService, validateNativeFlowParameters, type LoginResult } from "./native-auth.js";
 import type { RequestRateLimiter } from "./request-rate-limit.js";
 import snapshotSchema from "../../shared/preference-snapshot-v1.schema.json" with { type: "json" };
@@ -25,6 +26,7 @@ export type AppDependencies = {
   emailAuth?: EmailAuthService;
   nativeAuth?: NativeAuthService;
   accountMfa?: AccountMfaService;
+  accountDeletion?: AccountDeletionService;
   requestRateLimiter: RequestRateLimiter;
 };
 
@@ -70,6 +72,7 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
   const emailAuth = dependencies.emailAuth;
   const nativeAuth = dependencies.nativeAuth;
   const accountMfa = dependencies.accountMfa;
+  const accountDeletion = dependencies.accountDeletion;
 
   app.post("/v1/auth/session/revoke", { preHandler: limited(rateLimit, "session-revoke", 10, 60) }, async (request, reply) => {
     const authorization = request.headers.authorization;
@@ -106,6 +109,27 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
     const revoked = await dependencies.revokeOtherSessions(accountId, authorization);
     return reply.send({ revoked });
   });
+
+  if (accountDeletion) {
+    app.delete<{ Body: { confirmation: "ELIMINAR" } }>("/v1/auth/account", {
+      preHandler: limited(rateLimit, "account-delete", 3, 900),
+      schema: {
+        body: {
+          type: "object", additionalProperties: false,
+          required: ["confirmation"],
+          properties: { confirmation: { const: "ELIMINAR" } },
+        },
+      },
+    }, async (request, reply) => {
+      const authorization = request.headers.authorization;
+      const accountId = await dependencies.authenticate(authorization);
+      if (!accountId) return reply.code(401).send({ error: "unauthorized" });
+      const result = await accountDeletion.deleteAccount(accountId, authorization);
+      if (result === "recent_auth_required") return reply.code(403).send({ error: "recent_auth_required" });
+      if (result === "unauthorized") return reply.code(401).send({ error: "unauthorized" });
+      return reply.code(204).send();
+    });
+  }
 
   if (emailAuth && nativeAuth) {
     void app.register(formbody, { bodyLimit: 8 * 1024 });

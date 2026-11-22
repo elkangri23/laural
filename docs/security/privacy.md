@@ -29,6 +29,10 @@ La exportación/importación local ya está implementada de forma inicial. El ar
 
 Los perfiles locales guardan el tipo de proveedor y, con consentimiento explícito por perfil, si su endpoint personalizado podrá incluirse en un snapshot. La opción comienza desactivada. El contrato v1 omite `customEndpoint` cuando no se autorizó. Al aplicar un endpoint que vino de la nube, se desactiva en el equipo receptor el permiso para compartirlo de nuevo. El backend privado de snapshots y cuentas existe localmente, pero no está desplegado ni habilitado para usuarios.
 
+## Borrado de cuenta
+
+El borrado de cuenta elimina de PostgreSQL la cuenta, preferencias sincronizadas, sesiones, desafíos, factores MFA, códigos de recuperación e historial de avisos asociados. No envía un correo de despedida ni conserva un registro personal de la cuenta borrada. La acción requiere un login de menos de diez minutos y confirmación literal. En el equipo, Laural elimina la sesión de Credential Manager y el estado local de sincronización; conserva `providers.json`, preferencias, claves API, conversaciones locales y proyectos.
+
 La copia previa de importación se almacena en el directorio de configuración local, en `transfer-backups`; no se sube ni se cifra con una contraseña independiente. Si una importación cambia credenciales, esa copia incluye claves y se cifra usando la contraseña del archivo importado. Protégela como al archivo original. Una copia en el mismo equipo no protege ante la pérdida del equipo o del perfil de Windows.
 
 El servicio de sincronización aún no está desplegado y no tiene copias de desastre. La decisión del propietario es no enviar respaldos fuera del VPS. Si el host se pierde por completo, las cuentas y preferencias guardadas en la nube pueden perderse sin posibilidad de recuperación. Antes de habilitar sincronización, la interfaz debe comunicar este límite. Una copia de PostgreSQL dentro del mismo VPS no está decidida y tampoco protegería frente a la pérdida del host.

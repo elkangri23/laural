@@ -2,6 +2,7 @@ import pg from "pg";
 import { createApp } from "./app.js";
 import { createAccountSessionLister, createAccountSessionRevoker, createOtherSessionsRevoker, createSessionAuthenticator, createSessionRevoker } from "./auth.js";
 import { AccountMfaService } from "./account-mfa.js";
+import { AccountDeletionService } from "./account-deletion.js";
 import { readConfig, readEmailAuthConfig } from "./config.js";
 import { EmailAuthService } from "./email-auth.js";
 import { PostgresEmailAuthStore } from "./postgres-email-auth-store.js";
@@ -45,6 +46,7 @@ const app = createApp({
   ...(emailAuth ? { emailAuth } : {}),
   ...(nativeAuth ? { nativeAuth } : {}),
   ...(accountMfa ? { accountMfa } : {}),
+  accountDeletion: new AccountDeletionService(pool),
 });
 
 await app.listen({ host: config.host, port: config.port });

@@ -75,3 +75,11 @@
 **Flujo:** tras confirmar la activación o desactivación de TOTP, o confirmar la rotación de códigos de recuperación, el servicio guarda el evento en PostgreSQL junto al cambio. Un trabajador lo entrega al correo verificado mediante Resend; ante fallos temporales, reintenta con una clave idempotente.
 
 **Aceptación:** no se envía antes de confirmar la operación; el mensaje no contiene códigos de recuperación, IP, ubicación ni datos del dispositivo. Tras ocho fallos el evento queda abandonado y los resultados terminales se eliminan tras 30 días. Entrega y alertas reales en VPS siguen pendientes.
+
+## UC-27 — Eliminar la cuenta de sincronización
+
+**Actor:** titular de una cuenta con sesión local activa.
+
+**Flujo:** desde Cuenta, la persona inicia sesión otra vez para renovar la autenticación si hace falta, escribe `ELIMINAR` y confirma la solicitud. El servidor borra la cuenta y sus datos vinculados en una transacción. La app elimina del Credential Manager la sesión y borra la línea base local de sync.
+
+**Aceptación:** la sesión debe haberse emitido en los últimos diez minutos; con TOTP, login exige completar ese factor. Frase incorrecta no modifica datos; la ruta limita intentos. El borrado en cascada cubre snapshots, idempotencias, sesiones, desafíos y factores sin tocar otra cuenta. La configuración, perfiles y API keys locales permanecen. Si se pierde la respuesta de red, el resultado puede ser indeterminado y la UI debe advertir antes de reintentar.

@@ -2,6 +2,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import pg, { type Pool } from "pg";
 import { createApp } from "../src/app.js";
+import { AccountDeletionService } from "../src/account-deletion.js";
 import { createAccountSessionLister, createAccountSessionRevoker, createOtherSessionsRevoker, createSessionAuthenticator, createSessionRevoker } from "../src/auth.js";
 import { AccountMfaService } from "../src/account-mfa.js";
 import { EmailAuthService } from "../src/email-auth.js";
@@ -127,6 +128,69 @@ describePostgres("integración real de PostgreSQL para rate limits", () => {
     expect(abandoned.rows[0]?.attempts).toBe(8);
     expect(abandoned.rows[0]?.abandoned_at).toBeInstanceOf(Date);
     await expect(deliverSecurityEmailBatch(isolatedPool, failingSender)).resolves.toEqual({ delivered: 0, deferred: 0 });
+  });
+
+  it("exige login reciente y borra en cascada solo la cuenta confirmada", async () => {
+    const accountId = randomUUID();
+    const otherAccountId = randomUUID();
+    const email = `${accountId}@example.test`;
+    const token = randomBytes(32).toString("base64url");
+    await isolatedPool.query(
+      `INSERT INTO accounts (id, email, display_name, email_verified_at)
+       VALUES ($1, $2, 'Cuenta a borrar', now()), ($3, $4, 'Cuenta vecina', now())`,
+      [accountId, email, otherAccountId, `${otherAccountId}@example.test`],
+    );
+    await isolatedPool.query(
+      `INSERT INTO account_sessions (account_id, token_hash, expires_at, created_at)
+       VALUES ($1, $2, now() + interval '30 days', now() - interval '11 minutes')`,
+      [accountId, createHash("sha256").update(token).digest("hex")],
+    );
+    const snapshot = { schemaVersion: 1, preferences: { themeId: "ocean", appearance: "dark", updateMode: "manual" }, activeProviderId: null, providers: [] };
+    await isolatedPool.query("INSERT INTO account_preferences (account_id, snapshot, revision) VALUES ($1, $2::jsonb, 1)", [accountId, JSON.stringify(snapshot)]);
+    await isolatedPool.query(
+      "INSERT INTO preference_idempotency (account_id, idempotency_key, payload_digest, snapshot, revision) VALUES ($1, 'delete-test-key', repeat('a', 64), $2::jsonb, 1)",
+      [accountId, JSON.stringify(snapshot)],
+    );
+    await isolatedPool.query("INSERT INTO account_totp_factors (account_id, encrypted_secret, enabled_at) VALUES ($1, '{}'::jsonb, now())", [accountId]);
+    await isolatedPool.query("INSERT INTO account_recovery_codes (account_id, verifier_digest) VALUES ($1, repeat('b', 64))", [accountId]);
+    await isolatedPool.query("INSERT INTO account_security_email_outbox (account_id, recipient_email, event_type) VALUES ($1, $2, 'totp_enabled')", [accountId, email]);
+    const app = createApp({
+      store: new PostgresPreferenceStore(isolatedPool),
+      authenticate: createSessionAuthenticator(isolatedPool),
+      revokeSession: createSessionRevoker(isolatedPool),
+      listAccountSessions: createAccountSessionLister(isolatedPool),
+      revokeAccountSession: createAccountSessionRevoker(isolatedPool),
+      revokeOtherSessions: createOtherSessionsRevoker(isolatedPool),
+      checkReadiness: async () => { await isolatedPool.query("SELECT 1"); },
+      requestRateLimiter: new PostgresRequestRateLimiter(isolatedPool, "integracion-rate-limit-pepper-32-bytes-minimo"),
+      accountDeletion: new AccountDeletionService(isolatedPool),
+    });
+    const headers = { authorization: `Bearer ${token}` };
+
+    try {
+      const stale = await app.inject({ method: "DELETE", url: "/v1/auth/account", headers, payload: { confirmation: "ELIMINAR" } });
+      expect(stale.statusCode).toBe(403);
+      expect(stale.json()).toEqual({ error: "recent_auth_required" });
+      expect((await isolatedPool.query("SELECT id FROM accounts WHERE id = $1", [accountId])).rowCount).toBe(1);
+
+      await isolatedPool.query("UPDATE account_sessions SET created_at = now() WHERE account_id = $1", [accountId]);
+      const deleted = await app.inject({ method: "DELETE", url: "/v1/auth/account", headers, payload: { confirmation: "ELIMINAR" } });
+      expect(deleted.statusCode).toBe(204);
+      const [account, sessions, prefs, idempotency, factors, codes, outbox, neighbor] = await Promise.all([
+        isolatedPool.query("SELECT id FROM accounts WHERE id = $1", [accountId]),
+        isolatedPool.query("SELECT id FROM account_sessions WHERE account_id = $1", [accountId]),
+        isolatedPool.query("SELECT account_id FROM account_preferences WHERE account_id = $1", [accountId]),
+        isolatedPool.query("SELECT account_id FROM preference_idempotency WHERE account_id = $1", [accountId]),
+        isolatedPool.query("SELECT account_id FROM account_totp_factors WHERE account_id = $1", [accountId]),
+        isolatedPool.query("SELECT account_id FROM account_recovery_codes WHERE account_id = $1", [accountId]),
+        isolatedPool.query("SELECT account_id FROM account_security_email_outbox WHERE account_id = $1", [accountId]),
+        isolatedPool.query("SELECT id FROM accounts WHERE id = $1", [otherAccountId]),
+      ]);
+      expect([account, sessions, prefs, idempotency, factors, codes, outbox].map(({ rowCount }) => rowCount)).toEqual([0, 0, 0, 0, 0, 0, 0]);
+      expect(neighbor.rowCount).toBe(1);
+    } finally {
+      await app.close();
+    }
   });
 
   it("limpia registros caducados y conserva los que aún están dentro de su retención", async () => {
