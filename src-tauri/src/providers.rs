@@ -1903,6 +1903,26 @@ fn shell_state_change_or_evaluation_is_high_risk(
             "eval" | "source" | "." | "builtin" => true,
             "trap" => arguments.next().is_some_and(|argument| argument != "-p"),
             "export" | "unset" | "set" | "shopt" => arguments.next().is_some(),
+            "declare" | "typeset" | "readonly" => {
+                let Some(first_argument) = arguments.next() else {
+                    return false;
+                };
+                first_argument != "-p"
+                    || arguments.any(|argument| {
+                        !argument.chars().enumerate().all(|(index, character)| {
+                            character == '_'
+                                || character.is_ascii_alphanumeric()
+                                    && (index > 0 || !character.is_ascii_digit())
+                        })
+                    })
+            }
+            "local" => arguments.next().is_some(),
+            "enable" => {
+                let Some(first_argument) = arguments.next() else {
+                    return false;
+                };
+                !matches!(first_argument, "-a" | "-p") || arguments.next().is_some()
+            }
             _ => false,
         },
         _ => false,
@@ -3320,6 +3340,11 @@ mod tests {
             ("git-bash", ". deploy.sh"),
             ("git-bash", "trap 'rm -rf proyecto' EXIT"),
             ("git-bash", "export PATH=/tmp"),
+            ("git-bash", "declare -x PATH=/tmp"),
+            ("wsl", "typeset -f prompt='() { :; }'"),
+            ("git-bash", "readonly PATH=/tmp"),
+            ("wsl", "local IFS=,"),
+            ("git-bash", "enable -n printf"),
             ("wsl", "unset PATH"),
             ("git-bash", "set -o noclobber"),
             ("wsl", "builtin eval rm"),
@@ -3331,6 +3356,11 @@ mod tests {
             ("cmd", "set"),
             ("powershell", "$env:PATH"),
             ("git-bash", "export"),
+            ("git-bash", "declare -p PATH"),
+            ("wsl", "typeset -p PATH"),
+            ("git-bash", "readonly -p"),
+            ("wsl", "enable -a"),
+            ("git-bash", "enable -p"),
             ("git-bash", "trap -p"),
             ("git-bash", "echo PATH=/tmp"),
         ] {
@@ -3446,6 +3476,8 @@ mod tests {
                 "eval \"rm -rf proyecto\"".into(),
                 "PATH+=/tmp rm -rf proyecto".into(),
                 "$global:prompt = { 'alterado' }".into(),
+                "declare -x PATH=/tmp".into(),
+                "enable -n printf".into(),
             ],
             backup_retention: None,
         };
@@ -3459,6 +3491,8 @@ mod tests {
             ("git-bash", "eval \"rm -rf proyecto\""),
             ("git-bash", "PATH+=/tmp rm -rf proyecto"),
             ("powershell", "$global:prompt = { 'alterado' }"),
+            ("git-bash", "declare -x PATH=/tmp"),
+            ("wsl", "enable -n printf"),
         ] {
             let result = authorize_agent_command_with_settings(shell, command, &settings);
             assert!(
