@@ -33,6 +33,7 @@ function createBoundedTextBuffer(limit: number) {
       const first = chunks[firstChunk];
       if (first.length <= excess) {
         length -= first.length;
+        chunks[firstChunk] = "";
         firstChunk += 1;
       } else {
         chunks[firstChunk] = first.slice(excess);
