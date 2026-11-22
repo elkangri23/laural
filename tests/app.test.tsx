@@ -83,6 +83,7 @@ afterEach(async () => {
   root = undefined;
   host.remove();
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 test("recupera y guarda el tema y el modo desde Configuración", async () => {
@@ -353,6 +354,7 @@ test("agrupa deltas del chat y conserva el contenido final", async () => {
 });
 
 test("agrupa fragmentos de salida y vacía el último lote al cerrar el bloque", async () => {
+  vi.useFakeTimers();
   await act(async () => root!.render(<App />));
   await act(async () => buttonIncluding("Bloques").click());
   await act(async () => host.querySelector<HTMLButtonElement>('[data-testid="begin-command"]')!.click());
@@ -362,7 +364,9 @@ test("agrupa fragmentos de salida y vacía el último lote al cerrar el bloque",
   await act(async () => host.querySelector<HTMLButtonElement>('[data-testid="output-two"]')!.click());
   expect(mocks.terminalPaneRenderCount).toBe(rendersAfterCommandStart);
 
-  await act(async () => new Promise((resolve) => window.setTimeout(resolve, 50)));
+  await act(async () => { await vi.advanceTimersByTimeAsync(49); });
+  expect(host.querySelector(".command-block pre")?.textContent).toBe("Sin salida capturada.");
+  await act(async () => { await vi.advanceTimersByTimeAsync(1); });
   expect(mocks.terminalPaneRenderCount).toBe(rendersAfterCommandStart);
   expect(host.querySelector(".command-block pre")?.textContent).toBe("primera segunda");
 

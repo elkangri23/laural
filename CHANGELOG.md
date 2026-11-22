@@ -9,6 +9,7 @@
 - Una regresión sintética confirma que 1.500 eventos PTY en una ráfaga producen una sola actualización de contexto, limitada a los últimos 24.000 caracteres; no representa una medición de CPU con carga real.
 - El acumulador de contexto PTY conserva fragmentos en una cola acotada, suelta referencias al recortarlos y une el texto una vez por lote.
 - Microbenchmark local del módulo real con Node 24: 1.500 fragmentos de 180 caracteres dieron una mediana de 0,127 ms con el acumulador nuevo frente a 2,789 ms con el anterior (22×); salidas idénticas. Es una medición aislada, no de la app completa.
+- Los bloques secundarios de comandos actualizan su estado a 20 Hz en vez de 30 Hz; el terminal visible sigue escribiendo al instante y los bloques vacían siempre el último fragmento al terminar.
 - La limpieza de contadores del limitador ahora trabaja en lotes de hasta 1.000 filas y evita consultas de purga simultáneas dentro de una misma instancia; una regresión PostgreSQL verifica el tamaño real del lote.
 - Nueva medición de recursos del proceso release abierto: durante 62 s y con PowerShell presente sin salida/chat, el árbol se mantuvo en 9 procesos, 108,2–108,3 MiB de working set y añadió 0,07 s de CPU. Arranque frío e instalación limpia siguen sin medirse.
 - Añadido un runbook de respuesta a incidentes del servicio de sync y actualizado el de recuperación de cuenta para reflejar TOTP/códigos implementados localmente. Se registró una segunda muestra de memoria en reposo de la app Windows y sus límites.

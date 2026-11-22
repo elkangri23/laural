@@ -148,6 +148,7 @@ Las regresiones Rust cubren fallo de formato/versión/secciones, parámetros y c
 - El acumulador PTY deja de reconstruir hasta 24.000 caracteres en cada fragmento: guarda partes acotadas, recorta mediante un índice y une solo al vaciar el lote. Regresiones comprueban equivalencia del sufijo, límites Unicode y 1.500 eventos; `terminalOutput.ts` queda con 100 % de líneas y ramas en la suite dirigida. La suite completa actualiza a 140/140 pruebas y 77,96 % de cobertura de líneas; la CPU real y memoria bajo carga siguen sin medirse.
 - El recorte del acumulador también libera en el acto las referencias a fragmentos descartados, evitando que el arreglo los retenga hasta la compactación periódica.
 - Microbenchmark local actualizado sobre el módulo real (`Node v24.22.1`, Windows): 1.500 fragmentos de 180 caracteres, cola útil de 24.000 caracteres, tres calentamientos y 15 muestras. La mediana fue 2,789 ms para el algoritmo anterior y 0,127 ms para el nuevo (22×); las cadenas finales coinciden. Mide solo el acumulador, no el render de xterm, IPC, CPU ni memoria del proceso Laural. Mantener pendiente la medición integral.
+- El estado React de los bloques secundarios se agrupa cada 50 ms (20 Hz) en vez de 33 ms (≈30 Hz), reduciendo hasta un tercio esas actualizaciones durante salida continua; xterm conserva la escritura inmediata y el cierre vacía la salida final. La regresión usa reloj simulado para comprobar el límite y el flush final.
 
 ## No planificado para el MVP
 

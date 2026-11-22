@@ -34,7 +34,7 @@ type PlanAction =
   | { type: "run_command"; command: string; reason: string; status?: string; result?: string }
   | { type: "write_file"; path: string; content: string; reason: string; status?: string; result?: string };
 type AgentPlan = { summary: string; actions: PlanAction[] };
-const COMMAND_OUTPUT_BATCH_MS = 33;
+const COMMAND_OUTPUT_BATCH_MS = 50;
 const MAX_COMMAND_BLOCKS = 80;
 const MAX_COMMAND_HISTORY = 100;
 const MAX_OPEN_TERMINALS = 16;
