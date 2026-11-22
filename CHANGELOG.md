@@ -2,6 +2,7 @@
 
 ## Sin publicar
 
+- Añadido un runbook de respuesta a incidentes del servicio de sync y actualizado el de recuperación de cuenta para reflejar TOTP/códigos implementados localmente. Se registró una segunda muestra de memoria en reposo de la app Windows y sus límites.
 - Mejorado el rendimiento del streaming: los fragmentos del asistente se agrupan cada 50 ms y Markdown evita renderizar mensajes que no cambiaron. La terminal limita a 16 sesiones y cada PTY envía eventos solo a su propia pestaña, con menos eventos por salida.
 - Añadidas regresiones para el límite de terminales y el renderizado agrupado del chat. Auditoría actual: npm sin vulnerabilidades conocidas; se mantienen documentados los avisos transitivos Rust sin parche compatible.
 - Endurecida la autorización del agente ante evaluación de comandos y cambios persistentes del shell: `eval`, `source`, dot-sourcing, traps, asignaciones compuestas como `PATH+=...` y cambios de variables de sesión/entorno en CMD, PowerShell, Bash y WSL ahora requieren revisión manual. Consultas simples como `$env:PATH` siguen permitidas; perfiles personalizados siguen fuera del alcance.

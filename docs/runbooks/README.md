@@ -4,4 +4,5 @@ Procedimientos manuales para operar el servicio de sincronización y responder a
 
 | Procedimiento | Propósito | Estado |
 | --- | --- | --- |
-| [Recuperación de cuenta](recuperacion-cuenta.md) | Recuperar factores perdidos sin permitir que el PIN de correo los retire | Documentado; no habilitable hasta implementar MFA/códigos y ensayar en el VPS |
+| [Respuesta a incidentes](respuesta-incidentes.md) | Contener compromisos, caídas, exposición de secretos y pérdida/divergencia de snapshots | Borrador; completar datos del VPS y ensayar antes de habilitar cuentas externas |
+| [Recuperación de cuenta](recuperacion-cuenta.md) | Recuperar acceso sin permitir que el PIN de correo retire MFA | Flujos TOTP/códigos implementados localmente; recuperación administrativa y ensayo VPS pendientes |
