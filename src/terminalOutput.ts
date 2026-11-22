@@ -1,6 +1,7 @@
 export const COMMAND_BLOCK_OUTPUT_LIMIT = 8_000;
 const TERMINAL_CONTEXT_OUTPUT_LIMIT = 24_000;
 const TERMINAL_TEXT_BATCH_MS = 16;
+const TERMINAL_TEXT_BATCH_COMPACT_THRESHOLD = 256;
 
 export function appendTerminalOutput(
   previous: string,
@@ -12,29 +13,79 @@ export function appendTerminalOutput(
   return first >= 0xdc00 && first <= 0xdfff ? tail.slice(1) : tail;
 }
 
+function createBoundedTextBuffer(limit: number) {
+  let chunks: string[] = [];
+  let firstChunk = 0;
+  let length = 0;
+
+  function push(text: string) {
+    if (text.length >= limit) {
+      chunks = [text.slice(-limit)];
+      firstChunk = 0;
+      length = limit;
+      return;
+    }
+
+    chunks.push(text);
+    length += text.length;
+    while (length > limit) {
+      const excess = length - limit;
+      const first = chunks[firstChunk];
+      if (first.length <= excess) {
+        length -= first.length;
+        firstChunk += 1;
+      } else {
+        chunks[firstChunk] = first.slice(excess);
+        length -= excess;
+      }
+    }
+
+    if (firstChunk >= TERMINAL_TEXT_BATCH_COMPACT_THRESHOLD && firstChunk * 2 >= chunks.length) {
+      chunks = chunks.slice(firstChunk);
+      firstChunk = 0;
+    }
+  }
+
+  function take() {
+    if (length === 0) return "";
+    const text = chunks.slice(firstChunk).join("");
+    chunks = [];
+    firstChunk = 0;
+    length = 0;
+    const first = text.charCodeAt(0);
+    return first >= 0xdc00 && first <= 0xdfff ? text.slice(1) : text;
+  }
+
+  function clear() {
+    chunks = [];
+    firstChunk = 0;
+    length = 0;
+  }
+
+  return { push, take, clear };
+}
+
 export function createTerminalTextBatcher(onText: (text: string) => void, delayMs = TERMINAL_TEXT_BATCH_MS) {
-  let pending = "";
+  const pending = createBoundedTextBuffer(TERMINAL_CONTEXT_OUTPUT_LIMIT);
   let timer: ReturnType<typeof setTimeout> | null = null;
 
   function flush() {
     if (timer !== null) clearTimeout(timer);
     timer = null;
-    if (!pending) return;
-    const text = pending;
-    pending = "";
-    onText(text);
+    const text = pending.take();
+    if (text) onText(text);
   }
 
   function push(text: string) {
     if (!text) return;
-    pending = appendTerminalOutput(pending, text, TERMINAL_CONTEXT_OUTPUT_LIMIT);
+    pending.push(text);
     if (timer === null) timer = setTimeout(flush, delayMs);
   }
 
   function cancel() {
     if (timer !== null) clearTimeout(timer);
     timer = null;
-    pending = "";
+    pending.clear();
   }
 
   return { push, flush, cancel };

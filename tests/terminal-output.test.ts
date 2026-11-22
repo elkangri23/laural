@@ -65,6 +65,31 @@ test("reduce una ráfaga PTY de 1.500 eventos a una actualización acotada", () 
   expect(onText).toHaveBeenCalledWith(expected.slice(-24_000));
 });
 
+test("conserva el mismo sufijo al recortar fragmentos Unicode entre lotes", () => {
+  vi.useFakeTimers();
+  const onText = vi.fn();
+  const batcher = createTerminalTextBatcher(onText, 16);
+  const chunks = [`\ud83d\ude00${"x".repeat(23_999)}`, "y".repeat(4), "z"];
+  const expected = chunks.reduce((output, chunk) => appendTerminalOutput(output, chunk), "");
+
+  chunks.forEach(chunk => batcher.push(chunk));
+  batcher.flush();
+
+  expect(onText).toHaveBeenCalledWith(expected);
+});
+
+test("no devuelve un sustituto bajo aislado al recortar una ráfaga grande", () => {
+  vi.useFakeTimers();
+  const onText = vi.fn();
+  const batcher = createTerminalTextBatcher(onText, 16);
+  const chunk = `\ud83d\ude00${"x".repeat(23_999)}`;
+
+  batcher.push(chunk);
+  batcher.flush();
+
+  expect(onText).toHaveBeenCalledWith(appendTerminalOutput("", chunk));
+});
+
 test("ignora fragmentos vacíos y el vaciado de una cola vacía", () => {
   vi.useFakeTimers();
   const onText = vi.fn();
