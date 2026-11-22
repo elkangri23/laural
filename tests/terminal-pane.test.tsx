@@ -203,6 +203,24 @@ test("captura el texto corregido con ambos códigos de Retroceso", async () => {
   ]);
 });
 
+test("no atribuye un comando incorrecto tras atajos de edición de línea", async () => {
+  await act(async () => root!.render(pane()));
+  const input = onData.mock.calls[0][0];
+
+  await act(async () => {
+    for (const key of ["\x01", "\x05", "\x0b", "\x15", "\x16", "\x17", "\x1f", "\x1b[A"]) {
+      input("git status");
+      input(key);
+      input("--short\r");
+    }
+  });
+
+  expect(submit.mock.calls).toEqual(Array.from({ length: 8 }, () => [
+    "uno",
+    "Comando editado en el shell; texto no capturado",
+  ]));
+});
+
 test("marca como editada la línea que el usuario modifica dentro del shell", async () => {
   await act(async () => root!.render(pane()));
   const input = onData.mock.calls[0][0];

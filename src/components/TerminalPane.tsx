@@ -8,6 +8,7 @@ import "@xterm/xterm/css/xterm.css";
 
 type Shell = "powershell" | "cmd" | "wsl" | "git-bash";
 const TERMINAL_SCROLLBACK_LINES = 2_500;
+const UNTRACKED_LINE_EDIT_KEYS = /[\u0001\u0004\u0005\u000b\u0015\u0016\u0017\u001f]/;
 type OutputEvent = { terminalId: string; data: number[] };
 type TerminalRequest = { sequence: number; terminalId: string };
 type TerminalPaneProps = { terminalId: string; shell: Shell; cwd: string | null; visible: boolean; active: boolean; copyRequest: TerminalRequest; clearRequest: TerminalRequest; onActionNotice: (message: string) => void; onRestart: (terminalId: string) => void; theme: ThemeDefinition; appearance: AppearanceMode; onTextOutput: (terminalId: string, text: string) => void; onCommandSubmit: (terminalId: string, command: string) => void; onCommandFinish: (terminalId: string, exitCode: number | null) => void };
@@ -69,25 +70,23 @@ function TerminalPane({ terminalId, shell, cwd, visible, active, copyRequest, cl
     const inputSubscription = terminal.onData((data) => {
       if (disposed || exited) return;
       if (data.includes("\u0003")) commandLine = "";
-      if (data.startsWith("\u001b")) commandLine = null;
-      else {
-        for (const character of data) {
-          if (character === "\r") {
-            skipLineFeed = true;
-            if (commandLine?.trim()) onCommandSubmit(terminalId, commandLine.trim());
-            else if (commandLine === null) onCommandSubmit(terminalId, "Comando editado en el shell; texto no capturado");
-            commandLine = "";
-          } else if (character === "\n" && skipLineFeed) {
-            skipLineFeed = false;
-          } else if (character === "\n") {
-            if (commandLine?.trim()) onCommandSubmit(terminalId, commandLine.trim());
-            else if (commandLine === null) onCommandSubmit(terminalId, "Comando editado en el shell; texto no capturado");
-            commandLine = "";
-          } else if (character === "\u007f" || character === "\b") {
-            if (commandLine && commandLine.length > 0) commandLine = commandLine.slice(0, -1);
-          } else if (character >= " " && character !== "\u007f") {
-            commandLine = commandLine === null ? null : commandLine + character;
-          }
+      else if (data.includes("\u001b") || UNTRACKED_LINE_EDIT_KEYS.test(data)) commandLine = null;
+      for (const character of data) {
+        if (character === "\r") {
+          skipLineFeed = true;
+          if (commandLine?.trim()) onCommandSubmit(terminalId, commandLine.trim());
+          else if (commandLine === null) onCommandSubmit(terminalId, "Comando editado en el shell; texto no capturado");
+          commandLine = "";
+        } else if (character === "\n" && skipLineFeed) {
+          skipLineFeed = false;
+        } else if (character === "\n") {
+          if (commandLine?.trim()) onCommandSubmit(terminalId, commandLine.trim());
+          else if (commandLine === null) onCommandSubmit(terminalId, "Comando editado en el shell; texto no capturado");
+          commandLine = "";
+        } else if (character === "\u007f" || character === "\b") {
+          if (commandLine && commandLine.length > 0) commandLine = commandLine.slice(0, -1);
+        } else if (character >= " " && character !== "\u007f") {
+          commandLine = commandLine === null ? null : commandLine + character;
         }
       }
       if (!data.includes("\r") && !data.includes("\n")) skipLineFeed = false;
