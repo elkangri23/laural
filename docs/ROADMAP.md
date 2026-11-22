@@ -72,7 +72,7 @@ Estado al 22 de noviembre de 2026. «Implementado» describe código presente; �
 
 - Aplicada CSP local y retirada la capacidad `opener` no utilizada.
 - Acotadas respuestas de proveedor, enumeración de proyectos, escrituras, datos IPC y concurrencia de consultas.
-- npm audit sin vulnerabilidades conocidas. Cargo audit conserva avisos de mantenimiento y una advertencia GLib de la cadena Linux de Tauri; revisar el árbol al actualizar Tauri.
+- CI ejecuta `npm audit --audit-level=moderate` en escritorio y servicio y `cargo audit --deny unsound`. Las cinco advertencias de crates Rust sin mantenimiento quedan visibles; RUSTSEC-2024-0429 se excluye del gate porque GLib/GTK3 solo entra en el target Linux, no está en el árbol Windows y no se encontró uso de `VariantStrIter` en el código de Laural. Revisar esta excepción al cambiar Tauri o habilitar Linux.
 - Pendiente una prueba manual de instalación limpia, revisión de firma/actualización y ensayos de agente con perfiles personalizados. La auditoría no certifica sandbox del terminal.
 
 ## Después del MVP
@@ -125,6 +125,7 @@ Las regresiones Rust cubren fallo de formato/versión/secciones, parámetros y c
 - La integración aislada aplica siete migraciones en PostgreSQL real y verifica límites concurrentes compartidos, renovación de ventana, autenticación, restablecimiento, MFA, outbox de seguridad y reintento idempotente. CI ejecuta esa suite con PostgreSQL temporal. Falta validar cabeceras de IP detrás de Caddy en el VPS.
 - Runbook de recuperación documentado: código de un uso o revisión manual del administrador con PIN de buzón más prueba de titularidad preexistente e independiente; sin ella se deniega la retirada de factores. TOTP, códigos y cola de avisos integrados localmente; siguen faltando passkeys, el mecanismo administrativo local al VPS y ensayo del procedimiento.
 - Fijar límites de cuenta/dispositivo/solicitud, monitorización y procedimiento de incidentes.
+- CI comprueba avisos npm de severidad moderada o superior y fallos de soundness Rust; cinco crates transitivos sin mantenimiento siguen avisados y sin versión corregida. La única excepción de soundness es GLib/GTK3 de Linux, fuera del primer target Windows y sin llamadas a `VariantStrIter` en el código revisado.
 - CI exige ahora al menos 85 % de cobertura de líneas en `agent_files.rs`, `configuration_transfer.rs` y `git_panel.rs`; pruebas del verificador comprueban módulos ausentes, datos inválidos y regresiones bajo el umbral. Pendiente establecer y cumplir un umbral de ramas para lógica crítica; la instrumentación actual de Rust no informa ramas.
 - Continúan pendientes la revisión de seguridad, instalación/actualización Windows y plan de incidentes.
 

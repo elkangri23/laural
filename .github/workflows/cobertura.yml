@@ -17,8 +17,16 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-llvm-cov@0.9.1
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit@0.22.2
       - run: npm ci
+      - name: Auditar dependencias JavaScript de escritorio
+        run: npm audit --audit-level=moderate
       - run: npm run build
+      - name: Auditar dependencias Rust
+        # RUSTSEC-2024-0429 llega por GTK3/Linux; Laural se publica primero en Windows y no usa VariantStrIter.
+        run: cargo audit --file src-tauri/Cargo.lock --ignore RUSTSEC-2024-0429 --deny unsound
       - run: npm run test:coverage
       - run: cargo llvm-cov report --summary-only
         working-directory: src-tauri
@@ -59,6 +67,9 @@ jobs:
           cache: npm
           cache-dependency-path: server/package-lock.json
       - run: npm ci
+        working-directory: server
+      - name: Auditar dependencias del servicio
+        run: npm audit --audit-level=moderate
         working-directory: server
       - run: npm run build
         working-directory: server

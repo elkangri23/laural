@@ -55,6 +55,8 @@ En Windows, instala el instrumental Rust una vez con `rustup component add llvm-
 
 Abre `coverage/index.html` para la interfaz y `src-tauri/target/llvm-cov/html/index.html` para Rust. GitHub Actions publica ambos informes en el artefacto informes-cobertura y falla si la cobertura de líneas de `agent_files.rs`, `configuration_transfer.rs` o `git_panel.rs` baja del 85 %. El verificador también falla si falta un módulo o su cobertura es ambigua o inválida. Interpreta los porcentajes por capa. Las pruebas de instalación, PTY y conexión con proveedores requieren validación adicional.
 
+Cada push y pull request también audita dependencias: `npm audit --audit-level=moderate` para escritorio y servicio, y `cargo audit --deny unsound` para Rust. La excepción Linux de GLib/GTK3 está documentada en el [informe de seguridad](../security/audit-report.md) y debe revisarse antes de publicar para Linux.
+
 ## Publicar una release con actualizador
 
 Incrementa la misma versión semántica en `package.json`, `src-tauri/Cargo.toml` y `src-tauri/tauri.conf.json`, actualiza `CHANGELOG.md` y crea una etiqueta `v<versión>`. El workflow `.github/workflows/windows-release.yml` compila NSIS x64, firma los artefactos, crea la release alpha y actualiza `updates/latest.json` en `main`.
