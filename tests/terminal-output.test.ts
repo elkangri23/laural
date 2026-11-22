@@ -47,6 +47,36 @@ test("agrupa la captura de texto PTY y limita la cola al sufijo útil", () => {
   expect(onText).toHaveBeenLastCalledWith("x".repeat(24_000));
 });
 
+test("reduce una ráfaga PTY de 1.500 eventos a una actualización acotada", () => {
+  vi.useFakeTimers();
+  const onText = vi.fn();
+  const batcher = createTerminalTextBatcher(onText, 16);
+  let expected = "";
+
+  for (let index = 0; index < 1_500; index += 1) {
+    const fragment = `evento-${index}: ${"salida".repeat(8)}\n`;
+    expected += fragment;
+    batcher.push(fragment);
+  }
+
+  vi.advanceTimersByTime(16);
+
+  expect(onText).toHaveBeenCalledTimes(1);
+  expect(onText).toHaveBeenCalledWith(expected.slice(-24_000));
+});
+
+test("ignora fragmentos vacíos y el vaciado de una cola vacía", () => {
+  vi.useFakeTimers();
+  const onText = vi.fn();
+  const batcher = createTerminalTextBatcher(onText, 16);
+
+  batcher.push("");
+  batcher.flush();
+  vi.advanceTimersByTime(16);
+
+  expect(onText).not.toHaveBeenCalled();
+});
+
 test("cancelar descarta la captura pendiente", () => {
   vi.useFakeTimers();
   const onText = vi.fn();
