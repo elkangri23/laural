@@ -43,7 +43,7 @@ beforeEach(() => {
   root = createRoot(host);
   listen.mockImplementation(async (name, fn) => {
     handlers.set(name, fn);
-    return name === "terminal-output" ? removeOutput : removeExit;
+    return name === "terminal-output-uno" ? removeOutput : removeExit;
   });
   onData.mockReturnValue({ dispose() {} });
   registerOscHandler.mockReturnValue({ dispose() {} });
@@ -58,19 +58,20 @@ afterEach(async () => { await unmount(); vi.unstubAllGlobals(); });
 test("ocultar la pestaña conserva el proceso y su salida; salir permite reiniciar", async () => {
   await act(async () => root!.render(pane()));
   await act(async () => root!.render(pane(false)));
-  handlers.get("terminal-output")!({ payload: { terminalId: "uno", data: [65] } });
+  handlers.get("terminal-output-uno")!({ payload: { data: [65] } });
   expect(output).toHaveBeenCalledWith("uno", "A");
   await act(async () => root!.render(pane()));
   expect(invoke.mock.calls.filter(([name]) => name === "create_terminal")).toHaveLength(1);
-  await act(async () => handlers.get("terminal-exit")!({ payload: "otro" }));
   expect(host.querySelector("button")).toBeNull();
-  await act(async () => handlers.get("terminal-exit")!({ payload: "uno" }));
+  await act(async () => handlers.get("terminal-exit-uno")!({ payload: undefined }));
   expect(finished).toHaveBeenCalledWith("uno", null);
   host.querySelector("button")!.click();
   expect(restart).toHaveBeenCalledOnce();
   await unmount();
   expect(removeOutput).toHaveBeenCalledOnce();
   expect(removeExit).toHaveBeenCalledOnce();
+  expect(listen).toHaveBeenCalledWith("terminal-output-uno", expect.any(Function));
+  expect(listen).toHaveBeenCalledWith("terminal-exit-uno", expect.any(Function));
   expect(invoke).toHaveBeenCalledWith("close_terminal", { terminalId: "uno" });
 });
 

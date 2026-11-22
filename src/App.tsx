@@ -36,6 +36,8 @@ type AgentPlan = { summary: string; actions: PlanAction[] };
 const COMMAND_OUTPUT_BATCH_MS = 33;
 const MAX_COMMAND_BLOCKS = 80;
 const MAX_COMMAND_HISTORY = 100;
+const MAX_OPEN_TERMINALS = 16;
+const CHAT_DELTA_BATCH_MS = 50;
 const SYNC_RISK_ACK_KEY = "laural.sync-risk-ack.v1";
 
 const shellNames: Record<Shell, string> = {
@@ -501,6 +503,10 @@ function App() {
   }
 
   function addTerminal(shell: Shell, cwd: string | null = projectPath) {
+    if (tabs.length >= MAX_OPEN_TERMINALS) {
+      setTerminalActionNotice(`Puedes mantener abiertas hasta ${MAX_OPEN_TERMINALS} terminales.`);
+      return;
+    }
     const count = tabs.filter((tab) => tab.shell === shell).length + 1;
     const title = count === 1 ? shellNames[shell] : `${shellNames[shell]} ${count}`;
     const nextTab = { id: crypto.randomUUID(), shell, title, cwd };
@@ -648,9 +654,25 @@ function App() {
     setChatBusy(true);
     activeChatRequestRef.current = requestId;
     let unlisten: (() => void) | undefined;
+    let pendingDelta = "";
+    let deltaTimer: number | undefined;
+    const flushDelta = () => {
+      if (deltaTimer !== undefined) {
+        window.clearTimeout(deltaTimer);
+        deltaTimer = undefined;
+      }
+      if (!pendingDelta) return;
+      const delta = pendingDelta;
+      pendingDelta = "";
+      setChatMessages((current) => current.map((message) => message.id === assistantMessageId ? { ...message, content: message.content + delta } : message));
+    };
+    const queueDelta = (delta: string) => {
+      pendingDelta += delta;
+      if (deltaTimer === undefined) deltaTimer = window.setTimeout(flushDelta, CHAT_DELTA_BATCH_MS);
+    };
     void listen<{ requestId: string; delta: string }>("chat-stream-delta", (event) => {
       if (event.payload.requestId !== requestId) return;
-      setChatMessages((current) => current.map((message) => message.id === assistantMessageId ? { ...message, content: message.content + event.payload.delta } : message));
+      queueDelta(event.payload.delta);
     }).then((stopListening) => {
       unlisten = stopListening;
       return invoke("send_chat_stream", {
@@ -662,9 +684,11 @@ function App() {
       gitDiffContext,
       });
     }).catch((error) => {
+      flushDelta();
       const message = String(error);
       setChatMessages((current) => current.map((item) => item.id === assistantMessageId ? { ...item, content: item.content ? `${item.content}\n\n[${message}]` : `No se pudo completar la consulta: ${message}` } : item));
     }).finally(() => {
+      flushDelta();
       unlisten?.();
       activeChatRequestRef.current = null;
       setChatBusy(false);

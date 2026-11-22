@@ -43,6 +43,15 @@
 - La sustitución de un archivo existente consta de dos renombrados para conservar un backup y rechazar destinos concurrentes. Si Laural se interrumpe entre ambos, el archivo puede faltar hasta restaurar su versión desde `.laural-backups`.
 - No se probó malware local, una cadena de suministro comprometida, instalación limpia, escape del sandbox del WebView ni seguridad del sistema operativo. La firma del updater no equivale a Authenticode ni protege frente a una cuenta/repositorio o clave privada comprometidos.
 
+## Revisión de seguridad y rendimiento (22-11-2026)
+
+- `npm audit --audit-level=low` en escritorio y `server`: 0 vulnerabilidades conocidas en ambos árboles npm.
+- `cargo audit --deny unsound --ignore RUSTSEC-2024-0429`: pasa con la excepción documentada de GLib/GTK3. Permanecen cinco avisos transitivos `unmaintained` sin versión corregida disponible; no se elevaron a vulnerabilidades explotables.
+- Resistencia PTY: límite de 16 sesiones simultáneas por proceso y validación estricta del identificador usado para formar nombres de eventos. Las salidas se envían al canal de su sesión, evitando difusión a cada terminal abierta; el búfer de lectura sube a 32 KiB para reducir eventos pequeños.
+- Renderizado del asistente: los deltas de respuesta se agrupan en lotes de 50 ms y el componente Markdown queda memorizado por contenido, evitando volver a parsear mensajes anteriores en cada actualización.
+- Las regresiones cubren el límite de sesiones, el enrutamiento de eventos PTY y la agregación del streaming. Queda pendiente medir CPU/memoria en una instalación Windows limpia con carga simultánea sostenida.
+- Verificación local: UI 128/128 (76,59 % de líneas); servicio 114 pasadas y 7 omitidas por requerir `TEST_DATABASE_URL` (80,35 % de líneas); Rust 114 pasadas y 1 ignorada. `npm run build`, pruebas de política de cobertura (7/7), `cargo fmt --check` y auditorías npm pasan. `cargo llvm-cov` ejecuta las pruebas, pero no genera perfiles con Windows/MSVC (`no coverage data found`); la cobertura Rust se mide en CI Linux.
+
 ## Verificación
 
 La auditoría inicial ejecutó `git diff --check`, auditoría npm/Rust, pruebas frontend con cobertura, tests Rust, compilación Tauri y build frontend. No se probó el login contra un servicio habilitado ni contra PostgreSQL/Resend reales. La revisión estática no sustituye una prueba de penetración ni la validación manual del instalador/actualizador.

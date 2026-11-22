@@ -4,8 +4,9 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import App from "../src/App";
 
-const mocks = vi.hoisted(() => ({ invoke: vi.fn(), open: vi.fn(), terminalPaneRenderCount: 0, terminalRequests: [] as Array<{ terminalId: string; copySequence: number; copyTarget: string; clearSequence: number; clearTarget: string }> }));
+const mocks = vi.hoisted(() => ({ invoke: vi.fn(), open: vi.fn(), listen: vi.fn(), terminalPaneRenderCount: 0, terminalRequests: [] as Array<{ terminalId: string; copySequence: number; copyTarget: string; clearSequence: number; clearTarget: string }> }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: mocks.invoke }));
+vi.mock("@tauri-apps/api/event", () => ({ listen: mocks.listen }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open: mocks.open }));
 vi.mock("../src/components/TerminalPane", async () => {
   const { memo } = await import("react");
@@ -69,6 +70,7 @@ beforeEach(() => {
     return undefined;
   });
   mocks.open.mockReset();
+  mocks.listen.mockReset().mockImplementation(async () => () => undefined);
   mocks.terminalPaneRenderCount = 0;
   mocks.terminalRequests.length = 0;
   host = document.createElement("div");
@@ -287,6 +289,55 @@ test("crea una pestaña del shell elegido y alterna la división de terminal", a
   expect(host.querySelector<HTMLButtonElement>('[aria-label^="División horizontal"]')).not.toBeNull();
   await act(async () => host.querySelector<HTMLButtonElement>('[aria-label^="División horizontal"]')!.click());
   expect(host.querySelector<HTMLButtonElement>('[aria-label="Dividir panel"]')).not.toBeNull();
+});
+
+test("limita a 16 las terminales abiertas", async () => {
+  await act(async () => root!.render(<App />));
+  for (let index = 1; index < 16; index += 1) {
+    await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Nueva terminal"]')!.click());
+    await act(async () => host.querySelector<HTMLButtonElement>(".shell-menu button")!.click());
+  }
+  expect(host.querySelectorAll('[aria-label="Sesiones de terminal"] [role="tab"]')).toHaveLength(16);
+
+  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Nueva terminal"]')!.click());
+  await act(async () => host.querySelector<HTMLButtonElement>(".shell-menu button")!.click());
+  expect(host.querySelectorAll('[aria-label="Sesiones de terminal"] [role="tab"]')).toHaveLength(16);
+  expect(host.querySelector(".terminal-action-notice")?.textContent).toContain("16");
+});
+
+test("agrupa deltas del chat y conserva el contenido final", async () => {
+  let finishRequest: (() => void) | undefined;
+  mocks.invoke.mockImplementation(async (command: string) => {
+    if (command === "get_provider") return { id: "local", name: "Local", model: "test" };
+    if (command === "get_providers") return [{ id: "local", name: "Local", model: "test" }];
+    if (command === "get_agent_settings") return { mode: "review", allowedPrefixes: ["git status", "git diff"], backupRetention: null };
+    if (command === "send_chat_stream") return new Promise<void>((resolve) => { finishRequest = resolve; });
+    return undefined;
+  });
+  let onDelta: ((event: { payload: { requestId: string; delta: string } }) => void) | undefined;
+  mocks.listen.mockImplementation(async (_topic: string, callback: typeof onDelta) => {
+    onDelta = callback;
+    return () => undefined;
+  });
+  await act(async () => root!.render(<App />));
+  const composer = host.querySelector<HTMLTextAreaElement>(".composer textarea")!;
+  await act(async () => {
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+    setter?.call(composer, "Hola");
+    composer.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => host.querySelector<HTMLButtonElement>(".send-button")!.click());
+  await act(async () => Promise.resolve());
+  const requestId = mocks.invoke.mock.calls.find(([command]) => command === "send_chat_stream")?.[1]?.requestId as string;
+  expect(onDelta).toBeTypeOf("function");
+  await act(async () => {
+    onDelta?.({ payload: { requestId, delta: "Hola " } });
+    onDelta?.({ payload: { requestId, delta: "mundo" } });
+  });
+  await act(async () => new Promise((resolve) => window.setTimeout(resolve, 60)));
+  const assistantMessages = host.querySelectorAll(".chat-message.assistant");
+  expect(assistantMessages[assistantMessages.length - 1]?.textContent).toContain("Hola mundo");
+  await act(async () => { finishRequest?.(); await Promise.resolve(); });
 });
 
 test("agrupa fragmentos de salida y vacía el último lote al cerrar el bloque", async () => {

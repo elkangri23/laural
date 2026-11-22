@@ -44,11 +44,14 @@ struct PtyState {
 
 const MAX_TERMINAL_ID_BYTES: usize = 100;
 const MAX_TERMINAL_INPUT_BYTES: usize = 1_000_000;
+const MAX_TERMINAL_SESSIONS: usize = 16;
 
 fn valid_terminal_id(terminal_id: &str) -> bool {
     !terminal_id.trim().is_empty()
         && terminal_id.len() <= MAX_TERMINAL_ID_BYTES
-        && !terminal_id.chars().any(char::is_control)
+        && terminal_id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
 }
 
 fn validate_terminal_input(data: &str) -> Result<(), String> {
@@ -81,7 +84,6 @@ impl PtyStore {
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct TerminalOutput {
-    terminal_id: String,
     data: Vec<u8>,
 }
 
@@ -192,6 +194,9 @@ fn create_terminal(
     if state.sessions.contains_key(&terminal_id) {
         return Ok(());
     }
+    if state.sessions.len() >= MAX_TERMINAL_SESSIONS {
+        return Err("Has alcanzado el límite de 16 terminales abiertas.".into());
+    }
 
     let mut command = shell_command(&shell)?;
     if let Some(cwd) = cwd {
@@ -239,17 +244,17 @@ fn create_terminal(
     thread::Builder::new()
         .name(format!("laural-pty-{terminal_id}"))
         .spawn(move || {
-            let terminal_id = reader_id;
-            let mut buffer = [0_u8; 8192];
+            let output_event = format!("terminal-output-{reader_id}");
+            let exit_event = format!("terminal-exit-{reader_id}");
+            let mut buffer = [0_u8; 32 * 1024];
             loop {
                 match reader.read(&mut buffer) {
                     Ok(0) | Err(_) => break,
                     Ok(length) => {
                         if app
                             .emit(
-                                "terminal-output",
+                                &output_event,
                                 TerminalOutput {
-                                    terminal_id: terminal_id.clone(),
                                     data: buffer[..length].to_vec(),
                                 },
                             )
@@ -260,7 +265,7 @@ fn create_terminal(
                     }
                 }
             }
-            let _ = app.emit("terminal-exit", terminal_id);
+            let _ = app.emit(&exit_event, ());
         })
         .map_err(|error| format!("No se pudo iniciar la lectura de la terminal: {error}"))?;
 
@@ -537,6 +542,26 @@ pub fn run() {
                 app.state::<PtyStore>().shutdown();
             }
         });
+}
+
+#[cfg(test)]
+mod terminal_policy_tests {
+    use super::*;
+
+    #[test]
+    fn terminal_ids_only_allow_safe_event_name_characters() {
+        assert!(valid_terminal_id("550e8400-e29b-41d4-a716-446655440000"));
+        assert!(!valid_terminal_id("terminal/output"));
+        assert!(!valid_terminal_id("terminal\noutput"));
+        assert!(!valid_terminal_id("sesión"));
+        assert!(!valid_terminal_id(&"x".repeat(MAX_TERMINAL_ID_BYTES + 1)));
+    }
+
+    #[test]
+    fn keeps_a_fixed_limit_on_open_terminal_sessions() {
+        assert!(MAX_TERMINAL_SESSIONS > 0);
+        assert_eq!(MAX_TERMINAL_SESSIONS, 16);
+    }
 }
 
 #[cfg(all(test, windows))]

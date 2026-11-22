@@ -9,7 +9,7 @@ import "@xterm/xterm/css/xterm.css";
 type Shell = "powershell" | "cmd" | "wsl" | "git-bash";
 const TERMINAL_SCROLLBACK_LINES = 2_500;
 const UNTRACKED_LINE_EDIT_KEYS = /[\u0001-\u0002\u0004-\u0007\u0009\u000b\u000c\u000e-\u001f]/;
-type OutputEvent = { terminalId: string; data: number[] };
+type OutputEvent = { data: number[] };
 type TerminalRequest = { sequence: number; terminalId: string };
 type TerminalPaneProps = { terminalId: string; shell: Shell; cwd: string | null; visible: boolean; active: boolean; copyRequest: TerminalRequest; clearRequest: TerminalRequest; onActionNotice: (message: string) => void; onRestart: (terminalId: string) => void; theme: ThemeDefinition; appearance: AppearanceMode; onTextOutput: (terminalId: string, text: string) => void; onCommandSubmit: (terminalId: string, command: string) => void; onCommandFinish: (terminalId: string, exitCode: number | null) => void };
 
@@ -59,7 +59,7 @@ function TerminalPane({ terminalId, shell, cwd, visible, active, copyRequest, cl
       return mark === "A" || mark === "B" || mark === "C";
     });
     const onOutput = (event: { payload: OutputEvent }) => {
-      if (!disposed && event.payload.terminalId === terminalId) {
+      if (!disposed) {
         const bytes = new Uint8Array(event.payload.data);
         terminal.write(bytes);
         onTextOutput(terminalId, decoder.decode(bytes, { stream: true }));
@@ -110,11 +110,11 @@ function TerminalPane({ terminalId, shell, cwd, visible, active, copyRequest, cl
     const observer = new ResizeObserver(fitAndResize);
     observer.observe(host);
     async function start() {
-      const output = await listen<OutputEvent>("terminal-output", onOutput);
+      const output = await listen<OutputEvent>(`terminal-output-${terminalId}`, onOutput);
       if (disposed) { output(); return; }
       subscriptions.push(output);
-      const exit = await listen<string>("terminal-exit", ({ payload }) => {
-        if (disposed || payload !== terminalId) return;
+      const exit = await listen<void>(`terminal-exit-${terminalId}`, () => {
+        if (disposed) return;
         exited = true;
         isReady = false;
         setEnded(true);

@@ -120,6 +120,8 @@ Las regresiones Rust cubren fallo de formato/versión/secciones, parámetros y c
 
 ## M11 — Preparación para producción (pendiente)
 
+- Auditoría local 22-11-2026: auditorías npm sin vulnerabilidades conocidas; Rust conserva cinco avisos transitivos sin mantenimiento y la excepción GLib/GTK3 Linux documentada. Corregido el fan-out de eventos PTY, limitado a 16 sesiones y agrupado el streaming de chat a 50 ms. Falta medir consumo sostenido en una instalación limpia.
+
 - El riesgo de no tener copias fuera del VPS ya se documenta y se muestra antes de habilitar sync. Acordar si habrá una copia local de PostgreSQL y aclarar que no sobrevive a la pérdida del host.
 - Implementado un límite persistente de solicitudes por IP y ruta, con contador atómico en PostgreSQL, huella HMAC sin IP en claro y confianza de proxy restringida a loopback. Pendiente verificar migración/contención bajo carga con PostgreSQL y Caddy reales, calibrar umbrales y añadir alertas operativas.
 - La integración aislada aplica siete migraciones en PostgreSQL real y verifica límites concurrentes compartidos, renovación de ventana, autenticación, restablecimiento, MFA, outbox de seguridad y reintento idempotente. CI ejecuta esa suite con PostgreSQL temporal. Falta validar cabeceras de IP detrás de Caddy en el VPS.
@@ -133,6 +135,7 @@ Las regresiones Rust cubren fallo de formato/versión/secciones, parámetros y c
 
 - La entrada JavaScript bajó de 824 KB a 297 KB mediante división de terminal, Markdown y paneles secundarios. La terminal se carga en un bloque propio; Markdown y paneles se solicitan cuando se necesitan. Ningún bloque supera 500 KB.
 - Línea base preliminar en Windows release: 9 procesos del árbol, 107,9 MiB de working set y 258 MiB privados; cuatro mediciones en 34 segundos no detectaron variación al MiB. La instancia ya estaba abierta y no se reinició, por lo que no mide el arranque en frío ni el paquete instalado. Pendiente repetir en instalación limpia, medir arranque y muestrear durante uso de terminal/chat; dividir bloques no implica por sí solo una reducción del total de código que la app solicita al iniciar.
+- Auditoría 22-11-2026: los eventos PTY ya no se difunden a todas las terminales; el límite de 16 sesiones y los lotes de 50 ms para streaming reducen procesos y renders. Se añadieron regresiones; falta un muestreo de recursos prolongado en instalación limpia.
 
 ## No planificado para el MVP
 

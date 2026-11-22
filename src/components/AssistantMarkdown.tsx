@@ -1,3 +1,4 @@
+import { memo } from "react";
 import Markdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -20,10 +21,10 @@ function safeUrlTransform(url: string) {
   }
 }
 
-export function AssistantMarkdown({ content }: { content: string }) {
+export const AssistantMarkdown = memo(function AssistantMarkdown({ content }: { content: string }) {
   return <div className="markdown-content">
     <Markdown remarkPlugins={[remarkGfm]} components={components} urlTransform={safeUrlTransform}>
       {content}
     </Markdown>
   </div>;
-}
+});
