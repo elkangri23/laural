@@ -15,7 +15,9 @@ Windows no permite limitar `CTRL_C_EVENT` a un grupo de procesos. `CTRL_BREAK_EV
 - No enviar `CTRL_C_EVENT` ni `CTRL_BREAK_EVENT` sin aislamiento por sesión; una señal amplia puede interrumpir procesos ajenos.
 - No simular “detener comando” terminando el árbol completo de procesos: puede cerrar procesos de fondo y perder el estado del shell.
 - Mantener `Ctrl+C` como entrada PTY hasta implementar y probar una señal acotada a la sesión ConPTY seleccionada.
-- Antes de cambiar el backend, identificar el grupo de procesos que ejecuta el comando en primer plano dentro de cada shell. Crear solo el grupo del shell con `CREATE_NEW_PROCESS_GROUP` no detuvo `ping` en CMD. La siguiente prueba debe dirigir `CTRL_BREAK_EVENT` al grupo real del comando, sin grupo 0, y demostrar que el shell conserva el prompt y que otras terminales siguen intactas. Elegir una versión/fork de `portable-pty` o un backend alternativo solo después de probar la pertenencia a grupos de los procesos hijo.
+- No basar la solución en descubrir el grupo en primer plano mediante `GetConsoleProcessList`: la API solo devuelve PID conectados a la consola y no indica qué proceso/grupo está en primer plano. Microsoft la marca además como no recomendada y sin equivalente VT.
+- Antes de cambiar el backend, aislar si ConPTY convierte el byte `0x03` recibido por su pipe de entrada en una pulsación Ctrl+C para CMD y sus hijos. La prueba mínima debe comparar un comando largo y un proceso hijo interactivo, registrar si el byte llega al lector y verificar que el prompt vuelve. Si el contrato de entrada no permite interrumpir CMD de forma acotada, evaluar una integración específica del shell o una semántica explícita de terminar el proceso activo; no inferir el objetivo a partir de la lista de PID.
+- Cualquier alternativa debe demostrar que el shell conserva el prompt, que otras terminales permanecen intactas y que el cierre de Laural sigue limpiando procesos. Elegir una versión/fork de `portable-pty` o un backend alternativo solo tras tener esa prueba reproducible.
 
 ## Alternativas consideradas
 
@@ -39,4 +41,5 @@ Windows no permite limitar `CTRL_C_EVENT` a un grupo de procesos. `CTRL_BREAK_EV
 - [Microsoft: flags de creación de procesos](https://learn.microsoft.com/en-us/windows/win32/procthread/process-creation-flags)
 - [Microsoft: GenerateConsoleCtrlEvent](https://learn.microsoft.com/en-us/windows/console/generateconsolectrlevent)
 - [Microsoft: señales Ctrl+C y Ctrl+Break](https://learn.microsoft.com/en-us/windows/console/ctrl-c-and-ctrl-break-signals)
+- [Microsoft: GetConsoleProcessList](https://learn.microsoft.com/en-us/windows/console/getconsoleprocesslist)
 - `portable-pty` 0.9 local: `src/win/psuedocon.rs`, llamada `CreateProcessW`.
