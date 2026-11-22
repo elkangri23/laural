@@ -115,6 +115,18 @@ test("recupera y guarda el tema y el modo desde Configuración", async () => {
   expect(document.documentElement.dataset.mode).toBe("dark");
 });
 
+test("fuerza el guardado del historial del chat antes de ocultar la ventana", async () => {
+  const history = [{ role: "user", content: "mensaje pendiente" }];
+  localStorage.setItem("laural.chat.v1", JSON.stringify(history));
+  const setItem = vi.spyOn(Storage.prototype, "setItem");
+  await act(async () => root!.render(<App />));
+
+  expect(setItem.mock.calls.filter(([key]) => key === "laural.chat.v1")).toHaveLength(0);
+  await act(async () => window.dispatchEvent(new Event("pagehide")));
+
+  expect(setItem).toHaveBeenCalledWith("laural.chat.v1", JSON.stringify(history));
+});
+
 test("no inicia sincronización automática sin aceptar el riesgo del VPS", async () => {
   await act(async () => root!.render(<App />));
   await act(async () => { await new Promise((resolve) => setTimeout(resolve, 1_600)); });

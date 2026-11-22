@@ -55,6 +55,7 @@
 - Verificación del 22-11-2026: servicio con `npm run test:coverage` (116 pasadas, 8 omitidas por no configurar `TEST_DATABASE_URL`; 80,50 % de líneas, 79,04 % sentencias, 79,61 % ramas y 89,50 % funciones) y `npm run build`, ambos correctos. La suite de integración nueva crea 1.001 contadores vencidos y comprueba que una purga real deja uno para el lote siguiente; CI debe ejecutarla con PostgreSQL.
 - CI del commit `efebcc5` ejecutó 17/17 archivos de prueba del servicio con PostgreSQL real temporal y pasó compilación, cobertura de escritorio, Rust y ramas Rust. `request-rate-limit.ts` quedó con 100 % de sentencias, ramas, funciones y líneas; la prueba de 1.001 contadores confirmó la purga en un lote real.
 - Muestra de recursos del proceso release existente (22-11-2026): 9 procesos durante 62 s, 108,2–108,3 MiB de working set, 254,9–255,0 MiB privados y 0,07 s de CPU adicional. Había un shell PowerShell iniciado, sin salida generada ni chat activo. No reinicié ni instalé la app; queda pendiente medir instalación limpia, arranque frío y carga sostenida.
+- Reducida la persistencia sincrónica del chat: el historial, acotado a 100 mensajes de 20.000 caracteres, se escribe como máximo cada 500 ms durante streaming y se fuerza en `pagehide`. Antes, el efecto serializaba y escribía el historial completo en cada delta agrupado cada 50 ms. La suite UI pasó 132 pruebas con 76,96 % de cobertura de líneas; el módulo nuevo queda completamente cubierto. `npm run build` pasa. No se atribuye una mejora medida de CPU hasta probar streaming real.
 
 ## Verificación
 

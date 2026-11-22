@@ -1,4 +1,5 @@
 import { appendTerminalOutput, COMMAND_BLOCK_OUTPUT_LIMIT } from "./terminalOutput";
+import { createChatHistoryPersistence } from "./chatPersistence";
 import { HelpDialog, HelpIcon } from "./components/HelpDialog";
 import { BellIcon, NotificationCenter } from "./components/NotificationCenter";
 import { SettingsDialog } from "./components/SettingsDialog";
@@ -110,6 +111,8 @@ function App() {
       return Array.isArray(stored) ? stored.filter((item): item is ChatMessage => item && (item.role === "user" || item.role === "assistant") && typeof item.content === "string").slice(-100) : [];
     } catch { return []; }
   });
+  const chatHistoryPersistenceRef = useRef<ReturnType<typeof createChatHistoryPersistence> | null>(null);
+  if (chatHistoryPersistenceRef.current === null) chatHistoryPersistenceRef.current = createChatHistoryPersistence(localStorage);
   const [chatBusy, setChatBusy] = useState(false);
   const [contextFiles, setContextFiles] = useState<string[]>([]);
   const [gitDiffContext, setGitDiffContext] = useState("");
@@ -199,11 +202,17 @@ function App() {
   }
 
   useEffect(() => {
-    try {
-      const bounded = chatMessages.slice(-100).map(({ role, content }) => ({ role, content: content.slice(0, 20_000) }));
-      localStorage.setItem("laural.chat.v1", JSON.stringify(bounded));
-    } catch { /* Storage may be unavailable or full; chat can still continue in memory. */ }
+    chatHistoryPersistenceRef.current?.schedule(chatMessages);
   }, [chatMessages]);
+
+  useEffect(() => {
+    const persistBeforeHide = () => chatHistoryPersistenceRef.current?.flush();
+    window.addEventListener("pagehide", persistBeforeHide);
+    return () => {
+      window.removeEventListener("pagehide", persistBeforeHide);
+      chatHistoryPersistenceRef.current?.cancel();
+    };
+  }, []);
 
   useEffect(() => {
     void invoke<{ pending: boolean }>("get_preference_sync_status").then((status) => {
