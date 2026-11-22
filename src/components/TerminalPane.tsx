@@ -4,7 +4,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { terminalTheme, type AppearanceMode, type ThemeDefinition } from "../themes";
-import { createTerminalTextBatcher } from "../terminalOutput";
+import { createTerminalTextBatcher, terminalSizeChanged, type TerminalSize } from "../terminalOutput";
 import "@xterm/xterm/css/xterm.css";
 
 type Shell = "powershell" | "cmd" | "wsl" | "git-bash";
@@ -48,6 +48,7 @@ function TerminalPane({ terminalId, shell, cwd, visible, active, copyRequest, cl
     let writeQueue: Promise<void> = Promise.resolve();
     let started = false;
     let exited = false;
+    let lastSentSize: TerminalSize | null = null;
     const subscriptions: (() => void)[] = [];
     const decoder = new TextDecoder();
     const textBatcher = createTerminalTextBatcher((text) => onTextOutput(terminalId, text));
@@ -104,7 +105,11 @@ function TerminalPane({ terminalId, shell, cwd, visible, active, copyRequest, cl
       if (disposed || host.clientWidth === 0 || host.clientHeight === 0) return;
       try {
         fitAddon.fit();
-        if (isReady) void invoke("resize_terminal", { terminalId, rows: terminal.rows, cols: terminal.cols }).catch(() => undefined);
+        const size = { rows: terminal.rows, cols: terminal.cols };
+        if (isReady && terminalSizeChanged(lastSentSize, size)) {
+          lastSentSize = size;
+          void invoke("resize_terminal", { terminalId, ...size }).catch(() => undefined);
+        }
       } catch {
         // The host may briefly have no layout while a split or tab is changing.
       }
@@ -128,8 +133,10 @@ function TerminalPane({ terminalId, shell, cwd, visible, active, copyRequest, cl
       subscriptions.push(exit);
       fitAndResize();
       started = true;
-      await invoke("create_terminal", { terminalId, shell, cwd, rows: terminal.rows || 28, cols: terminal.cols || 100 });
+      const initialSize = { rows: terminal.rows || 28, cols: terminal.cols || 100 };
+      await invoke("create_terminal", { terminalId, shell, cwd, ...initialSize });
       if (disposed || exited) return;
+      lastSentSize = initialSize;
       isReady = true;
       fitAndResize();
     }

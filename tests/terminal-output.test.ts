@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { appendTerminalOutput, createTerminalTextBatcher } from "../src/terminalOutput";
+import { appendTerminalOutput, createTerminalTextBatcher, terminalSizeChanged } from "../src/terminalOutput";
 
 afterEach(() => vi.useRealTimers());
 
@@ -111,4 +111,14 @@ test("cancelar descarta la captura pendiente", () => {
   batcher.cancel();
   vi.advanceTimersByTime(16);
   expect(onText).not.toHaveBeenCalled();
+});
+
+test("solo solicita redimensionar cuando cambian filas o columnas válidas", () => {
+  const initial = { rows: 28, cols: 100 };
+
+  expect(terminalSizeChanged(initial, initial)).toBe(false);
+  expect(terminalSizeChanged(initial, { rows: 29, cols: 100 })).toBe(true);
+  expect(terminalSizeChanged(initial, { rows: 28, cols: 101 })).toBe(true);
+  expect(terminalSizeChanged(initial, { rows: 0, cols: 100 })).toBe(false);
+  expect(terminalSizeChanged(null, { rows: 28, cols: 100 })).toBe(true);
 });
