@@ -130,6 +130,7 @@ fn shell_command(shell: &str) -> Result<CommandBuilder, String> {
         }
         "cmd" => {
             let mut command = CommandBuilder::new("cmd.exe");
+            command.arg("/d");
             let existing_prompt = std::env::var("PROMPT").unwrap_or_else(|_| "$P$G".to_string());
             command.env(
                 "PROMPT",

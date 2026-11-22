@@ -30,3 +30,5 @@ Revisión posterior a alpha.5: las reglas guardadas pasan a compararse con la l�
 Actualización: antes de aplicar reglas o ejecución automática, Rust rechaza metacaracteres según el shell guardado en la sesión. La aprobación humana mantiene la ejecución de órdenes compuestas tras validar controles y tamaño.
 
 Actualización M3: para herramientas de gestión conocidas, una opción global antes del subcomando exige revisión manual. Así se evita que opciones de selección de proyecto/contexto desplacen un subcomando de cambio fuera de la primera posición que inspecciona la regla. Se permiten llamadas exactas de ayuda/versión y la consulta `pacman -Ss`; el clasificador sigue siendo heurístico y no sustituye un sandbox.
+
+Actualización M3: PowerShell, WSL y Git Bash ejecutan perfiles interactivos que pueden redefinir comandos, así que sus modos automático y por reglas ahora requieren confirmación manual. CMD inicia con `/d` para desactivar `AutoRun`; `doskey` requiere revisión porque crea macros de sesión.

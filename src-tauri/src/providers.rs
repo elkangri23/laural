@@ -1700,9 +1700,11 @@ fn authorize_agent_command_with_settings(
     settings: &AgentSettings,
 ) -> Result<(), String> {
     validate_agent_shell_syntax(shell, command)?;
-    if shell == "powershell" && matches!(settings.mode.as_str(), "automatic" | "rules") {
+    if matches!(shell, "powershell" | "wsl" | "git-bash")
+        && matches!(settings.mode.as_str(), "automatic" | "rules")
+    {
         return Err(
-            "PowerShell puede cargar perfiles con alias y funciones personalizados; este modo requiere confirmación manual en cada comando.".into(),
+            "Este shell puede cargar perfiles con alias y funciones personalizados; los modos automático y por reglas requieren confirmación manual en cada comando.".into(),
         );
     }
     if command_is_high_risk(shell, command) {
@@ -1782,6 +1784,7 @@ fn command_is_high_risk(shell: &str, command: &str) -> bool {
         "cipher",
         "alias",
         "function",
+        "doskey",
     ];
     let powershell_risky_commands = [
         "remove-item",
@@ -3337,6 +3340,7 @@ mod tests {
             ("powershell", "attrib +R archivo.txt"),
             ("powershell", "mklink enlace destino"),
             ("cmd", "del archivo.txt"),
+            ("cmd", "doskey git=del *"),
             ("cmd", "erase archivo.txt"),
             ("cmd", "rd carpeta"),
             ("cmd", "copy origen destino"),
@@ -3695,20 +3699,21 @@ mod tests {
             "git status --short",
             "git rev-parse --show-toplevel",
         ] {
-            assert!(authorize_agent_command_with_settings("git-bash", command, &settings).is_ok());
+            assert!(authorize_agent_command_with_settings("cmd", command, &settings).is_ok());
         }
         assert!(
-            authorize_agent_command_with_settings("git-bash", "git status --ignored", &settings)
+            authorize_agent_command_with_settings("cmd", "git status --ignored", &settings)
                 .is_err()
         );
-        assert!(
-            authorize_agent_command_with_settings("git-bash", "echo listo", &settings).is_err()
-        );
-        assert!(
-            authorize_agent_command_with_settings("powershell", "git status", &settings)
-                .unwrap_err()
-                .contains("perfiles")
-        );
+        assert!(authorize_agent_command_with_settings("cmd", "echo listo", &settings).is_err());
+        for shell in ["powershell", "wsl", "git-bash"] {
+            assert!(
+                authorize_agent_command_with_settings(shell, "git status", &settings)
+                    .unwrap_err()
+                    .contains("perfiles"),
+                "{shell}"
+            );
+        }
     }
 
     #[test]
@@ -3719,24 +3724,21 @@ mod tests {
             backup_retention: None,
         };
 
-        assert!(authorize_agent_command_with_settings("git-bash", "echo listo", &settings).is_ok());
+        assert!(authorize_agent_command_with_settings("cmd", "echo listo", &settings).is_ok());
         assert!(
-            authorize_agent_command_with_settings("git-bash", "echo listo ahora", &settings)
-                .is_err()
+            authorize_agent_command_with_settings("cmd", "echo listo ahora", &settings).is_err()
         );
         assert!(
-            authorize_agent_command_with_settings(
-                "git-bash",
-                "echo listo; Remove-Item *",
-                &settings
-            )
-            .is_err()
+            authorize_agent_command_with_settings("cmd", "echo listo & del *", &settings).is_err()
         );
-        assert!(
-            authorize_agent_command_with_settings("powershell", "echo listo", &settings)
-                .unwrap_err()
-                .contains("perfiles")
-        );
+        for shell in ["powershell", "wsl", "git-bash"] {
+            assert!(
+                authorize_agent_command_with_settings(shell, "echo listo", &settings)
+                    .unwrap_err()
+                    .contains("perfiles"),
+                "{shell}"
+            );
+        }
     }
 
     #[test]

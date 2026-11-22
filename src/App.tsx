@@ -1183,7 +1183,7 @@ function App() {
               <BackupRetentionControl value={backupRetention} onChange={(value) => void changeBackupRetention(value)} />
               {policyNotice && <span className="policy-notice">{policyNotice}</span>}
               <p>Los cambios de archivos siempre requieren aprobación.</p>
-              <p>Los filtros no aíslan el shell. PowerShell puede cargar perfiles con alias y funciones personalizados, por lo que sus modos automático y por reglas requieren confirmación manual. Revisa cada comando antes de aprobarlo.</p>
+              <p>Los filtros no aíslan el shell. PowerShell, WSL y Git Bash pueden cargar perfiles con alias y funciones personalizados, así que los modos automático y por reglas requieren confirmación manual. CMD se inicia con AutoRun desactivado. Revisa cada comando antes de aprobarlo.</p>
             </div>
         <AgentActivity />
         <button className="action-quiet" onClick={clearChat} disabled={!chatMessages.length || chatBusy || agentPlanBusy || agentCommandBusy}>Borrar historial del chat</button>
