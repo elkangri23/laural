@@ -62,8 +62,10 @@ Actualización del 22-11-2026: el clasificador de riesgo identifica alias/ejecut
 
 Regresión local de autorización tras ampliar los builtins: 109 pruebas Rust pasan y 1 queda ignorada; interfaz 124/124 con 74,80 % de líneas. El comando de cobertura Rust vuelve a ejecutar los tests pero `llvm-cov` no encuentra datos con Windows/MSVC; se conserva como referencia la última cobertura obtenida en CI hasta completar el workflow de este commit.
 
-Ampliación del filtro de PowerShell: detecta también operadores `++`/`--` en prefijo (`++$contador`, `--$global:contador`) y sufijo con espacios (`$contador ++`, `$global:contador --`). La suite Rust pasa: 109 pruebas y 1 ignorada; UI 124/124 con 74,80 % de líneas. El informe de cobertura local está limitado por Windows/MSVC; el último informe CI disponible (commit be86b7a) marca 64,00 % de líneas Rust total y 66,83 % para `providers.rs`.
+Ampliación del filtro de PowerShell: detecta también operadores `++`/`--` en prefijo (`++$contador`, `--$global:contador`) y sufijo con espacios (`$contador ++`, `$global:contador --`). La suite Rust pasa: 109 pruebas y 1 ignorada; UI 124/124 con 74,80 % de líneas. El informe de cobertura local está limitado por Windows/MSVC; el último informe CI disponible (commit 7f6d817) marca 64,13 % de líneas Rust total y 67,08 % para `providers.rs`.
 
 Ampliación de PowerShell: se añaden destinos variables entre paréntesis (`($contador)++`, `++($contador)`, `($env:PATH) += ...`) y una regresión de lectura segura para `($env:PATH)`.
+
+También se detectan operadores de prefijo separados por espacios (`++ $contador`, `-- ($contador)`). PowerShell local confirmó que estas formas mutan el valor; las regresiones Rust pasan con 109 pruebas y 1 ignorada.
 
 Actualización del 22-11-2026: se extrajo la decisión de autorización a una función pura para probar el flujo completo sin acceder a archivos del usuario. Regresiones verifican que las operaciones de riesgo requieren revisión incluso si aparecen en reglas, el modo automático permite solo las consultas Git exactas y las reglas usan igualdad completa y rechazan operadores. Localmente pasan 91 pruebas Rust, 115 de UI y 121 de servicio; este Windows/MSVC no genera perfiles de cobertura Rust, que se producen en CI.

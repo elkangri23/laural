@@ -1861,9 +1861,11 @@ fn command_is_high_risk(shell: &str, command: &str) -> bool {
 }
 
 fn has_leading_shell_assignment(shell: &str, command: &str) -> bool {
-    let Some(token) = command.split_whitespace().next() else {
+    let mut tokens = command.split_whitespace();
+    let Some(token) = tokens.next() else {
         return false;
     };
+    let next_token = tokens.next();
     if shell == "powershell" {
         let is_variable_expression = |expression: &str| {
             expression.starts_with('$')
@@ -1871,6 +1873,9 @@ fn has_leading_shell_assignment(shell: &str, command: &str) -> bool {
                     && expression.ends_with(')')
                     && expression.contains('$'))
         };
+        if matches!(token, "++" | "--") && next_token.is_some_and(is_variable_expression) {
+            return true;
+        }
         if ["++", "--"].iter().any(|operator| {
             token
                 .strip_prefix(operator)
@@ -1889,7 +1894,7 @@ fn has_leading_shell_assignment(shell: &str, command: &str) -> bool {
             return false;
         }
         return token.contains('=')
-            || command.split_whitespace().nth(1).is_some_and(|operator| {
+            || next_token.is_some_and(|operator| {
                 matches!(
                     operator,
                     "=" | "+=" | "-=" | "*=" | "/=" | "%=" | "??=" | "++" | "--"
@@ -3334,6 +3339,8 @@ mod tests {
             ("powershell", "$contador++"),
             ("powershell", "++$contador"),
             ("powershell", "--$global:contador"),
+            ("powershell", "++ $contador"),
+            ("powershell", "-- ($global:contador)"),
             ("powershell", "$contador ++"),
             ("powershell", "$global:contador --"),
             ("powershell", "($contador)++"),
@@ -3507,6 +3514,7 @@ mod tests {
                 "PATH+=/tmp rm -rf proyecto".into(),
                 "$global:prompt = { 'alterado' }".into(),
                 "++$contador".into(),
+                "++ $contador".into(),
                 "($contador)++".into(),
                 "declare -x PATH=/tmp".into(),
                 "enable -n printf".into(),
@@ -3524,6 +3532,7 @@ mod tests {
             ("git-bash", "PATH+=/tmp rm -rf proyecto"),
             ("powershell", "$global:prompt = { 'alterado' }"),
             ("powershell", "++$contador"),
+            ("powershell", "++ $contador"),
             ("powershell", "($contador)++"),
             ("git-bash", "declare -x PATH=/tmp"),
             ("wsl", "enable -n printf"),
