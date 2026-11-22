@@ -78,7 +78,7 @@ Estado al 22 de noviembre de 2026. «Implementado» describe código presente; �
 
 ## M8 — Portabilidad local (implementación inicial)
 
-El flujo de exportar/importar `.laural` ya está integrado en Configuración. Incluye vista previa, fusión o reemplazo, validación de formato y URLs, exclusión de claves por defecto, cifrado Argon2id + AES-256-GCM cuando se eligen claves, copia previa local y rollback de credenciales ante fallos del almacén. La importación no guarda claves en el WebView. El contrato de sincronización también valida de forma automática el JSON Schema canónico y cada enumeración en Rust y TypeScript.
+El flujo de exportar/importar `.laural` ya está integrado en Configuración. Incluye vista previa, fusión o reemplazo, validación de formato y URLs, exclusión de claves por defecto, cifrado Argon2id + AES-256-GCM cuando se eligen claves, copia previa local y rollback de credenciales ante fallos del almacén. La importación no guarda claves en el WebView.
 
 Añadidas regresiones que simulan el fallo al escribir una credencial y comprueban tanto el rollback satisfactorio como el mensaje/localización de copia cuando el rollback también falla. Pendiente antes de dar M8 por cerrado: pruebas de integración con fallos reales de Credential Manager y escritura de `providers.json`, ensayo manual de exportación/importación en Windows limpio, comprobación de recuperación de copias y cobertura Rust específica del flujo de portabilidad.
 
@@ -100,7 +100,7 @@ Añadidas regresiones que simulan el fallo al escribir una credencial y comprueb
 
 ## M10 — Cliente y sincronización (parcial)
 
-- El fixture compartido se valida con el JSON Schema canónico en Ajv y Rust; los tests recorren todas las enumeraciones del contrato para detectar divergencias de proveedor, tema y preferencias.
+- El fixture compartido se valida con el JSON Schema canónico en Ajv. Las pruebas Rust y TypeScript cotejan exactamente las enumeraciones y rechazan valores/propiedades prohibidos para detectar divergencias entre los validadores.
 
 - Implementados en Configuración: **Sincronizar ahora**, lectura/comparación inicial, elección de snapshot completo sin mostrar diferencias, y carga explícita de la configuración local cuando la nube está vacía.
 - El cliente Rust consulta y escribe la API por HTTPS usando la sesión de Credential Manager; emplea `ETag`, `If-Match`, clave de idempotencia y detección de conflicto. El token no llega al WebView.

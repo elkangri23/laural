@@ -127,12 +127,11 @@ mod tests {
     }
 
     #[test]
-    fn esquema_canonico_acepta_todos_los_valores_que_admite_rust() {
+    fn enumeraciones_canonicas_coinciden_con_los_valores_aceptados_por_rust() {
         let schema: serde_json::Value = serde_json::from_slice(include_bytes!(
             "../../../shared/preference-snapshot-v1.schema.json"
         ))
         .unwrap();
-        let validator = jsonschema::validator_for(&schema).unwrap();
 
         for (schema_values, rust_values) in [
             (
@@ -167,33 +166,13 @@ mod tests {
             assert_eq!(schema_values, rust_values);
         }
 
-        for (field, values) in [
-            (
-                "themeId",
-                schema["properties"]["preferences"]["properties"]["themeId"]["enum"]
-                    .as_array()
-                    .unwrap(),
-            ),
-            (
-                "appearance",
-                schema["properties"]["preferences"]["properties"]["appearance"]["enum"]
-                    .as_array()
-                    .unwrap(),
-            ),
-            (
-                "updateMode",
-                schema["properties"]["preferences"]["properties"]["updateMode"]["enum"]
-                    .as_array()
-                    .unwrap(),
-            ),
-        ] {
+        for field in ["themeId", "appearance", "updateMode"] {
+            let values = schema["properties"]["preferences"]["properties"][field]["enum"]
+                .as_array()
+                .unwrap();
             for value in values {
                 let mut instance: serde_json::Value = serde_json::from_slice(&fixture()).unwrap();
                 instance["preferences"][field] = value.clone();
-                assert!(
-                    validator.is_valid(&instance),
-                    "schema rechaza {field}={value}"
-                );
                 assert!(decode(&serde_json::to_vec(&instance).unwrap()).is_ok());
             }
         }
@@ -205,19 +184,12 @@ mod tests {
         for kind in provider_kinds {
             let mut instance: serde_json::Value = serde_json::from_slice(&fixture()).unwrap();
             instance["providers"][0]["kind"] = kind.clone();
-            assert!(validator.is_valid(&instance), "schema rechaza kind={kind}");
             assert!(decode(&serde_json::to_vec(&instance).unwrap()).is_ok());
         }
     }
 
     #[test]
-    fn esquema_canonico_y_rust_rechazan_campos_secretos_y_enumeraciones_invalidas() {
-        let schema: serde_json::Value = serde_json::from_slice(include_bytes!(
-            "../../../shared/preference-snapshot-v1.schema.json"
-        ))
-        .unwrap();
-        let validator = jsonschema::validator_for(&schema).unwrap();
-
+    fn rust_rechaza_secretos_y_enumeraciones_fuera_del_schema_canonico() {
         let mut instances: Vec<serde_json::Value> = Vec::new();
         let mut secret: serde_json::Value = serde_json::from_slice(&fixture()).unwrap();
         secret["providers"][0]["apiKey"] = "secreto".into();
@@ -230,9 +202,23 @@ mod tests {
         instances.push(invalid_kind);
 
         for instance in instances {
-            assert!(!validator.is_valid(&instance));
             assert!(decode(&serde_json::to_vec(&instance).unwrap()).is_err());
         }
+
+        for (field, value) in [
+            ("themeId", serde_json::json!("tema-inexistente")),
+            ("appearance", serde_json::json!("system")),
+            ("updateMode", serde_json::json!("always")),
+        ] {
+            let mut instance: serde_json::Value = serde_json::from_slice(&fixture()).unwrap();
+            instance["preferences"][field] = value;
+            assert!(decode(&serde_json::to_vec(&instance).unwrap()).is_err());
+        }
+
+        let mut invalid_provider_kind: serde_json::Value =
+            serde_json::from_slice(&fixture()).unwrap();
+        invalid_provider_kind["providers"][0]["kind"] = "provider-desconocido".into();
+        assert!(decode(&serde_json::to_vec(&invalid_provider_kind).unwrap()).is_err());
     }
 
     #[test]
