@@ -53,8 +53,16 @@ export function TaskRecipes({ onClose, onUse }: { onClose: () => void; onUse: (p
   const [editing, setEditing] = useState<TaskRecipe | null>(null);
   const [error, setError] = useState("");
   const dialogRef = useRef<HTMLElement>(null);
+  const openerRef = useRef<HTMLElement | null>(null);
   const isEditing = editing !== null;
   const selected = useMemo(() => recipes.find((recipe) => recipe.id === selectedId) ?? recipes[0], [recipes, selectedId]);
+
+  useEffect(() => {
+    openerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    return () => {
+      if (openerRef.current?.isConnected) openerRef.current.focus();
+    };
+  }, []);
 
   useEffect(() => {
     const dialog = dialogRef.current;

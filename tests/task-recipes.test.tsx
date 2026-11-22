@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act } from "react";
+import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { TaskRecipes } from "../src/components/TaskRecipes";
@@ -287,4 +287,41 @@ test("mantiene el foco dentro del diálogo y enfoca el formulario al editar", as
 
   await act(async () => button("Editar").click());
   expect(document.activeElement).toBe(host.querySelector(".recipe-editor input"));
+});
+
+test("devuelve el foco al control que abrió las recetas al cerrar", async () => {
+  const opener = document.createElement("button");
+  opener.textContent = "Abrir recetas";
+  document.body.append(opener);
+  opener.focus();
+
+  function Harness() {
+    const [open, setOpen] = useState(true);
+    return open ? <TaskRecipes onClose={() => setOpen(false)} onUse={onUse} /> : null;
+  }
+
+  await act(async () => root!.render(<Harness />));
+  expect(document.activeElement).toBe(host.querySelector(".recipes-list button.selected"));
+  await act(async () => host.querySelector<HTMLButtonElement>(".dialog-close")!.click());
+
+  expect(host.querySelector('[role="dialog"]')).toBeNull();
+  expect(document.activeElement).toBe(opener);
+  opener.remove();
+});
+
+test("cierra el diálogo sin enfocar un control que ya no existe", async () => {
+  const opener = document.createElement("button");
+  document.body.append(opener);
+  opener.focus();
+
+  function Harness() {
+    const [open, setOpen] = useState(true);
+    return open ? <TaskRecipes onClose={() => setOpen(false)} onUse={onUse} /> : null;
+  }
+
+  await act(async () => root!.render(<Harness />));
+  opener.remove();
+  await act(async () => host.querySelector<HTMLButtonElement>(".dialog-close")!.click());
+
+  expect(host.querySelector('[role="dialog"]')).toBeNull();
 });
