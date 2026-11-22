@@ -1691,8 +1691,8 @@ fn validate_agent_shell_syntax(shell: &str, command: &str) -> Result<(), String>
 }
 
 fn command_is_high_risk(shell: &str, command: &str) -> bool {
-    let command = command.trim().to_ascii_lowercase();
-    let executable = first_command_name(&command);
+    let normalized_command = command.trim().to_ascii_lowercase();
+    let executable = first_command_name(&normalized_command);
     let common_risky_commands = [
         "rm",
         "unlink",
@@ -1813,10 +1813,15 @@ fn command_is_high_risk(shell: &str, command: &str) -> bool {
     ];
     let script_launchers = [
         "bash",
+        "busybox",
         "cmd",
+        "command",
         "cscript",
+        "env",
+        "exec",
         "mshta",
         "node",
+        "nohup",
         "perl",
         "powershell",
         "pwsh",
@@ -1827,8 +1832,11 @@ fn command_is_high_risk(shell: &str, command: &str) -> bool {
         "rundll32",
         "ruby",
         "sh",
+        "time",
+        "timeout",
         "wscript",
         "wsl",
+        "xargs",
     ];
     let shell_specific_risky = match shell {
         "powershell" => {
@@ -1846,15 +1854,29 @@ fn command_is_high_risk(shell: &str, command: &str) -> bool {
     };
     shell_specific_risky
         || script_launchers.contains(&executable.as_str())
-        || git_command_is_high_risk(&command)
-        || external_tool_is_high_risk(&command, &executable)
+        || git_command_is_high_risk(command.trim())
+        || external_tool_is_high_risk(&normalized_command, &executable)
 }
 
 fn git_command_is_high_risk(command: &str) -> bool {
-    let mut tokens = command.split_whitespace();
-    if first_command_name(command) != "git" {
+    if !first_command_name(command).eq_ignore_ascii_case("git") {
         return false;
     }
+    let mut original_tokens = command.split_whitespace();
+    original_tokens.next();
+    if original_tokens.clone().any(|argument| {
+        argument == "-c"
+            || argument.starts_with("-c")
+            || argument == "--config-env"
+            || argument.starts_with("--config-env=")
+            || argument == "--exec-path"
+            || argument.starts_with("--exec-path=")
+    }) {
+        return true;
+    }
+
+    let normalized_command = command.to_ascii_lowercase();
+    let mut tokens = normalized_command.split_whitespace();
     tokens.next();
     let Some(subcommand) = tokens.next() else {
         return false;
@@ -1918,6 +1940,14 @@ fn external_tool_is_high_risk(command: &str, executable: &str) -> bool {
         ),
         "kubectl" => matches!(subcommand, "delete" | "apply" | "replace" | "patch"),
         "terraform" => matches!(subcommand, "apply" | "destroy" | "import"),
+        "find" => std::iter::once(subcommand)
+            .chain(arguments)
+            .any(|argument| {
+                matches!(
+                    argument,
+                    "-delete" | "-exec" | "-execdir" | "-ok" | "-okdir"
+                )
+            }),
         "reg" => matches!(
             subcommand,
             "add" | "delete" | "import" | "load" | "restore" | "save" | "copy"
@@ -3176,6 +3206,42 @@ mod tests {
             ("reg delete HKCU\\Software\\Laural /f", "reg"),
         ] {
             assert!(external_tool_is_high_risk(command, executable), "{command}");
+        }
+    }
+
+    #[test]
+    fn exige_revision_para_lanzadores_indirectos_y_configuracion_inline_de_git() {
+        for (shell, command) in [
+            ("git-bash", "env rm -rf proyecto"),
+            ("wsl", "command chmod -R 777 proyecto"),
+            ("git-bash", "nohup python3 script.py"),
+            ("wsl", "xargs rm -f archivo"),
+            ("git-bash", "busybox rm archivo"),
+            ("wsl", "find . -type f -delete"),
+            ("git-bash", "find . -exec rm -rf {} +"),
+            ("wsl", "find -delete"),
+            ("powershell", "git -c alias.inspect=!whoami inspect"),
+            ("git-bash", "git -calias.inspect=!whoami inspect"),
+            ("powershell", "git -c color.ui=false status --short"),
+            (
+                "git-bash",
+                "git --config-env=alias.inspect=LAURAL_CONFIG inspect",
+            ),
+            (
+                "powershell",
+                "git --config-env alias.inspect=LAURAL_CONFIG inspect",
+            ),
+            ("powershell", "git --exec-path=C:\\tools\\git inspect"),
+            ("powershell", "git --exec-path C:\\tools\\git inspect"),
+        ] {
+            assert!(command_is_high_risk(shell, command), "{shell}: {command}");
+        }
+
+        for (shell, command) in [
+            ("wsl", "find . -name '*.rs'"),
+            ("git-bash", "git -C proyecto status --short"),
+        ] {
+            assert!(!command_is_high_risk(shell, command), "{shell}: {command}");
         }
     }
 
