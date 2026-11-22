@@ -1855,6 +1855,7 @@ fn command_is_high_risk(shell: &str, command: &str) -> bool {
     shell_specific_risky
         || script_launchers.contains(&executable.as_str())
         || has_leading_shell_assignment(shell, command)
+        || shell_state_change_or_evaluation_is_high_risk(shell, &normalized_command, &executable)
         || git_command_is_high_risk(command.trim())
         || external_tool_is_high_risk(&normalized_command, &executable)
 }
@@ -1875,6 +1876,34 @@ fn has_leading_shell_assignment(shell: &str, command: &str) -> bool {
     };
     (first == '_' || first.is_ascii_alphabetic())
         && characters.all(|character| character == '_' || character.is_ascii_alphanumeric())
+}
+
+fn shell_state_change_or_evaluation_is_high_risk(
+    shell: &str,
+    command: &str,
+    executable: &str,
+) -> bool {
+    let mut arguments = command.split_whitespace().skip(1);
+    match shell {
+        "cmd" => executable == "set" && arguments.any(|argument| argument.contains('=')),
+        "powershell" => {
+            executable == "."
+                || (command.starts_with("$env:")
+                    && (command
+                        .split_whitespace()
+                        .next()
+                        .unwrap_or_default()
+                        .contains('=')
+                        || command.split_whitespace().nth(1) == Some("=")))
+        }
+        "wsl" | "git-bash" => match executable {
+            "eval" | "source" | "." | "builtin" => true,
+            "trap" => arguments.next().is_some_and(|argument| argument != "-p"),
+            "export" | "unset" | "set" | "shopt" => arguments.next().is_some(),
+            _ => false,
+        },
+        _ => false,
+    }
 }
 
 fn git_command_is_high_risk(command: &str) -> bool {
@@ -3269,6 +3298,37 @@ mod tests {
     }
 
     #[test]
+    fn exige_revision_para_evaluacion_y_cambios_de_estado_del_shell() {
+        for (shell, command) in [
+            ("cmd", "set PATH=C:\\tools"),
+            ("cmd", "set /a contador+=1"),
+            ("powershell", ". .\\deploy.ps1"),
+            ("powershell", "$env:PATH=C:\\tools"),
+            ("powershell", "$env:PATH = C:\\tools"),
+            ("git-bash", "eval \"rm -rf proyecto\""),
+            ("wsl", "source deploy.sh"),
+            ("git-bash", ". deploy.sh"),
+            ("git-bash", "trap 'rm -rf proyecto' EXIT"),
+            ("git-bash", "export PATH=/tmp"),
+            ("wsl", "unset PATH"),
+            ("git-bash", "set -o noclobber"),
+            ("wsl", "builtin eval rm"),
+        ] {
+            assert!(command_is_high_risk(shell, command), "{shell}: {command}");
+        }
+
+        for (shell, command) in [
+            ("cmd", "set"),
+            ("powershell", "$env:PATH"),
+            ("git-bash", "export"),
+            ("git-bash", "trap -p"),
+            ("git-bash", "echo PATH=/tmp"),
+        ] {
+            assert!(!command_is_high_risk(shell, command), "{shell}: {command}");
+        }
+    }
+
+    #[test]
     fn exige_revision_para_cambios_de_registro_servicios_usuarios_y_tareas() {
         for (shell, command) in [
             (
@@ -3372,6 +3432,8 @@ mod tests {
                 "PATH=/tmp rm -rf proyecto".into(),
                 "find . -type f -delete".into(),
                 "git -c color.ui=false status --short".into(),
+                "set PATH=C:\\tools".into(),
+                "eval \"rm -rf proyecto\"".into(),
             ],
             backup_retention: None,
         };
@@ -3381,6 +3443,8 @@ mod tests {
             ("git-bash", "PATH=/tmp rm -rf proyecto"),
             ("wsl", "find . -type f -delete"),
             ("powershell", "git -c color.ui=false status --short"),
+            ("cmd", "set PATH=C:\\tools"),
+            ("git-bash", "eval \"rm -rf proyecto\""),
         ] {
             let result = authorize_agent_command_with_settings(shell, command, &settings);
             assert!(
