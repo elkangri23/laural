@@ -1652,6 +1652,11 @@ fn authorize_agent_command_with_settings(
     settings: &AgentSettings,
 ) -> Result<(), String> {
     validate_agent_shell_syntax(shell, command)?;
+    if shell == "powershell" && matches!(settings.mode.as_str(), "automatic" | "rules") {
+        return Err(
+            "PowerShell puede cargar perfiles con alias y funciones personalizados; este modo requiere confirmación manual en cada comando.".into(),
+        );
+    }
     if command_is_high_risk(shell, command) {
         return Err(
             "Este comando requiere confirmación manual por su alcance o sus efectos.".to_string(),
@@ -3616,6 +3621,11 @@ mod tests {
         assert!(
             authorize_agent_command_with_settings("git-bash", "echo listo", &settings).is_err()
         );
+        assert!(
+            authorize_agent_command_with_settings("powershell", "git status", &settings)
+                .unwrap_err()
+                .contains("perfiles")
+        );
     }
 
     #[test]
@@ -3626,20 +3636,23 @@ mod tests {
             backup_retention: None,
         };
 
+        assert!(authorize_agent_command_with_settings("git-bash", "echo listo", &settings).is_ok());
         assert!(
-            authorize_agent_command_with_settings("powershell", "echo listo", &settings).is_ok()
-        );
-        assert!(
-            authorize_agent_command_with_settings("powershell", "echo listo ahora", &settings)
+            authorize_agent_command_with_settings("git-bash", "echo listo ahora", &settings)
                 .is_err()
         );
         assert!(
             authorize_agent_command_with_settings(
-                "powershell",
+                "git-bash",
                 "echo listo; Remove-Item *",
                 &settings
             )
             .is_err()
+        );
+        assert!(
+            authorize_agent_command_with_settings("powershell", "echo listo", &settings)
+                .unwrap_err()
+                .contains("perfiles")
         );
     }
 
