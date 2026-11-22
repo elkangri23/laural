@@ -601,6 +601,95 @@ mod terminal_tests {
             .expect("el lector sigue abierto");
     }
 
+    #[test]
+    fn ctrl_c_interrumpe_ping_en_cmd_y_devuelve_el_prompt() {
+        let pair = native_pty_system().openpty(PtySize::default()).unwrap();
+        let mut reader = pair.master.try_clone_reader().unwrap();
+        let mut writer = pair.master.take_writer().unwrap();
+        let child = pair
+            .slave
+            .spawn_command(shell_command("cmd").unwrap())
+            .unwrap();
+        drop(pair.slave);
+        let (sent, received) = mpsc::channel();
+        thread::spawn(move || {
+            let mut chunk = [0; 4096];
+            while let Ok(count) = reader.read(&mut chunk) {
+                if count == 0 || sent.send(chunk[..count].to_vec()).is_err() {
+                    break;
+                }
+            }
+        });
+
+        let mut output = Vec::new();
+        let mut answered_cursor = false;
+        let startup_deadline = Instant::now() + Duration::from_secs(10);
+        while Instant::now() < startup_deadline && !output.windows(5).any(|part| part == b"133;A") {
+            if let Ok(bytes) = received.recv_timeout(Duration::from_millis(100)) {
+                output.extend(bytes);
+                if !answered_cursor && output.windows(4).any(|part| part == b"\x1b[6n") {
+                    writer.write_all(b"\x1b[1;1R").unwrap();
+                    writer.flush().unwrap();
+                    answered_cursor = true;
+                }
+            }
+        }
+        let shell_ready = output.windows(5).any(|part| part == b"133;A");
+
+        let mut ping_started = false;
+        if shell_ready {
+            writer.write_all(b"ping -t 127.0.0.1\r").unwrap();
+            writer.flush().unwrap();
+            let ping_deadline = Instant::now() + Duration::from_secs(10);
+            while Instant::now() < ping_deadline && !ping_started {
+                if let Ok(bytes) = received.recv_timeout(Duration::from_millis(100)) {
+                    output.extend(bytes);
+                    ping_started = output.windows(13).any(|part| part == b"Haciendo ping")
+                        || output.windows(8).any(|part| part == b"Pinging ")
+                        || ["Reply from 127.0.0.1", "Respuesta desde 127.0.0.1"]
+                            .iter()
+                            .any(|marker| {
+                                output
+                                    .windows(marker.len())
+                                    .any(|part| part == marker.as_bytes())
+                            });
+                }
+            }
+        }
+
+        let mut shell_returned = false;
+        if ping_started {
+            writer
+                .write_all(b"\x03echo LAURAL_AFTER_INTERRUPT\r")
+                .unwrap();
+            writer.flush().unwrap();
+            let return_deadline = Instant::now() + Duration::from_secs(4);
+            while Instant::now() < return_deadline && !shell_returned {
+                if let Ok(bytes) = received.recv_timeout(Duration::from_millis(100)) {
+                    output.extend(bytes);
+                    shell_returned = output
+                        .windows(b"LAURAL_AFTER_INTERRUPT".len())
+                        .any(|part| part == b"LAURAL_AFTER_INTERRUPT");
+                }
+            }
+        }
+
+        drop(writer);
+        drop(pair.master);
+        let mut child = child;
+        if child.try_wait().unwrap().is_none() {
+            let _ = child.kill();
+        }
+        let _ = child.wait();
+        assert!(
+            answered_cursor,
+            "ConPTY no solicitó/recibió posición del cursor"
+        );
+        assert!(shell_ready, "CMD no mostró el prompt dentro del plazo");
+        assert!(ping_started, "CMD no inició ping dentro del plazo");
+        assert!(shell_returned, "Ctrl+C no devolvió el prompt CMD");
+    }
+
     // WSL and Git Bash are optional installations on end-user machines and CI runners.
     #[test]
     #[ignore = "requiere PowerShell, CMD, Git Bash y una distribución WSL instalados"]
