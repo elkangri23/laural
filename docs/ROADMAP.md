@@ -14,7 +14,7 @@ Estado al 22 de noviembre de 2026. «Implementado» describe código presente; �
 - Pruebas con un nuevo montaje verifican que tema/modo vuelven desde `localStorage` y que la app recupera el perfil activo al consultar el backend; falta verificar el reinicio del proceso instalado en Windows.
 - Planes de agente, modos revisar/reglas/automático y aprobación explícita para cambios de archivos.
 - Icono y favicon propios; build de Windows automatizable desde GitHub Actions.
-- Código dividido para carga progresiva: entrada JS de 297,30 KB (89,85 KB gzip), terminal en bloque de 335,94 KB (85,03 KB gzip), Markdown de 164,75 KB cargado al necesitarlo y paneles secundarios bajo demanda. No quedan bloques mayores de 500 KB; medir arranque frío y memoria en una instalación Windows sigue pendiente.
+- Código dividido para carga progresiva: entrada JS de 297,30 KB (89,85 KB gzip), terminal en bloque de 335,94 KB (85,03 KB gzip), Markdown de 164,75 KB cargado al necesitarlo y paneles secundarios bajo demanda. No quedan bloques mayores de 500 KB. En el build release de Windows, una muestra de la instancia ya abierta registró 107,9 MiB de working set y 258 MiB de memoria privada sumando Laural y sus 8 procesos descendientes; cuatro mediciones durante 34 segundos no mostraron variación al MiB. Es una línea base de una sola máquina, no una garantía de consumo ni una medida de arranque frío. Falta medir el paquete instalado, arranque en frío y consumo durante uso sostenido.
 - README, arquitectura, requisitos, ADR, casos de uso y documentación de contribución.
 
 ## M1 — Estabilidad de terminal (parcial)
@@ -126,7 +126,7 @@ Las regresiones Rust cubren fallo de formato/versión/secciones, parámetros y c
 ## M12 — Carga progresiva (implementación inicial)
 
 - La entrada JavaScript bajó de 824 KB a 297 KB mediante división de terminal, Markdown y paneles secundarios. La terminal se carga en un bloque propio; Markdown y paneles se solicitan cuando se necesitan. Ningún bloque supera 500 KB.
-- Pendiente medir tiempo de arranque y memoria en una instalación real de Windows; dividir bloques no implica por sí solo una reducción del total de código que la app solicita al iniciar.
+- Línea base preliminar en Windows release: 9 procesos del árbol, 107,9 MiB de working set y 258 MiB privados; cuatro mediciones en 34 segundos no detectaron variación al MiB. La instancia ya estaba abierta y no se reinició, por lo que no mide el arranque en frío ni el paquete instalado. Pendiente repetir en instalación limpia, medir arranque y muestrear durante uso de terminal/chat; dividir bloques no implica por sí solo una reducción del total de código que la app solicita al iniciar.
 
 ## No planificado para el MVP
 
