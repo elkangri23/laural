@@ -31,7 +31,7 @@ Estado al 22 de noviembre de 2026. «Implementado» describe código presente; �
 ## M2 — Chat y proveedores (parcial)
 
 - Chat incremental cancelable e historial local borrable implementados.
-- Corregida la compilación de `keyring` para usar Windows Credential Manager; la clave se verifica tras guardar. En la comprobación local del 20 de noviembre de 2026 no había Ollama en `11434` ni LM Studio en `1234`; FreeLLMAPI en `31415` respondió `401` a una consulta sin autenticación. No se envió una clave. Pendiente configurar un proveedor de prueba y validar desde la aplicación.
+- Corregida la compilación de `keyring` para usar Windows Credential Manager; la clave se verifica tras guardar. El 22 de noviembre de 2026, FreeLLMAPI local en `31415` respondió `200` a `/v1/models` con autenticación y devolvió 20 modelos; la consulta fue directa y de solo lectura, no pasó por la aplicación. Ollama en `11434` y LM Studio en `1234` no estaban activos. Pendiente configurar un perfil y validar listado y streaming desde Laural.
 - Probar manualmente `/models` y streaming de chat con Ollama, LM Studio, FreeLLMAPI y un endpoint OpenAI-compatible. La sonda local sin credenciales solo confirmó que Ollama/LM Studio no estaban activos y que FreeLLMAPI exige autenticación; no cuenta como prueba funcional del proveedor.
 - Añadida regresión local que confirma que el cliente rechaza redirecciones HTTP del proveedor, para no enviar credenciales/contexto a otro destino. Las pruebas con proveedores instalados siguen pendientes.
 - La vista previa del contexto y sus límites de envío están implementados; verificar que coincide con cada proveedor.
