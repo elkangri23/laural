@@ -1861,15 +1861,27 @@ fn command_is_high_risk(shell: &str, command: &str) -> bool {
 }
 
 fn has_leading_shell_assignment(shell: &str, command: &str) -> bool {
-    if !matches!(shell, "wsl" | "git-bash") {
-        return false;
-    }
     let Some(token) = command.split_whitespace().next() else {
         return false;
     };
+    if shell == "powershell" {
+        if !token.starts_with('$') {
+            return false;
+        }
+        return token.contains('=')
+            || token.ends_with("++")
+            || token.ends_with("--")
+            || command.split_whitespace().nth(1).is_some_and(|operator| {
+                matches!(operator, "=" | "+=" | "-=" | "*=" | "/=" | "%=" | "??=")
+            });
+    }
+    if !matches!(shell, "wsl" | "git-bash") {
+        return false;
+    }
     let Some((name, _)) = token.split_once('=') else {
         return false;
     };
+    let name = name.strip_suffix('+').unwrap_or(name);
     let mut characters = name.chars();
     let Some(first) = characters.next() else {
         return false;
@@ -1886,16 +1898,7 @@ fn shell_state_change_or_evaluation_is_high_risk(
     let mut arguments = command.split_whitespace().skip(1);
     match shell {
         "cmd" => executable == "set" && arguments.any(|argument| argument.contains('=')),
-        "powershell" => {
-            executable == "."
-                || (command.starts_with("$env:")
-                    && (command
-                        .split_whitespace()
-                        .next()
-                        .unwrap_or_default()
-                        .contains('=')
-                        || command.split_whitespace().nth(1) == Some("=")))
-        }
+        "powershell" => executable == ".",
         "wsl" | "git-bash" => match executable {
             "eval" | "source" | "." | "builtin" => true,
             "trap" => arguments.next().is_some_and(|argument| argument != "-p"),
@@ -3282,8 +3285,12 @@ mod tests {
             ("powershell", "git --exec-path=C:\\tools\\git inspect"),
             ("powershell", "git --exec-path C:\\tools\\git inspect"),
             ("git-bash", "PATH=/tmp rm -rf proyecto"),
+            ("git-bash", "PATH+=/tmp rm -rf proyecto"),
             ("wsl", "GIT_CONFIG_COUNT=1 git status --short"),
             ("git-bash", "FOO=bar npm view react version"),
+            ("powershell", "$global:prompt = { 'oculto' }"),
+            ("powershell", "$env:PATH += ';C:\\tools'"),
+            ("powershell", "$contador++"),
         ] {
             assert!(command_is_high_risk(shell, command), "{shell}: {command}");
         }
@@ -3292,6 +3299,9 @@ mod tests {
             ("wsl", "find . -name '*.rs'"),
             ("git-bash", "git -C proyecto status --short"),
             ("git-bash", "echo PATH=/tmp"),
+            ("git-bash", "echo PATH+=/tmp"),
+            ("powershell", "$env:PATH"),
+            ("powershell", "$contador"),
         ] {
             assert!(!command_is_high_risk(shell, command), "{shell}: {command}");
         }
@@ -3434,6 +3444,8 @@ mod tests {
                 "git -c color.ui=false status --short".into(),
                 "set PATH=C:\\tools".into(),
                 "eval \"rm -rf proyecto\"".into(),
+                "PATH+=/tmp rm -rf proyecto".into(),
+                "$global:prompt = { 'alterado' }".into(),
             ],
             backup_retention: None,
         };
@@ -3445,6 +3457,8 @@ mod tests {
             ("powershell", "git -c color.ui=false status --short"),
             ("cmd", "set PATH=C:\\tools"),
             ("git-bash", "eval \"rm -rf proyecto\""),
+            ("git-bash", "PATH+=/tmp rm -rf proyecto"),
+            ("powershell", "$global:prompt = { 'alterado' }"),
         ] {
             let result = authorize_agent_command_with_settings(shell, command, &settings);
             assert!(
