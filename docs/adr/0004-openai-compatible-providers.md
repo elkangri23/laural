@@ -24,3 +24,4 @@ Usar endpoints de estilo OpenAI: obtener modelos en `/models` y solicitar chat e
 - Las pruebas de contrato deben cubrir modelos, autenticación, errores y respuesta de chat de cada proveedor objetivo.
 - HTTP queda limitado a loopback; para hosts remotos se exige HTTPS.
 - Las solicitudes de modelos y chat no siguen redirecciones HTTP. Cada perfil queda ligado a su destino configurado y una respuesta 3xx no debe reenviar claves ni contexto a otro host.
+- Chat normal y streaming construyen la solicitud con el mismo adaptador para evitar divergencias de URL, modelo, mensajes y autenticación; solo difiere el indicador `stream`. Las pruebas inspeccionan el contrato serializado y rechazan HTTP fuera de loopback.

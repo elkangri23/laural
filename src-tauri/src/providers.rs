@@ -607,6 +607,23 @@ fn endpoint(base_url: &str, suffix: &str) -> Result<reqwest::Url, String> {
         .map_err(|_| "La dirección del endpoint no es válida.".to_string())
 }
 
+fn chat_request(
+    http: &reqwest::Client,
+    base_url: &str,
+    model: &str,
+    messages: &[Value],
+    api_key: Option<&str>,
+    stream: bool,
+) -> Result<reqwest::RequestBuilder, String> {
+    let mut request = http
+        .post(endpoint(base_url, "chat/completions")?)
+        .json(&json!({ "model": model, "messages": messages, "stream": stream }));
+    if let Some(key) = api_key.filter(|key| !key.trim().is_empty()) {
+        request = request.bearer_auth(key.trim());
+    }
+    Ok(request)
+}
+
 fn client() -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
         .timeout(Duration::from_secs(35))
@@ -1385,20 +1402,17 @@ pub async fn send_chat(
         &selected_context,
         &git_diff_context,
     );
-    let mut request = client()?
-        .post(endpoint(&provider.base_url, "chat/completions")?)
-        .json(&json!({
-            "model": provider.model,
-            "messages": request_messages,
-            "stream": false
-        }));
-    if let Some(key) = key.as_deref() {
-        request = request.bearer_auth(key);
-    }
-    let request = request
-        .send()
-        .await
-        .map_err(|error| format!("No se pudo enviar la consulta: {error}"))?;
+    let request = chat_request(
+        &client()?,
+        &provider.base_url,
+        &provider.model,
+        &request_messages,
+        key.as_deref(),
+        false,
+    )?
+    .send()
+    .await
+    .map_err(|error| format!("No se pudo enviar la consulta: {error}"))?;
     let status = request.status();
     let body = read_provider_response(request).await?;
     if !status.is_success() {
@@ -1459,9 +1473,14 @@ pub async fn send_chat_stream(
             &selected_context,
             &git_diff_context,
         );
-        let mut request = client()?.post(endpoint(&provider.base_url,"chat/completions")?)
-            .json(&json!({"model":provider.model,"messages":request_messages,"stream":true}));
-        if let Some(key) = key.as_deref() { request = request.bearer_auth(key); }
+        let request = chat_request(
+            &client()?,
+            &provider.base_url,
+            &provider.model,
+            &request_messages,
+            key.as_deref(),
+            true,
+        )?;
         let response = await_or_cancel(
             async {
                 request
@@ -3746,6 +3765,75 @@ mod tests {
         for body in ["no-json", r#"{"data":[{"id":" "},{"name":null}]}"#] {
             assert!(parse_models(body).is_err(), "{body}");
         }
+    }
+
+    #[test]
+    fn chat_normal_y_stream_comparten_endpoint_autenticacion_y_payload() {
+        let http = client().unwrap();
+        let messages = vec![json!({ "role": "user", "content": "consulta-fixture" })];
+
+        for stream in [false, true] {
+            let request = chat_request(
+                &http,
+                "http://127.0.0.1:31415/v1",
+                "modelo-local",
+                &messages,
+                Some("  credencial-fixture  "),
+                stream,
+            )
+            .unwrap()
+            .build()
+            .unwrap();
+
+            assert_eq!(request.method(), reqwest::Method::POST);
+            assert_eq!(
+                request.url().as_str(),
+                "http://127.0.0.1:31415/v1/chat/completions"
+            );
+            assert_eq!(
+                request.headers()[reqwest::header::AUTHORIZATION],
+                "Bearer credencial-fixture"
+            );
+            let body: Value =
+                serde_json::from_slice(request.body().unwrap().as_bytes().expect("payload JSON"))
+                    .unwrap();
+            assert_eq!(
+                body,
+                json!({
+                    "model": "modelo-local",
+                    "messages": messages,
+                    "stream": stream
+                })
+            );
+        }
+
+        let request = chat_request(
+            &http,
+            "http://127.0.0.1:11434/v1",
+            "qwen",
+            &messages,
+            Some("  "),
+            true,
+        )
+        .unwrap()
+        .build()
+        .unwrap();
+        assert!(
+            !request
+                .headers()
+                .contains_key(reqwest::header::AUTHORIZATION)
+        );
+        assert!(
+            chat_request(
+                &http,
+                "http://provider.example/v1",
+                "qwen",
+                &messages,
+                None,
+                false,
+            )
+            .is_err()
+        );
     }
 
     #[tokio::test]
