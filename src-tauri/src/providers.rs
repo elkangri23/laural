@@ -2657,10 +2657,17 @@ mod tests {
 
         write_provider_store_at(&path, &store).unwrap();
 
+        let mut replacement = store;
+        replacement.providers[0].name = "Perfil actualizado".into();
+        replacement.providers[0].model = "modelo-nuevo".into();
+        write_provider_store_at(&path, &replacement).unwrap();
+
         let saved: ProviderStore = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
         assert_eq!(saved.active_provider_id.as_deref(), Some("perfil-prueba"));
         assert_eq!(saved.providers.len(), 1);
-        assert_eq!(saved.providers[0].name, "Ollama de prueba");
+        assert_eq!(saved.providers[0].name, "Perfil actualizado");
+        assert_eq!(saved.providers[0].model, "modelo-nuevo");
+        assert_eq!(fs::read_dir(directory.path()).unwrap().count(), 1);
     }
 
     #[test]
