@@ -1865,6 +1865,9 @@ fn has_leading_shell_assignment(shell: &str, command: &str) -> bool {
         return false;
     };
     if shell == "powershell" {
+        if token.starts_with("++$") || token.starts_with("--$") {
+            return true;
+        }
         if !token.starts_with('$') {
             return false;
         }
@@ -1872,7 +1875,10 @@ fn has_leading_shell_assignment(shell: &str, command: &str) -> bool {
             || token.ends_with("++")
             || token.ends_with("--")
             || command.split_whitespace().nth(1).is_some_and(|operator| {
-                matches!(operator, "=" | "+=" | "-=" | "*=" | "/=" | "%=" | "??=")
+                matches!(
+                    operator,
+                    "=" | "+=" | "-=" | "*=" | "/=" | "%=" | "??=" | "++" | "--"
+                )
             });
     }
     if !matches!(shell, "wsl" | "git-bash") {
@@ -3311,6 +3317,10 @@ mod tests {
             ("powershell", "$global:prompt = { 'oculto' }"),
             ("powershell", "$env:PATH += ';C:\\tools'"),
             ("powershell", "$contador++"),
+            ("powershell", "++$contador"),
+            ("powershell", "--$global:contador"),
+            ("powershell", "$contador ++"),
+            ("powershell", "$global:contador --"),
         ] {
             assert!(command_is_high_risk(shell, command), "{shell}: {command}");
         }
@@ -3476,6 +3486,7 @@ mod tests {
                 "eval \"rm -rf proyecto\"".into(),
                 "PATH+=/tmp rm -rf proyecto".into(),
                 "$global:prompt = { 'alterado' }".into(),
+                "++$contador".into(),
                 "declare -x PATH=/tmp".into(),
                 "enable -n printf".into(),
             ],
@@ -3491,6 +3502,7 @@ mod tests {
             ("git-bash", "eval \"rm -rf proyecto\""),
             ("git-bash", "PATH+=/tmp rm -rf proyecto"),
             ("powershell", "$global:prompt = { 'alterado' }"),
+            ("powershell", "++$contador"),
             ("git-bash", "declare -x PATH=/tmp"),
             ("wsl", "enable -n printf"),
         ] {
