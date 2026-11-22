@@ -99,3 +99,5 @@ Verificación: 112 pruebas Rust pasan y 1 queda ignorada; UI 126/126, con 74,81 
 Regresión M3: una macro `doskey` que coincida con una regla permitida continúa exigiendo aprobación manual. Esto verifica que la clasificación de comandos de riesgo prevalezca sobre reglas exactas.
 
 M11: añadí una barrera CI de cobertura mínima del 85 % de líneas para `agent_files.rs`, `configuration_transfer.rs` y `git_panel.rs`. El verificador falla ante archivos ausentes, duplicados, porcentajes no válidos o regresiones; cuatro pruebas unitarias cubren esos casos. La cobertura de ramas queda pendiente porque `llvm-cov` informa cero ramas instrumentadas para la biblioteca Rust actual.
+
+Verificación M11: el CI `45042291022` terminó en verde y ejecutó el gate contra el JSON real de LLVM: 91,55 % en `agent_files.rs`, 94,10 % en `configuration_transfer.rs` y 87,94 % en `git_panel.rs`. Localmente pasan 126 pruebas de interfaz, las 4 pruebas del verificador y 112 pruebas Rust con 1 ignorada; `npm run build` y `cargo fmt --check` pasan. Windows/MSVC vuelve a ejecutar las pruebas Rust, pero no genera el informe local de cobertura.
