@@ -2071,6 +2071,32 @@ fn external_tool_is_high_risk(command: &str, executable: &str) -> bool {
     let Some(subcommand) = arguments.next() else {
         return false;
     };
+    if executable == "pacman" && matches!(subcommand, "-ss" | "--sync-search") {
+        return false;
+    }
+    if matches!(
+        executable,
+        "npm"
+            | "cargo"
+            | "docker"
+            | "kubectl"
+            | "terraform"
+            | "winget"
+            | "choco"
+            | "scoop"
+            | "conda"
+            | "pip"
+            | "pip3"
+            | "apt"
+            | "apt-get"
+            | "dnf"
+            | "yum"
+            | "pacman"
+    ) && subcommand.starts_with('-')
+    {
+        return !matches!(subcommand, "--version" | "-v" | "-V" | "--help" | "-h")
+            || arguments.next().is_some();
+    }
     match executable {
         "npm" => matches!(
             subcommand,
@@ -3341,6 +3367,9 @@ mod tests {
             ("git-bash", "git log --oneline"),
             ("cmd", "echo del archivo.txt"),
             ("git-bash", "npm view react version"),
+            ("git-bash", "npm --version"),
+            ("git-bash", "cargo --help"),
+            ("git-bash", "docker --help"),
             ("git-bash", "docker ps"),
             ("git-bash", "kubectl get pods"),
             ("git-bash", "terraform plan"),
@@ -3396,6 +3425,12 @@ mod tests {
             ("git-bash", "PATH+=/tmp rm -rf proyecto"),
             ("wsl", "GIT_CONFIG_COUNT=1 git status --short"),
             ("git-bash", "FOO=bar npm view react version"),
+            ("git-bash", "npm --prefix proyecto install paquete"),
+            ("git-bash", "cargo --locked install herramienta"),
+            ("git-bash", "docker --context produccion system prune -af"),
+            ("git-bash", "kubectl --context produccion delete pod x"),
+            ("git-bash", "terraform -chdir=infra apply -auto-approve"),
+            ("powershell", "winget --scope machine install paquete"),
             ("powershell", "$global:prompt = { 'oculto' }"),
             ("powershell", "$env:PATH += ';C:\\tools'"),
             ("powershell", "$contador++"),

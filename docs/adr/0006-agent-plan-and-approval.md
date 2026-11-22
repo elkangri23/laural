@@ -28,3 +28,5 @@ El modelo devuelve un plan acotado de acciones. El backend valida formato, longi
 
 Revisión posterior a alpha.5: las reglas guardadas pasan a compararse con la línea completa, respetando mayúsculas. El modo automático admite las tres consultas de Git enumeradas en la guía de configuración. Ampliar argumentos requiere registrar otra regla o confirmar el comando.
 Actualización: antes de aplicar reglas o ejecución automática, Rust rechaza metacaracteres según el shell guardado en la sesión. La aprobación humana mantiene la ejecución de órdenes compuestas tras validar controles y tamaño.
+
+Actualización M3: para herramientas de gestión conocidas, una opción global antes del subcomando exige revisión manual. Así se evita que opciones de selección de proyecto/contexto desplacen un subcomando de cambio fuera de la primera posición que inspecciona la regla. Se permiten llamadas exactas de ayuda/versión y la consulta `pacman -Ss`; el clasificador sigue siendo heurístico y no sustituye un sandbox.
