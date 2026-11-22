@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, type ReactNode } from "react";
+import { act, Profiler, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import App from "../src/App";
@@ -320,6 +320,7 @@ test("limita a 16 las terminales abiertas", async () => {
 
 test("agrupa deltas del chat y conserva el contenido final", async () => {
   vi.useFakeTimers();
+  let appCommits = 0;
   let finishRequest: (() => void) | undefined;
   mocks.invoke.mockImplementation(async (command: string) => {
     if (command === "get_provider") return { id: "local", name: "Local", model: "test" };
@@ -333,7 +334,7 @@ test("agrupa deltas del chat y conserva el contenido final", async () => {
     onDelta = callback;
     return () => undefined;
   });
-  await act(async () => root!.render(<App />));
+  await act(async () => root!.render(<Profiler id="chat-stream" onRender={() => { appCommits += 1; }}><App /></Profiler>));
   const composer = host.querySelector<HTMLTextAreaElement>(".composer textarea")!;
   await act(async () => {
     const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
@@ -355,8 +356,16 @@ test("agrupa deltas del chat y conserva el contenido final", async () => {
   expect(assistantMessages[assistantMessages.length - 1]?.textContent).toContain("Hola mundo");
   await act(async () => { await vi.advanceTimersByTimeAsync(1); });
   expect(assistantMessages[assistantMessages.length - 1]?.textContent).toContain("Hola mundo y más");
+  appCommits = 0;
+  for (let index = 0; index < 20; index += 1) {
+    await act(async () => onDelta?.({ payload: { requestId, delta: "x" } }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(50); });
+  }
+  await act(async () => { await vi.advanceTimersByTimeAsync(200); });
+  expect(appCommits).toBeLessThanOrEqual(14);
+  expect(assistantMessages[assistantMessages.length - 1]?.textContent).toContain("x".repeat(20));
   await act(async () => { finishRequest?.(); await Promise.resolve(); });
-  expect(host.querySelectorAll(".chat-message.assistant").item(0)?.textContent).toContain("Hola mundo y más");
+  expect(host.querySelectorAll(".chat-message.assistant").item(0)?.textContent).toContain(`Hola mundo y más${"x".repeat(20)}`);
 });
 
 test("conserva los deltas pendientes cuando falla el streaming", async () => {
