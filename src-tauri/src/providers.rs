@@ -293,6 +293,10 @@ fn read_provider_store(app: &AppHandle) -> Result<ProviderStore, String> {
 
 fn write_provider_store(app: &AppHandle, store: &ProviderStore) -> Result<(), String> {
     let path = config_path(app)?;
+    write_provider_store_at(&path, store)
+}
+
+fn write_provider_store_at(path: &Path, store: &ProviderStore) -> Result<(), String> {
     let bytes = serde_json::to_vec_pretty(store)
         .map_err(|error| format!("No se pudo codificar la configuración: {error}"))?;
     let parent = path
@@ -1065,6 +1069,44 @@ fn apply_credentials_with(
     Ok(())
 }
 
+fn apply_import_transaction_with(
+    key_updates: &HashMap<String, Option<zeroize::Zeroizing<String>>>,
+    previous_credentials: &HashMap<String, Option<zeroize::Zeroizing<String>>>,
+    backup_path: &str,
+    mut write: impl FnMut(&str, &str) -> Result<(), String>,
+    mut delete: impl FnMut(&str) -> Result<(), String>,
+    write_store: impl FnOnce() -> Result<(), String>,
+) -> Result<(), String> {
+    apply_credentials_with(
+        key_updates,
+        previous_credentials,
+        backup_path,
+        &mut write,
+        &mut delete,
+    )?;
+    if let Err(error) = write_store() {
+        let previous: Vec<_> = key_updates
+            .keys()
+            .map(|provider_id| {
+                (
+                    provider_id.clone(),
+                    previous_credentials.get(provider_id).cloned().flatten(),
+                )
+            })
+            .collect();
+        return Err(
+            if restore_credentials_with(&previous, &mut write, &mut delete) {
+                error
+            } else {
+                format!(
+                    "Falló el guardado y el rollback de claves. La copia recuperable está en {backup_path}."
+                )
+            },
+        );
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn import_configuration(
     app: AppHandle,
@@ -1182,34 +1224,14 @@ fn import_configuration_inner(
     let backup_string = backup.to_string_lossy().into_owned();
     write_transfer_file(&backup_string, &backup_bytes)?;
 
-    apply_credentials_with(
+    apply_import_transaction_with(
         &key_updates,
         &previous_credentials,
         &backup_string,
         write_api_key,
         delete_api_key,
+        || write_provider_store(&app, &new_store),
     )?;
-
-    if let Err(error) = write_provider_store(&app, &new_store) {
-        let applied_credentials: Vec<_> = key_updates
-            .keys()
-            .map(|provider_id| {
-                (
-                    provider_id.clone(),
-                    previous_credentials.get(provider_id).cloned().flatten(),
-                )
-            })
-            .collect();
-        let restored =
-            restore_credentials_with(&applied_credentials, write_api_key, delete_api_key);
-        return Err(if restored {
-            error
-        } else {
-            format!(
-                "Falló el guardado y el rollback de claves. La copia recuperable está en {backup_string}."
-            )
-        });
-    }
 
     let active = active_provider(&new_store).map(public_provider);
     let providers = new_store.providers.iter().map(public_provider).collect();
@@ -2615,6 +2637,102 @@ mod tests {
         );
         assert!(validate_transfer_path("settings.json").is_err());
         assert!(read_transfer_file("missing.laural").is_err());
+    }
+
+    #[test]
+    fn escribe_y_vuelve_a_leer_el_almacen_de_perfiles() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("providers.json");
+        let store = ProviderStore {
+            active_provider_id: Some("perfil-prueba".into()),
+            providers: vec![ProviderSettings {
+                id: "perfil-prueba".into(),
+                provider_kind: Some("ollama".into()),
+                name: "Ollama de prueba".into(),
+                base_url: "http://127.0.0.1:11434/v1".into(),
+                model: "qwen".into(),
+                share_custom_endpoint: false,
+            }],
+        };
+
+        write_provider_store_at(&path, &store).unwrap();
+
+        let saved: ProviderStore = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
+        assert_eq!(saved.active_provider_id.as_deref(), Some("perfil-prueba"));
+        assert_eq!(saved.providers.len(), 1);
+        assert_eq!(saved.providers[0].name, "Ollama de prueba");
+    }
+
+    #[test]
+    fn restaura_clave_anterior_si_falla_la_persistencia_de_providers_json() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory
+            .path()
+            .join("carpeta-ausente")
+            .join("providers.json");
+        let credentials = std::cell::RefCell::new(HashMap::from([(
+            "perfil".to_string(),
+            "clave-anterior".to_string(),
+        )]));
+        let updates = HashMap::from([(
+            "perfil".to_string(),
+            Some(zeroize::Zeroizing::new("clave-nueva".to_string())),
+        )]);
+        let previous = HashMap::from([(
+            "perfil".to_string(),
+            Some(zeroize::Zeroizing::new("clave-anterior".to_string())),
+        )]);
+        let new_store = ProviderStore::default();
+
+        let result = apply_import_transaction_with(
+            &updates,
+            &previous,
+            "copia.laural",
+            |id, value| {
+                credentials
+                    .borrow_mut()
+                    .insert(id.to_string(), value.to_string());
+                Ok(())
+            },
+            |id| {
+                credentials.borrow_mut().remove(id);
+                Ok(())
+            },
+            || write_provider_store_at(&path, &new_store),
+        );
+
+        assert!(result.is_err());
+        assert_eq!(
+            credentials.borrow().get("perfil").map(String::as_str),
+            Some("clave-anterior")
+        );
+        assert!(!path.exists());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn credential_manager_guarda_lee_y_borra_una_clave_temporal() {
+        let id = format!(
+            "prueba-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
+        let value = "clave-efimera-de-prueba";
+        let write = write_api_key(&id, value);
+        let read = write.as_ref().ok().and_then(|_| read_api_key(&id).ok());
+        let cleanup = if write.is_ok() {
+            delete_api_key(&id)
+        } else {
+            Ok(())
+        };
+
+        assert!(write.is_ok());
+        assert_eq!(read.flatten().as_deref(), Some(value));
+        assert!(cleanup.is_ok());
+        assert_eq!(read_api_key(&id).unwrap(), None);
     }
 
     #[test]
