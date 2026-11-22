@@ -1,5 +1,6 @@
 import { appendTerminalOutput, COMMAND_BLOCK_OUTPUT_LIMIT } from "./terminalOutput";
-import { createChatHistoryPersistence, limitChatMessages } from "./chatPersistence";
+import { createChatHistoryPersistence } from "./chatPersistence";
+import { limitChatMessages, prepareChatHistoryForRequest } from "./chatHistory";
 import { HelpDialog, HelpIcon } from "./components/HelpDialog";
 import { BellIcon, NotificationCenter } from "./components/NotificationCenter";
 import { SettingsDialog } from "./components/SettingsDialog";
@@ -688,7 +689,7 @@ function App() {
       unlisten = stopListening;
       return invoke("send_chat_stream", {
       requestId,
-      messages: nextMessages.slice(0, -1),
+      messages: prepareChatHistoryForRequest(nextMessages.slice(0, -1)),
       terminalContext: terminalContextRef.current[activeTabId] ?? "",
       projectPath,
       selectedFiles: contextFiles,

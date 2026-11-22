@@ -1,5 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { createChatHistoryPersistence, limitChatMessages, MAX_CHAT_MESSAGES } from "../src/chatPersistence";
+import { createChatHistoryPersistence } from "../src/chatPersistence";
+import { limitChatMessages, MAX_CHAT_MESSAGES } from "../src/chatHistory";
 
 afterEach(() => vi.useRealTimers());
 

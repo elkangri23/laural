@@ -1,17 +1,10 @@
-type ChatMessage = { role: "user" | "assistant"; content: string };
+import { limitChatMessages, type ChatHistoryMessage } from "./chatHistory";
 
 const CHAT_HISTORY_STORAGE_KEY = "laural.chat.v1";
-export const MAX_CHAT_MESSAGES = 100;
 const MAX_STORED_MESSAGE_LENGTH = 20_000;
 
-export function limitChatMessages<T extends ChatMessage>(messages: T[]): T[];
-export function limitChatMessages<T extends ChatMessage>(messages: readonly T[]): readonly T[];
-export function limitChatMessages<T extends ChatMessage>(messages: readonly T[]): readonly T[] {
-  return messages.length > MAX_CHAT_MESSAGES ? messages.slice(-MAX_CHAT_MESSAGES) : messages;
-}
-
 export function createChatHistoryPersistence(storage: Pick<Storage, "setItem">, intervalMs = 500) {
-  let pendingMessages: readonly ChatMessage[] | null = null;
+  let pendingMessages: readonly ChatHistoryMessage[] | null = null;
   let timer: ReturnType<typeof setTimeout> | null = null;
 
   function flush() {
@@ -32,7 +25,7 @@ export function createChatHistoryPersistence(storage: Pick<Storage, "setItem">, 
     }
   }
 
-  function schedule(messages: readonly ChatMessage[]) {
+  function schedule(messages: readonly ChatHistoryMessage[]) {
     pendingMessages = messages;
     if (timer === null) timer = setTimeout(flush, intervalMs);
   }

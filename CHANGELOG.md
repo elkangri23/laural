@@ -12,6 +12,7 @@
 - Los bloques secundarios de comandos actualizan su estado a 20 Hz en vez de 30 Hz; el terminal visible sigue escribiendo al instante y los bloques vacían siempre el último fragmento al terminar.
 - Cada bloque de comando ahora está memoizado: una salida nueva no vuelve a limpiar y renderizar las otras 29 entradas visibles.
 - El historial activo del chat se limita a los últimos 100 mensajes, igual que el almacenamiento y el límite del backend; evita crecimiento indefinido y solicitudes rechazadas al superar el máximo.
+- Antes del IPC, el contexto del chat se reduce a los últimos 20 mensajes y 8.000 caracteres Unicode por mensaje, los mismos límites que aplica Rust; evita reenviar respuestas largas completas.
 - La limpieza de contadores del limitador ahora trabaja en lotes de hasta 1.000 filas y evita consultas de purga simultáneas dentro de una misma instancia; una regresión PostgreSQL verifica el tamaño real del lote.
 - Nueva medición de recursos del proceso release abierto: durante 62 s y con PowerShell presente sin salida/chat, el árbol se mantuvo en 9 procesos, 108,2–108,3 MiB de working set y añadió 0,07 s de CPU. Arranque frío e instalación limpia siguen sin medirse.
 - Añadido un runbook de respuesta a incidentes del servicio de sync y actualizado el de recuperación de cuenta para reflejar TOTP/códigos implementados localmente. Se registró una segunda muestra de memoria en reposo de la app Windows y sus límites.
