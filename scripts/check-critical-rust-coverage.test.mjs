@@ -86,7 +86,7 @@ test("falla si faltan ramas, hay datos inválidos o se baja del mínimo", () => 
   );
 
   assert.deepEqual(checkCriticalCoverage(report, "branches"), [
-    "agent_files.rs: 69.99 % es inferior al mínimo de 70 % de ramas",
+    `agent_files.rs: ${(MINIMUM_BRANCH_COVERAGE - 0.01).toFixed(2)} % es inferior al mínimo de ${MINIMUM_BRANCH_COVERAGE} % de ramas`,
     "configuration_transfer.rs: el informe no contiene una cobertura de ramas válida",
     "git_panel.rs: se esperaba un archivo en el informe y se encontraron 0",
   ]);

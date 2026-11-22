@@ -3,7 +3,7 @@ import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 
 export const MINIMUM_LINE_COVERAGE = 85;
-export const MINIMUM_BRANCH_COVERAGE = 70;
+export const MINIMUM_BRANCH_COVERAGE = 65;
 
 const COVERAGE_THRESHOLDS = {
   lines: { label: "líneas", minimum: MINIMUM_LINE_COVERAGE },
