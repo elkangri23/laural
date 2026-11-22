@@ -28,16 +28,16 @@ describe("configuración del servicio", () => {
     expect(readEmailAuthConfig({} as NodeJS.ProcessEnv)).toBeNull();
   });
 
-  it("activa correo solo con clave, remitente sin controles y pepper de 32 bytes", () => {
+  it("activa correo solo con claves, remitente sin controles y parámetros TOTP válidos", () => {
     expect(readEmailAuthConfig({
-      EMAIL_AUTH_ENABLED: "true", RESEND_API_KEY: "re_test", RESEND_FROM: "Laural <auth@example.test>", AUTH_PIN_PEPPER: "x".repeat(32),
-    } as NodeJS.ProcessEnv)).toEqual({ resendApiKey: "re_test", resendFrom: "Laural <auth@example.test>", pinPepper: "x".repeat(32) });
+      EMAIL_AUTH_ENABLED: "true", RESEND_API_KEY: "re_test", RESEND_FROM: "Laural <auth@example.test>", AUTH_PIN_PEPPER: "x".repeat(32), AUTH_RECOVERY_PEPPER: "y".repeat(32), TOTP_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString("base64url"),
+    } as NodeJS.ProcessEnv)).toMatchObject({ resendApiKey: "re_test", resendFrom: "Laural <auth@example.test>", pinPepper: "x".repeat(32), recoveryPepper: "y".repeat(32), totpEncryptionKey: Buffer.alloc(32, 7) });
     expect(() => readEmailAuthConfig({ EMAIL_AUTH_ENABLED: "true" } as NodeJS.ProcessEnv)).toThrow();
     expect(() => readEmailAuthConfig({
-      EMAIL_AUTH_ENABLED: "true", RESEND_API_KEY: "key", RESEND_FROM: "bad\nfrom", AUTH_PIN_PEPPER: "x".repeat(32),
+      EMAIL_AUTH_ENABLED: "true", RESEND_API_KEY: "key", RESEND_FROM: "bad\nfrom", AUTH_PIN_PEPPER: "x".repeat(32), AUTH_RECOVERY_PEPPER: "y".repeat(32), TOTP_ENCRYPTION_KEY: Buffer.alloc(32).toString("base64url"),
     } as NodeJS.ProcessEnv)).toThrow();
     expect(() => readEmailAuthConfig({
-      EMAIL_AUTH_ENABLED: "true", RESEND_API_KEY: "key", RESEND_FROM: "auth@example.test", AUTH_PIN_PEPPER: "short",
+      EMAIL_AUTH_ENABLED: "true", RESEND_API_KEY: "key", RESEND_FROM: "auth@example.test", AUTH_PIN_PEPPER: "short", AUTH_RECOVERY_PEPPER: "y".repeat(32), TOTP_ENCRYPTION_KEY: Buffer.alloc(32).toString("base64url"),
     } as NodeJS.ProcessEnv)).toThrow();
   });
 });

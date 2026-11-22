@@ -8,6 +8,7 @@ export const MIGRATION_FILES = [
   "003_native_auth.sql",
   "004_request_rate_limits.sql",
   "005_password_reset.sql",
+  "006_account_mfa.sql",
 ] as const;
 
 export async function applyMigrations(client: PoolClient): Promise<void> {

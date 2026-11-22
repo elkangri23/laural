@@ -21,13 +21,13 @@ Los casos describen el comportamiento esperado del producto. Los estados disting
 | UC-18 | Transferir claves en archivo cifrado | Usuario | Implementación inicial; pruebas de rollback pendientes |
 | UC-19 | Activar cuenta y escoger snapshot inicial | Usuario | Login Tauri y elección manual inicial disponibles; VPS pendiente |
 | UC-20 | Sincronizar cambios y resolver conflicto | Usuario | Cliente manual/automático inicial; VPS y reconexión real pendientes |
-| UC-21 | Recuperar acceso tras perder factores | Usuario/administrador | Runbook documentado; MFA y recuperación no implementadas |
+| UC-21 | Recuperar acceso tras perder factores | Usuario/administrador | Códigos TOTP integrados; recuperación administrativa y ensayo pendientes |
 | UC-22 | Consultar estado público del servicio | Visitante | Página y contrato iniciales; despliegue y operación pendientes |
 | UC-23 | Consultar rama, cambios y diff Git | Desarrollador | Implementación inicial de solo lectura |
 | UC-24 | Preparar una tarea repetible con una receta del agente | Desarrollador | Implementación inicial; se guarda localmente |
 | UC-25 | Restablecer contraseña mediante PIN de correo | Titular de cuenta | Implementado localmente; despliegue Resend/VPS pendiente |
 
-Los casos UC-17 y UC-18 están disponibles en Configuración en su implementación inicial. UC-19 y UC-20 tienen un cliente inicial, pero requieren un servicio desplegado para su validación real. UC-21 sigue pendiente; UC-22 tiene una implementación local que requiere operación del VPS. UC-25 implementa restablecimiento de contraseña, independiente de recuperar factores. Los flujos de sincronización están detallados en [portabilidad y sincronización](sincronizacion-preferencias.md).
+Los casos UC-17 y UC-18 están disponibles en Configuración en su implementación inicial. UC-19 y UC-20 tienen un cliente inicial, pero requieren un servicio desplegado para su validación real. UC-21 permite usar códigos de recuperación TOTP; la revisión administrativa tras perder todos los factores sigue pendiente. UC-22 tiene una implementación local que requiere operación del VPS. UC-25 implementa restablecimiento de contraseña, independiente de recuperar factores. Los flujos de sincronización están detallados en [portabilidad y sincronización](sincronizacion-preferencias.md).
 
 ## UC-01 — Abrir terminal
 

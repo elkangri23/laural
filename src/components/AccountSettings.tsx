@@ -13,6 +13,8 @@ type Snapshot = {
 };
 type Remote = { snapshot: Snapshot | null; revision: number };
 type AccountSession = { id: string; createdAt: string; expiresAt: string; current: boolean };
+type AccountMfaStatus = { totpEnabled: boolean; recoveryCodesRemaining: number; enrollmentPending: boolean };
+type TotpEnrollment = { secret: string; provisioningUri: string };
 type ImportResult = { preferences: Preferences; activeProvider: { id: string; providerKind: string; name: string; baseUrl: string; model: string; hasApiKey: boolean; shareCustomEndpoint: boolean } | null; providers: { id: string; providerKind: string; name: string; baseUrl: string; model: string; hasApiKey: boolean; shareCustomEndpoint: boolean }[]; backupPath: string; backupEncrypted: boolean; backupContainsApiKeys: boolean };
 
 export function AccountSettings({ onClose, preferences, onImported, onSyncSettled, syncRiskAcknowledged, onAcknowledgeSyncRisk }: { onClose: () => void; preferences: Preferences; onImported: (result: ImportResult) => void; onSyncSettled: () => void; syncRiskAcknowledged: boolean; onAcknowledgeSyncRisk: () => boolean }) {
@@ -27,6 +29,13 @@ export function AccountSettings({ onClose, preferences, onImported, onSyncSettle
   const [riskAcknowledged, setRiskAcknowledged] = useState(syncRiskAcknowledged);
   const [sessions, setSessions] = useState<AccountSession[]>([]);
   const [sessionsMessage, setSessionsMessage] = useState("");
+  const [mfaStatus, setMfaStatus] = useState<AccountMfaStatus | null>(null);
+  const [enrollment, setEnrollment] = useState<TotpEnrollment | null>(null);
+  const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
+  const [recoveryAction, setRecoveryAction] = useState<"enrollment" | "rotation" | null>(null);
+  const [mfaCode, setMfaCode] = useState("");
+  const [recoverySaved, setRecoverySaved] = useState(false);
+  const [mfaMessage, setMfaMessage] = useState("");
 
   useEffect(() => setRiskAcknowledged(syncRiskAcknowledged), [syncRiskAcknowledged]);
 
@@ -40,6 +49,7 @@ export function AccountSettings({ onClose, preferences, onImported, onSyncSettle
       if (payload.status === "signed_in") {
         setConnected(true);
         void loadAccountSessions();
+        void loadAccountMfa();
         window.dispatchEvent(new Event("laural:account-connected"));
       }
       setMessage(payload.message);
@@ -58,7 +68,10 @@ export function AccountSettings({ onClose, preferences, onImported, onSyncSettle
         setConnected(hasSession);
         setMessage(hasSession ? "Hay una sesión guardada en este equipo." : "No hay ninguna cuenta conectada.");
         setSessionReady(true);
-        if (hasSession) void loadAccountSessions();
+        if (hasSession) {
+          void loadAccountSessions();
+          void loadAccountMfa();
+        }
       }
     }).catch(() => {
       if (!disposed) {
@@ -93,6 +106,118 @@ export function AccountSettings({ onClose, preferences, onImported, onSyncSettle
       setSessionsMessage(result.length ? "" : "No hay sesiones activas.");
     } catch {
       setSessionsMessage("No se pudo consultar la lista de sesiones. Comprueba la conexión e inténtalo de nuevo.");
+    }
+  }
+
+  async function loadAccountMfa() {
+    try {
+      setMfaStatus(await invoke<AccountMfaStatus>("get_account_mfa_status"));
+    } catch {
+      setMfaStatus(null);
+      setMfaMessage("No se pudo consultar la seguridad de la cuenta.");
+    }
+  }
+
+  async function startTotpEnrollment() {
+    setBusy(true);
+    setMfaMessage("");
+    try {
+      setEnrollment(await invoke<TotpEnrollment>("start_totp_enrollment"));
+      setRecoveryCodes([]);
+      setRecoveryAction(null);
+      setMfaCode("");
+    } catch {
+      setMfaMessage("No se pudo iniciar TOTP. Inicia sesión de nuevo y vuelve a intentarlo.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirmTotpEnrollment() {
+    setBusy(true);
+    setMfaMessage("");
+    try {
+      setRecoveryCodes(await invoke<string[]>("confirm_totp_enrollment", { code: mfaCode }));
+      setRecoveryAction("enrollment");
+      setRecoverySaved(false);
+      setMfaCode("");
+    } catch {
+      setMfaMessage("El código no es válido o la sesión reciente ha caducado. Comprueba el código e inicia sesión de nuevo si es necesario.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function rotateRecoveryCodes() {
+    setBusy(true);
+    setMfaMessage("");
+    try {
+      setRecoveryCodes(await invoke<string[]>("rotate_account_recovery_codes"));
+      setRecoveryAction("rotation");
+      setRecoverySaved(false);
+    } catch {
+      setMfaMessage("No se pudieron renovar los códigos. Inicia sesión de nuevo y vuelve a intentarlo.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function finishRecoveryCodes() {
+    if (!recoverySaved) return;
+    setBusy(true);
+    setMfaMessage("");
+    try {
+      await invoke("complete_totp_enrollment");
+      setEnrollment(null);
+      setRecoveryCodes([]);
+      setRecoveryAction(null);
+      await loadAccountMfa();
+      await loadAccountSessions();
+      setMfaMessage(recoveryAction === "rotation" ? "Códigos renovados. Las sesiones de otros equipos se revocaron." : "TOTP activado. Las sesiones de otros equipos se revocaron.");
+    } catch {
+      setMfaMessage("No se pudo confirmar. Conserva esta pantalla y vuelve a intentarlo; los códigos anteriores siguen activos hasta confirmar.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function cancelTotpEnrollment() {
+    setBusy(true);
+    try {
+      await invoke("cancel_totp_enrollment");
+      setEnrollment(null);
+      setRecoveryCodes([]);
+      setRecoveryAction(null);
+      setRecoverySaved(false);
+      await loadAccountMfa();
+    } catch {
+      setMfaMessage("No se pudo cancelar el cambio de TOTP.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function disableTotp() {
+    if (!window.confirm("Se desactivará la verificación TOTP y se eliminarán los códigos de recuperación. ¿Quieres continuar?")) return;
+    setBusy(true);
+    try {
+      await invoke("disable_account_totp");
+      setMfaMessage("TOTP desactivado. Las sesiones de otros equipos se revocaron.");
+      await loadAccountMfa();
+      await loadAccountSessions();
+    } catch {
+      setMfaMessage("No se pudo desactivar TOTP. Inicia sesión de nuevo y vuelve a intentarlo.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function copyRecoveryCodes() {
+    try {
+      await navigator.clipboard.writeText(recoveryCodes.join("\n"));
+      setMfaMessage("Códigos copiados. Guárdalos en un lugar seguro.");
+    } catch {
+      setMfaMessage("No se pudieron copiar. Selecciona y copia los códigos manualmente.");
     }
   }
 
@@ -135,6 +260,9 @@ export function AccountSettings({ onClose, preferences, onImported, onSyncSettle
     try {
       const remotelyRevoked = await invoke<boolean>("clear_account_session");
       setConnected(false);
+      setMfaStatus(null);
+      setEnrollment(null);
+      setRecoveryCodes([]);
       window.dispatchEvent(new Event("laural:account-disconnected"));
       setMessage(remotelyRevoked
         ? "Sesión cerrada en este equipo; el servidor confirmó que ya no es válida."
@@ -282,6 +410,45 @@ export function AccountSettings({ onClose, preferences, onImported, onSyncSettle
               </li>)}
             </ul>}
           </div>
+          <section className="account-mfa" aria-labelledby="account-mfa-title">
+            <h4 id="account-mfa-title">Autenticación en dos pasos</h4>
+            <p className="dialog-copy">Protege el inicio de sesión con una aplicación TOTP. Para cambiar esta opción debes haber iniciado sesión en los últimos diez minutos.</p>
+            {mfaMessage && <p className="form-message" role="status" aria-live="polite">{mfaMessage}</p>}
+            {!mfaStatus && <p className="dialog-copy">Consultando el estado de seguridad…</p>}
+            {mfaStatus && !enrollment && recoveryCodes.length === 0 && <>
+              <p className="account-mfa-status">Estado: <strong>{mfaStatus.totpEnabled ? "Activado" : "Desactivado"}</strong>{mfaStatus.totpEnabled && ` · ${mfaStatus.recoveryCodesRemaining} códigos disponibles`}</p>
+              {mfaStatus.enrollmentPending && !mfaStatus.totpEnabled && <p className="dialog-copy">Hay una configuración pendiente que no se activó. Puedes reiniciarla o cancelarla.</p>}
+              {!mfaStatus.totpEnabled
+                ? <div className="account-sync-actions">
+                  <button className="secondary-button" disabled={busy} onClick={() => void startTotpEnrollment()}>{mfaStatus.enrollmentPending ? "Reiniciar configuración" : "Configurar TOTP"}</button>
+                  {mfaStatus.enrollmentPending && <button className="secondary-button" disabled={busy} onClick={() => void cancelTotpEnrollment()}>Cancelar configuración pendiente</button>}
+                </div>
+                : <div className="account-sync-actions">
+                  <button className="secondary-button" disabled={busy} onClick={() => void rotateRecoveryCodes()}>Renovar códigos de recuperación</button>
+                  <button className="secondary-button" disabled={busy} onClick={() => void disableTotp()}>Desactivar TOTP</button>
+                </div>}
+            </>}
+            {enrollment && recoveryCodes.length === 0 && <div className="account-mfa-enrollment">
+              <p>1. Añade la cuenta a tu aplicación autenticadora mediante este URI o introduce manualmente la clave.</p>
+              <label>URI de configuración<input readOnly value={enrollment.provisioningUri} /></label>
+              <label>Clave manual<input readOnly value={enrollment.secret} /></label>
+              <label>Código de seis dígitos<input inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={mfaCode} onChange={(event) => setMfaCode(event.currentTarget.value.replace(/\D/gu, "").slice(0, 6))} /></label>
+              <div className="account-sync-actions">
+                <button className="secondary-button" disabled={busy || mfaCode.length !== 6} onClick={() => void confirmTotpEnrollment()}>Verificar y mostrar códigos</button>
+                <button className="secondary-button" disabled={busy} onClick={() => void cancelTotpEnrollment()}>Cancelar</button>
+              </div>
+            </div>}
+            {recoveryCodes.length > 0 && <div className="account-recovery-codes">
+              <p>{recoveryAction === "rotation" ? "Guarda los nuevos códigos. Los anteriores siguen activos hasta que confirmes que los has guardado." : "Guarda estos códigos ahora. Solo se muestran una vez y se activarán al confirmar que los has guardado."}</p>
+              <pre aria-label="Códigos de recuperación">{recoveryCodes.join("\n")}</pre>
+              <button className="secondary-button" disabled={busy} onClick={() => void copyRecoveryCodes()}>Copiar códigos</button>
+              <label className="account-recovery-confirm"><input type="checkbox" checked={recoverySaved} onChange={(event) => setRecoverySaved(event.currentTarget.checked)} /> He guardado los códigos en un lugar seguro</label>
+              <div className="account-sync-actions">
+                <button className="primary-button" disabled={busy || !recoverySaved} onClick={() => void finishRecoveryCodes()}>Confirmar y {recoveryAction === "rotation" ? "renovar" : "activar TOTP"}</button>
+                <button className="secondary-button" disabled={busy} onClick={() => void cancelTotpEnrollment()}>Cancelar</button>
+              </div>
+            </div>}
+          </section>
         </>
         : <button className="primary-button" onClick={() => void beginLogin()} disabled={busy || !listenerReady || !sessionReady}>{busy ? "Esperando en el navegador…" : "Iniciar sesión"}</button>}
       {connected && <p className="dialog-copy account-note">Solo se sincronizan las preferencias permitidas y los perfiles de proveedor. Las claves API permanecen en el almacén seguro de este equipo. Los endpoints personalizados solo se incluyen si activaste compartirlos en cada perfil.</p>}

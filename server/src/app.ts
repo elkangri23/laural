@@ -1,11 +1,12 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import Fastify, { type FastifyInstance } from "fastify";
+import Fastify, { type FastifyInstance, type FastifyReply } from "fastify";
 import formbody from "@fastify/formbody";
 import { Ajv2020 } from "ajv/dist/2020.js";
 import type { PreferenceSnapshot, PreferenceStore, ReadinessCheck, Authenticate, ListAccountSessions, RevokeAccountSession, RevokeOtherSessions, RevokeSession } from "./contracts.js";
 import type { EmailAuthService } from "./email-auth.js";
-import { NativeAuthService, validateNativeFlowParameters } from "./native-auth.js";
+import type { AccountMfaService } from "./account-mfa.js";
+import { NativeAuthService, validateNativeFlowParameters, type LoginResult } from "./native-auth.js";
 import type { RequestRateLimiter } from "./request-rate-limit.js";
 import snapshotSchema from "../../shared/preference-snapshot-v1.schema.json" with { type: "json" };
 
@@ -23,6 +24,7 @@ export type AppDependencies = {
   checkReadiness: ReadinessCheck;
   emailAuth?: EmailAuthService;
   nativeAuth?: NativeAuthService;
+  accountMfa?: AccountMfaService;
   requestRateLimiter: RequestRateLimiter;
 };
 
@@ -30,6 +32,7 @@ type RegistrationBody = { displayName: string; email: string; password: string }
 type EmailPinBody = { email: string; pin: string };
 type EmailBody = { email: string };
 type NativeLoginBody = { csrf: string; email: string; password: string };
+type NativeMfaLoginBody = { csrf: string; email: string; proof: string };
 type NativeRegisterBody = RegistrationBody & { csrf: string };
 type NativePinBody = EmailPinBody & { csrf: string };
 type NativeEmailBody = EmailBody & { csrf: string };
@@ -66,6 +69,7 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
 
   const emailAuth = dependencies.emailAuth;
   const nativeAuth = dependencies.nativeAuth;
+  const accountMfa = dependencies.accountMfa;
 
   app.post("/v1/auth/session/revoke", { preHandler: limited(rateLimit, "session-revoke", 10, 60) }, async (request, reply) => {
     const authorization = request.headers.authorization;
@@ -147,11 +151,29 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
         password: request.body.password,
       });
       if (!result) return reply.code(400).type("text/html; charset=utf-8").send(renderAuthPage(request.body.csrf, "No se pudo iniciar sesión. Revisa los datos y que el correo esté verificado."));
-      const callback = new URL(result.redirectUri);
-      callback.searchParams.set("code", result.code);
-      callback.searchParams.set("state", result.state);
-      reply.header("Set-Cookie", expiredFlowCookie());
-      return reply.code(303).header("Location", callback.href).send();
+      if (result.kind === "mfa_required") {
+        return reply.type("text/html; charset=utf-8").send(renderMfaPage(request.body.csrf, request.body.email));
+      }
+      return redirectNativeLogin(reply, result);
+    });
+
+    app.post<{ Body: NativeMfaLoginBody }>("/auth/native/login/mfa", {
+      preHandler: limited(rateLimit, "native-mfa-login", 10, 60),
+      schema: { body: nativeMfaLoginSchema },
+    }, async (request, reply) => {
+      if (!await nativeAuth.isBrowserFlowValid(readCookie(request.headers.cookie, FLOW_COOKIE), request.body.csrf)) {
+        return reply.code(400).type("text/html; charset=utf-8").send(renderAuthPage("", "La sesión de autenticación caducó. Vuelve a iniciar el proceso en Laural."));
+      }
+      const result = await nativeAuth.completeMfa({
+        cookieToken: readCookie(request.headers.cookie, FLOW_COOKIE) ?? "",
+        csrfToken: request.body.csrf,
+        email: request.body.email,
+        proof: request.body.proof,
+      });
+      if (!result || result.kind !== "authorized") {
+        return reply.code(400).type("text/html; charset=utf-8").send(renderMfaPage(request.body.csrf, request.body.email, "Código incorrecto o caducado. Inténtalo de nuevo."));
+      }
+      return redirectNativeLogin(reply, result);
     });
 
     app.post<{ Body: NativeRegisterBody }>("/auth/native/register", {
@@ -226,6 +248,68 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
       const grant = await nativeAuth.exchange(request.body.code, request.body.codeVerifier);
       if (!grant) return reply.code(400).send({ error: "invalid_or_expired_code" });
       return reply.send({ sessionToken: grant.token, expiresAt: grant.expiresAt });
+    });
+  }
+
+  if (accountMfa) {
+    app.get("/v1/auth/mfa", { preHandler: limited(rateLimit, "mfa-status", 30, 60) }, async (request, reply) => {
+      const accountId = await dependencies.authenticate(request.headers.authorization);
+      if (!accountId) return reply.code(401).send({ error: "unauthorized" });
+      return reply.send(await accountMfa.status(accountId));
+    });
+
+    app.post("/v1/auth/mfa/totp/enrollment", { preHandler: limited(rateLimit, "mfa-enroll-start", 3, 900) }, async (request, reply) => {
+      const authorization = request.headers.authorization;
+      const accountId = await dependencies.authenticate(authorization);
+      if (!accountId) return reply.code(401).send({ error: "unauthorized" });
+      const result = await accountMfa.startEnrollment(accountId, authorization);
+      if (!result) return reply.code(409).send({ error: "recent_login_required_or_factor_exists" });
+      return reply.send(result);
+    });
+
+    app.post<{ Body: { code: string } }>("/v1/auth/mfa/totp/enrollment/confirm", {
+      preHandler: limited(rateLimit, "mfa-enroll-confirm", 10, 60),
+      schema: { body: { type: "object", additionalProperties: false, required: ["code"], properties: { code: { type: "string", pattern: "^[0-9]{6}$" } } } },
+    }, async (request, reply) => {
+      const authorization = request.headers.authorization;
+      const accountId = await dependencies.authenticate(authorization);
+      if (!accountId) return reply.code(401).send({ error: "unauthorized" });
+      const codes = await accountMfa.confirmEnrollment(accountId, authorization, request.body.code);
+      if (!codes) return reply.code(400).send({ error: "invalid_or_expired_code" });
+      return reply.send({ recoveryCodes: codes });
+    });
+
+    app.post("/v1/auth/mfa/totp/enrollment/complete", { preHandler: limited(rateLimit, "mfa-enroll-complete", 5, 60) }, async (request, reply) => {
+      const authorization = request.headers.authorization;
+      const accountId = await dependencies.authenticate(authorization);
+      if (!accountId) return reply.code(401).send({ error: "unauthorized" });
+      if (!await accountMfa.acknowledgeRecoveryCodes(accountId, authorization)) return reply.code(409).send({ error: "recent_login_required_or_no_pending_enrollment" });
+      return reply.code(204).send();
+    });
+
+    app.delete("/v1/auth/mfa/totp/enrollment", { preHandler: limited(rateLimit, "mfa-enroll-cancel", 5, 60) }, async (request, reply) => {
+      const authorization = request.headers.authorization;
+      const accountId = await dependencies.authenticate(authorization);
+      if (!accountId) return reply.code(401).send({ error: "unauthorized" });
+      await accountMfa.cancelEnrollment(accountId, authorization);
+      return reply.code(204).send();
+    });
+
+    app.post("/v1/auth/mfa/recovery-codes/rotate", { preHandler: limited(rateLimit, "mfa-recovery-rotate", 5, 60) }, async (request, reply) => {
+      const authorization = request.headers.authorization;
+      const accountId = await dependencies.authenticate(authorization);
+      if (!accountId) return reply.code(401).send({ error: "unauthorized" });
+      const codes = await accountMfa.rotateRecoveryCodes(accountId, authorization);
+      if (!codes) return reply.code(409).send({ error: "recent_login_required_or_factor_disabled" });
+      return reply.send({ recoveryCodes: codes });
+    });
+
+    app.delete("/v1/auth/mfa/totp", { preHandler: limited(rateLimit, "mfa-totp-disable", 5, 60) }, async (request, reply) => {
+      const authorization = request.headers.authorization;
+      const accountId = await dependencies.authenticate(authorization);
+      if (!accountId) return reply.code(401).send({ error: "unauthorized" });
+      if (!await accountMfa.disableTotp(accountId, authorization)) return reply.code(409).send({ error: "recent_login_required_or_factor_disabled" });
+      return reply.code(204).send();
     });
   }
 
@@ -377,6 +461,11 @@ const nativeLoginSchema = formSchema({
   email: { type: "string", minLength: 6, maxLength: 320 },
   password: { type: "string", minLength: 12, maxLength: 128 },
 }, ["csrf", "email", "password"]);
+const nativeMfaLoginSchema = formSchema({
+  csrf: { type: "string", minLength: 43, maxLength: 43 },
+  email: { type: "string", minLength: 6, maxLength: 320 },
+  proof: { type: "string", pattern: "^(?:[0-9]{6}|[A-Fa-f0-9]{4}(?:-[A-Fa-f0-9]{4}){3})$" },
+}, ["csrf", "email", "proof"]);
 const nativeRegisterSchema = formSchema({
   csrf: { type: "string", minLength: 43, maxLength: 43 },
   displayName: { type: "string", minLength: 1, maxLength: 80 },
@@ -438,6 +527,32 @@ function renderAuthPage(csrfToken: string, notice = ""): string {
 <button type="submit">Reenviar PIN</button></form></details>
 <p class="privacy">El PIN solo verifica el correo o permite cambiar la contraseña. No inicia sesión ni elimina passkeys o MFA. Las claves de tus proveedores no forman parte de esta cuenta.</p>
 </main><footer>Laural · Acceso seguro desde navegador externo</footer></div></body></html>`;
+}
+
+function renderMfaPage(csrfToken: string, email: string, notice = ""): string {
+  const csrf = escapeHtml(csrfToken);
+  const safeEmail = escapeHtml(email);
+  const safeNotice = escapeHtml(notice);
+  return `<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Verificación de seguridad · Laural</title><link rel="stylesheet" href="/auth.css"></head>
+<body><div class="shell"><header class="brand"><div class="mark" aria-hidden="true">L</div><div><div class="brand-name">Laural</div><div class="brand-caption">Cuenta y sincronización</div></div></header>
+<main><h1>Verifica tu identidad</h1><p class="intro">Introduce el código de tu aplicación autenticadora o uno de tus códigos de recuperación.</p>
+<p class="notice" role="status">${safeNotice}</p>
+<form action="/auth/native/login/mfa" method="post"><input type="hidden" name="csrf" value="${csrf}">
+<label>Correo electrónico<input name="email" type="email" autocomplete="username" required maxlength="320" value="${safeEmail}"></label>
+<label>Código de autenticación o recuperación<input name="proof" inputmode="text" autocomplete="one-time-code" required maxlength="19" autofocus></label>
+<button type="submit">Verificar y continuar</button></form>
+<p class="privacy">Un código de recuperación se invalida al usarlo. El PIN de correo no sustituye este factor.</p>
+</main><footer>Laural · Acceso seguro desde navegador externo</footer></div></body></html>`;
+}
+
+function redirectNativeLogin(reply: FastifyReply, result: Extract<LoginResult, { kind: "authorized" }>): FastifyReply {
+  const callback = new URL(result.redirectUri);
+  callback.searchParams.set("code", result.code);
+  callback.searchParams.set("state", result.state);
+  reply.header("Set-Cookie", expiredFlowCookie());
+  return reply.code(303).header("Location", callback.href).send();
 }
 
 function escapeHtml(value: string): string {

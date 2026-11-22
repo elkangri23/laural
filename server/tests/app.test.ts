@@ -5,6 +5,7 @@ import type { PreferenceSnapshot, PreferenceStore, StoredSnapshot, WriteSnapshot
 import { createApp } from "../src/app.js";
 import { EmailAuthService } from "../src/email-auth.js";
 import { NativeAuthService, type NativeAuthStore } from "../src/native-auth.js";
+import type { AccountMfaService } from "../src/account-mfa.js";
 import type { RequestRateLimiter } from "../src/request-rate-limit.js";
 
 const snapshot: PreferenceSnapshot = {
@@ -38,7 +39,7 @@ class MemoryStore implements PreferenceStore {
 }
 
 const instances: Array<ReturnType<typeof createApp>> = [];
-function createTestApp(options: { store?: PreferenceStore; checkReadiness?: () => Promise<void>; emailAuth?: EmailAuthService; nativeAuth?: NativeAuthService; requestRateLimiter?: RequestRateLimiter; revokeSession?: (accountId: string, authorization: string | undefined) => Promise<boolean>; listAccountSessions?: (accountId: string, authorization: string | undefined) => Promise<{ id: string; createdAt: string; expiresAt: string; current: boolean }[]>; revokeAccountSession?: (accountId: string, authorization: string | undefined, sessionId: string) => Promise<boolean>; revokeOtherSessions?: (accountId: string, authorization: string | undefined) => Promise<number> } = {}): ReturnType<typeof createApp> {
+function createTestApp(options: { store?: PreferenceStore; checkReadiness?: () => Promise<void>; emailAuth?: EmailAuthService; nativeAuth?: NativeAuthService; accountMfa?: AccountMfaService; requestRateLimiter?: RequestRateLimiter; revokeSession?: (accountId: string, authorization: string | undefined) => Promise<boolean>; listAccountSessions?: (accountId: string, authorization: string | undefined) => Promise<{ id: string; createdAt: string; expiresAt: string; current: boolean }[]>; revokeAccountSession?: (accountId: string, authorization: string | undefined, sessionId: string) => Promise<boolean>; revokeOtherSessions?: (accountId: string, authorization: string | undefined) => Promise<number> } = {}): ReturnType<typeof createApp> {
   const store = options.store ?? new MemoryStore();
   const requestRateLimiter = options.requestRateLimiter ?? new TestRateLimiter();
   const app = createApp({
@@ -55,6 +56,7 @@ function createTestApp(options: { store?: PreferenceStore; checkReadiness?: () =
     requestRateLimiter,
     ...(options.emailAuth ? { emailAuth: options.emailAuth } : {}),
     ...(options.nativeAuth ? { nativeAuth: options.nativeAuth } : {}),
+    ...(options.accountMfa ? { accountMfa: options.accountMfa } : {}),
   });
   instances.push(app);
   return app;
@@ -73,6 +75,29 @@ class TestRateLimiter implements RequestRateLimiter {
 
 afterEach(async () => {
   await Promise.all(instances.splice(0).map((app) => app.close()));
+});
+
+describe("rutas MFA de cuenta", () => {
+  it("exige sesión para ver el estado y devuelve solo datos de estado", async () => {
+    const accountMfa = { status: vi.fn(async () => ({ totpEnabled: true, recoveryCodesRemaining: 7, enrollmentPending: false })) } as unknown as AccountMfaService;
+    const app = createTestApp({ accountMfa });
+    expect((await app.inject({ method: "GET", url: "/v1/auth/mfa" })).statusCode).toBe(401);
+    const response = await app.inject({ method: "GET", url: "/v1/auth/mfa", headers: { authorization: "Bearer account-user1" } });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ totpEnabled: true, recoveryCodesRemaining: 7, enrollmentPending: false });
+    expect(accountMfa.status).toHaveBeenCalledWith("user1");
+  });
+
+  it("valida formato de TOTP antes de llamar al servicio", async () => {
+    const accountMfa = { confirmEnrollment: vi.fn(async () => ["AAAA-BBBB-CCCC-DDDD"]) } as unknown as AccountMfaService;
+    const app = createTestApp({ accountMfa });
+    const invalid = await app.inject({ method: "POST", url: "/v1/auth/mfa/totp/enrollment/confirm", headers: { authorization: "Bearer account-user1" }, payload: { code: "abcdef" } });
+    expect(invalid.statusCode).toBe(400);
+    expect(accountMfa.confirmEnrollment).not.toHaveBeenCalled();
+    const valid = await app.inject({ method: "POST", url: "/v1/auth/mfa/totp/enrollment/confirm", headers: { authorization: "Bearer account-user1" }, payload: { code: "123456" } });
+    expect(valid.statusCode).toBe(200);
+    expect(valid.json()).toEqual({ recoveryCodes: ["AAAA-BBBB-CCCC-DDDD"] });
+  });
 });
 
 describe("API de snapshots de preferencias", () => {

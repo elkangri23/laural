@@ -15,6 +15,7 @@ export type NativeLoginCandidate = {
   accountId: string | null;
   passwordHash: string | null;
   emailVerified: boolean;
+  mfaEnabled: boolean;
 };
 
 export type AuthorizationRedirect = { redirectUri: string; state: string };
@@ -25,6 +26,7 @@ export interface NativeAuthStore {
   isFlowActive(cookieDigest: string, csrfDigest: string): Promise<boolean>;
   findLoginCandidate(cookieDigest: string, csrfDigest: string, email: string): Promise<NativeLoginCandidate | null>;
   failLogin(cookieDigest: string, csrfDigest: string): Promise<void>;
+  requireMfa(input: { flowId: string; cookieDigest: string; csrfDigest: string; accountId: string }): Promise<boolean>;
   completeLogin(input: {
     flowId: string;
     cookieDigest: string;
@@ -37,6 +39,12 @@ export interface NativeAuthStore {
 
 export type NativeFlowCredentials = { cookieToken: string; csrfToken: string };
 export type NativeLoginInput = { cookieToken: string; csrfToken: string; email: string; password: string };
+export type NativeMfaLoginInput = { cookieToken: string; csrfToken: string; email: string; proof: string };
+export type LoginResult = { kind: "authorized"; redirectUri: string; state: string; code: string } | { kind: "mfa_required" };
+
+export interface MfaLoginVerifier {
+  completeMfaLogin(input: { cookieDigest: string; csrfDigest: string; email: string; proof: string; codeDigest: string }): Promise<AuthorizationRedirect | null>;
+}
 
 const SESSION_TTL_DAYS = 30;
 const ARGON_OPTIONS = {
@@ -49,7 +57,7 @@ const ARGON_OPTIONS = {
 const DUMMY_PASSWORD_HASH = argon2.hash(randomBytes(32), { ...ARGON_OPTIONS, salt: randomBytes(16) });
 
 export class NativeAuthService {
-  constructor(private readonly store: NativeAuthStore) {}
+  constructor(private readonly store: NativeAuthStore, private readonly mfaVerifier?: MfaLoginVerifier) {}
 
   async startFlow(parameters: NativeFlowParameters): Promise<NativeFlowCredentials> {
     const cookieToken = randomBytes(32).toString("base64url");
@@ -67,7 +75,7 @@ export class NativeAuthService {
     return this.store.isFlowActive(sha256(cookieToken), sha256(csrfToken));
   }
 
-  async login(input: NativeLoginInput): Promise<{ redirectUri: string; state: string; code: string } | null> {
+  async login(input: NativeLoginInput): Promise<LoginResult | null> {
     if (!isOpaqueToken(input.cookieToken) || !isOpaqueToken(input.csrfToken)) return null;
     const normalizedEmail = normalizeEmail(input.email);
     const candidate = normalizedEmail
@@ -82,6 +90,16 @@ export class NativeAuthService {
       return null;
     }
 
+    if (candidate.mfaEnabled) {
+      if (!await this.store.requireMfa({
+        flowId: candidate.flowId,
+        cookieDigest: sha256(input.cookieToken),
+        csrfDigest: sha256(input.csrfToken),
+        accountId: candidate.accountId,
+      })) return null;
+      return { kind: "mfa_required" };
+    }
+
     const code = randomBytes(32).toString("base64url");
     const redirect = await this.store.completeLogin({
       flowId: candidate.flowId,
@@ -90,7 +108,20 @@ export class NativeAuthService {
       accountId: candidate.accountId,
       codeDigest: sha256(code),
     });
-    return redirect ? { ...redirect, code } : null;
+    return redirect ? { kind: "authorized", ...redirect, code } : null;
+  }
+
+  async completeMfa(input: NativeMfaLoginInput): Promise<LoginResult | null> {
+    if (!this.mfaVerifier || !isOpaqueToken(input.cookieToken) || !isOpaqueToken(input.csrfToken)) return null;
+    const code = randomBytes(32).toString("base64url");
+    const redirect = await this.mfaVerifier.completeMfaLogin({
+      cookieDigest: sha256(input.cookieToken),
+      csrfDigest: sha256(input.csrfToken),
+      email: input.email,
+      proof: input.proof,
+      codeDigest: sha256(code),
+    });
+    return redirect ? { kind: "authorized", ...redirect, code } : null;
   }
 
   async exchange(code: string, verifier: string): Promise<SessionGrant | null> {

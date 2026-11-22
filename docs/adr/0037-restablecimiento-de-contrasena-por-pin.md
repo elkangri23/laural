@@ -13,7 +13,7 @@ La persona puede perder la contraseña de su cuenta de sincronización. El dise�
 - Ofrecer solicitud de recuperación desde el formulario externo de cuenta y la API. El PIN aleatorio de seis dígitos dura cinco minutos, tiene un solo uso y hasta cinco intentos; su verificador HMAC está separado por propósito del PIN de verificación de correo.
 - Responder de forma genérica sin indicar si la cuenta existe, está verificada, recibió un correo o el PIN fue válido. Aplicar límites por IP y cuenta; limitar solicitudes por cuenta a una por minuto y tres cada quince minutos.
 - Un PIN correcto permite establecer una nueva contraseña, almacenada con Argon2id. En una única transacción se consume el código y se revocan las sesiones activas. La operación no crea una sesión.
-- El cambio no elimina ni sustituye factores MFA. Cuando MFA esté disponible, el siguiente inicio de sesión seguirá exigiendo los factores inscritos. La retirada manual por pérdida de factores sigue el [runbook](../runbooks/recuperacion-cuenta.md) y requiere prueba independiente.
+- El cambio no elimina ni sustituye factores MFA. Si TOTP está inscrito, el siguiente inicio de sesión exige el factor. La retirada manual por pérdida de factores sigue el [runbook](../runbooks/recuperacion-cuenta.md) y requiere prueba independiente.
 - El navegador usa cookie de flujo `HttpOnly`, `Secure`, `SameSite=Strict` y CSRF ligado al flujo PKCE. Resend recibe únicamente el correo, nombre y PIN necesarios para el mensaje.
 - La migración `005_password_reset.sql` guarda códigos como HMAC, aplica cinco intentos y retención máxima de quince minutos. No se registran correo, PIN ni cuerpo del mensaje.
 

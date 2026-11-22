@@ -98,6 +98,27 @@ paths:
         '303': { description: Login válido; redirige solo al callback loopback con code y state }
         '400': { description: Error genérico de credenciales o solicitud expirada }
         '429': { $ref: '#/components/responses/RateLimited' }
+  /auth/native/login/mfa:
+    post:
+      summary: Completa el segundo factor del flujo de login nativo
+      description: Acepta un TOTP o código de recuperación de un solo uso; el PIN de correo no es válido.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [csrf, email, proof]
+              properties:
+                csrf: { type: string, minLength: 43, maxLength: 43 }
+                email: { type: string, maxLength: 320 }
+                proof: { type: string, pattern: '^(?:[0-9]{6}|[A-Fa-f0-9]{4}(?:-[A-Fa-f0-9]{4}){3})$', writeOnly: true }
+      responses:
+        '303': { description: Segundo factor válido; redirige al callback loopback de un solo uso }
+        '400': { description: Factor inválido, reutilizado o flujo expirado }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /auth/native/register:
     post:
       summary: Formulario web para registrar una cuenta
@@ -259,6 +280,100 @@ paths:
                 properties:
                   revoked: { type: integer, minimum: 0 }
         '401': { description: Sesión actual no válida }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/auth/mfa:
+    get:
+      summary: Consulta estado TOTP y número de códigos de recuperación activos
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Estado MFA sin revelar semillas ni códigos
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [totpEnabled, recoveryCodesRemaining, enrollmentPending]
+                properties:
+                  totpEnabled: { type: boolean }
+                  recoveryCodesRemaining: { type: integer, minimum: 0, maximum: 10 }
+                  enrollmentPending: { type: boolean }
+        '401': { description: Sesión no válida }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/auth/mfa/totp/enrollment:
+    post:
+      summary: Inicia enrolamiento TOTP con autenticación reciente
+      description: Devuelve el secreto una vez para presentarlo localmente; expira a los 15 minutos.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Secreto y URI otpauth para configurar la app autenticadora
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [secret, provisioningUri]
+                properties:
+                  secret: { type: string, writeOnly: true }
+                  provisioningUri: { type: string, writeOnly: true }
+        '409': { description: Sesión no reciente o factor ya activo }
+        '429': { $ref: '#/components/responses/RateLimited' }
+    delete:
+      summary: Cancela enrolamiento TOTP y elimina códigos nuevos pendientes
+      security:
+        - bearerAuth: []
+      responses:
+        '204': { description: Enrolamiento cancelado }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/auth/mfa/totp/enrollment/confirm:
+    post:
+      summary: Verifica el TOTP y genera códigos de recuperación pendientes
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [code]
+              properties:
+                code: { type: string, pattern: '^[0-9]{6}$', writeOnly: true }
+      responses:
+        '200': { description: Códigos mostrados una vez, pendientes de confirmación de guardado }
+        '400': { description: Código inválido o enrolamiento expirado }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/auth/mfa/totp/enrollment/complete:
+    post:
+      summary: Activa TOTP tras confirmar que se guardaron los códigos
+      security:
+        - bearerAuth: []
+      responses:
+        '204': { description: TOTP activado y demás sesiones revocadas }
+        '409': { description: Sin códigos pendientes o sesión reciente no válida }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/auth/mfa/recovery-codes/rotate:
+    post:
+      summary: Genera códigos de recuperación nuevos pendientes
+      description: Los códigos actuales siguen válidos hasta confirmar el guardado en la ruta de finalización.
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: Códigos nuevos mostrados una sola vez }
+        '409': { description: Sesión no reciente o TOTP no activo }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/auth/mfa/totp:
+    delete:
+      summary: Desactiva TOTP con autenticación reciente
+      security:
+        - bearerAuth: []
+      responses:
+        '204': { description: Factor eliminado y demás sesiones revocadas }
+        '409': { description: Sesión no reciente o factor no activo }
         '429': { $ref: '#/components/responses/RateLimited' }
   /v1/auth/register:
     post:

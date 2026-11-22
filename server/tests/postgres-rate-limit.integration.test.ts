@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import pg, { type Pool } from "pg";
 import { createApp } from "../src/app.js";
 import { createAccountSessionLister, createAccountSessionRevoker, createOtherSessionsRevoker, createSessionAuthenticator, createSessionRevoker } from "../src/auth.js";
+import { AccountMfaService } from "../src/account-mfa.js";
 import { EmailAuthService } from "../src/email-auth.js";
 import { applyMigrations, MIGRATION_FILES } from "../src/migration-runner.js";
 import { NativeAuthService } from "../src/native-auth.js";
@@ -11,6 +12,7 @@ import { PostgresNativeAuthStore } from "../src/postgres-native-auth-store.js";
 import { PostgresPreferenceStore } from "../src/postgres-store.js";
 import { PostgresRequestRateLimiter } from "../src/request-rate-limit.js";
 import { cleanupExpiredRecords } from "../src/retention.js";
+import { totpCode } from "../src/totp.js";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const describePostgres = databaseUrl ? describe : describe.skip;
@@ -41,7 +43,7 @@ describePostgres("integración real de PostgreSQL para rate limits", () => {
     }
   });
 
-  it("aplica las cinco migraciones y comparte límites atómicos entre instancias", async () => {
+  it("aplica las seis migraciones y comparte límites atómicos entre instancias", async () => {
     const applied = await isolatedPool.query<{ version: string }>("SELECT version FROM schema_migrations ORDER BY version");
     expect(applied.rows.map(({ version }) => version)).toEqual([...MIGRATION_FILES]);
     const firstInstance = new PostgresRequestRateLimiter(isolatedPool, "integracion-rate-limit-pepper-32-bytes-minimo");
@@ -374,6 +376,123 @@ describePostgres("integración real de PostgreSQL para rate limits", () => {
       expect((await app.inject({ method: "GET", url: "/v1/preferences/current", headers: { authorization: `Bearer ${activeToken}` } })).statusCode).toBe(401);
       const passwordRecord = await isolatedPool.query<{ password_hash: string }>("SELECT password_hash FROM accounts WHERE email = $1", [email]);
       expect(passwordRecord.rows[0]?.password_hash).toMatch(/^\$argon2id\$/);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("activa TOTP y exige factor de un solo uso en el login nativo con PostgreSQL real", async () => {
+    const accountId = randomUUID();
+    const email = `${accountId}@example.test`;
+    const passwordHash = await (await import("argon2")).default.hash("clave MFA integración segura 2026");
+    await isolatedPool.query(
+      "INSERT INTO accounts (id, email, display_name, password_hash, email_verified_at) VALUES ($1, $2, 'MFA integración', $3, now())",
+      [accountId, email, passwordHash],
+    );
+    const mfa = new AccountMfaService(isolatedPool, Buffer.alloc(32, 29), "integracion-recovery-pepper-32-bytes-minimo");
+    const emailAuth = new EmailAuthService(new PostgresEmailAuthStore(isolatedPool), {
+      sendVerification: async () => undefined,
+      sendPasswordReset: async () => undefined,
+    }, "integracion-email-pin-pepper-32-bytes-minimo");
+    const app = createApp({
+      store: new PostgresPreferenceStore(isolatedPool),
+      authenticate: createSessionAuthenticator(isolatedPool),
+      revokeSession: createSessionRevoker(isolatedPool),
+      listAccountSessions: createAccountSessionLister(isolatedPool),
+      revokeAccountSession: createAccountSessionRevoker(isolatedPool),
+      revokeOtherSessions: createOtherSessionsRevoker(isolatedPool),
+      checkReadiness: async () => { await isolatedPool.query("SELECT 1"); },
+      requestRateLimiter: new PostgresRequestRateLimiter(isolatedPool, "integracion-rate-limit-pepper-32-bytes-minimo"),
+      accountMfa: mfa,
+      emailAuth,
+      nativeAuth: new NativeAuthService(new PostgresNativeAuthStore(isolatedPool), mfa),
+    });
+
+    async function newFlow() {
+      const verifier = randomBytes(32).toString("base64url");
+      const challenge = createHash("sha256").update(verifier).digest("base64url");
+      const state = randomBytes(32).toString("base64url");
+      const redirectUri = "http://127.0.0.1:49152/callback";
+      const response = await app.inject({ method: "GET", url: `/auth/native?${new URLSearchParams({ redirect_uri: redirectUri, state, code_challenge: challenge, code_challenge_method: "S256" })}` });
+      return {
+        verifier,
+        state,
+        redirectUri,
+        cookie: String(response.headers["set-cookie"]).split(";")[0],
+        csrf: response.body.match(/name="csrf" value="([^"]+)"/)?.[1] ?? "",
+      };
+    }
+
+    async function passwordLogin() {
+      const flow = await newFlow();
+      const response = await app.inject({
+        method: "POST", url: "/auth/native/login",
+        headers: { cookie: flow.cookie, "content-type": "application/x-www-form-urlencoded" },
+        payload: new URLSearchParams({ csrf: flow.csrf, email, password: "clave MFA integración segura 2026" }).toString(),
+      });
+      return { flow, response };
+    }
+
+    async function completeMfa(flow: Awaited<ReturnType<typeof newFlow>>, proof: string) {
+      return app.inject({
+        method: "POST", url: "/auth/native/login/mfa",
+        headers: { cookie: flow.cookie, "content-type": "application/x-www-form-urlencoded" },
+        payload: new URLSearchParams({ csrf: flow.csrf, email, proof }).toString(),
+      });
+    }
+
+    try {
+      const { flow: initialFlow, response: initialLogin } = await passwordLogin();
+      expect(initialLogin.statusCode).toBe(303);
+      const initialCode = new URL(String(initialLogin.headers.location)).searchParams.get("code")!;
+      const session = await app.inject({ method: "POST", url: "/v1/auth/native/exchange", payload: { code: initialCode, codeVerifier: initialFlow.verifier } });
+      const sessionToken = session.json<{ sessionToken: string }>().sessionToken;
+      const enrollmentResponse = await app.inject({ method: "POST", url: "/v1/auth/mfa/totp/enrollment", headers: { authorization: `Bearer ${sessionToken}` } });
+      expect(enrollmentResponse.statusCode).toBe(200);
+      const { secret } = enrollmentResponse.json<{ secret: string; provisioningUri: string }>();
+      const enrollmentCode = totpCode(secret, Math.floor(Date.now() / 30_000));
+      const codesResponse = await app.inject({ method: "POST", url: "/v1/auth/mfa/totp/enrollment/confirm", headers: { authorization: `Bearer ${sessionToken}` }, payload: { code: enrollmentCode } });
+      expect(codesResponse.statusCode).toBe(200);
+      const recoveryCodes = codesResponse.json<{ recoveryCodes: string[] }>().recoveryCodes;
+      expect((await mfa.status(accountId))).toMatchObject({ totpEnabled: false, recoveryCodesRemaining: 0 });
+      expect((await app.inject({ method: "POST", url: "/v1/auth/mfa/totp/enrollment/complete", headers: { authorization: `Bearer ${sessionToken}` } })).statusCode).toBe(204);
+      expect((await app.inject({ method: "POST", url: "/v1/auth/mfa/totp/enrollment/complete", headers: { authorization: `Bearer ${sessionToken}` } })).statusCode).toBe(204);
+      expect((await mfa.status(accountId))).toMatchObject({ totpEnabled: true, recoveryCodesRemaining: 10 });
+
+      const mfaFlow = await passwordLogin();
+      expect(mfaFlow.response.statusCode).toBe(200);
+      expect(mfaFlow.response.body).toContain("Verifica tu identidad");
+      expect(mfaFlow.response.headers.location).toBeUndefined();
+      const nextCounter = Math.floor(Date.now() / 30_000) + 1;
+      const loginCode = totpCode(secret, nextCounter);
+      expect((await completeMfa(mfaFlow.flow, loginCode)).statusCode).toBe(303);
+
+      const replayFlow = await passwordLogin();
+      expect((await completeMfa(replayFlow.flow, loginCode)).statusCode).toBe(400);
+      const backupFlow = await passwordLogin();
+      expect((await completeMfa(backupFlow.flow, recoveryCodes[0]!)).statusCode).toBe(303);
+      const backupReplayFlow = await passwordLogin();
+      expect((await completeMfa(backupReplayFlow.flow, recoveryCodes[0]!)).statusCode).toBe(400);
+      expect((await mfa.status(accountId)).recoveryCodesRemaining).toBe(9);
+
+      const pendingCodes = await app.inject({ method: "POST", url: "/v1/auth/mfa/recovery-codes/rotate", headers: { authorization: `Bearer ${sessionToken}` } });
+      expect(pendingCodes.statusCode).toBe(200);
+      expect((await mfa.status(accountId)).recoveryCodesRemaining).toBe(9);
+      expect((await app.inject({ method: "DELETE", url: "/v1/auth/mfa/totp/enrollment", headers: { authorization: `Bearer ${sessionToken}` } })).statusCode).toBe(204);
+      expect((await mfa.status(accountId)).recoveryCodesRemaining).toBe(9);
+
+      const replacementCodes = await app.inject({ method: "POST", url: "/v1/auth/mfa/recovery-codes/rotate", headers: { authorization: `Bearer ${sessionToken}` } });
+      expect(replacementCodes.statusCode).toBe(200);
+      expect((await app.inject({ method: "POST", url: "/v1/auth/mfa/totp/enrollment/complete", headers: { authorization: `Bearer ${sessionToken}` } })).statusCode).toBe(204);
+      expect((await app.inject({ method: "POST", url: "/v1/auth/mfa/totp/enrollment/complete", headers: { authorization: `Bearer ${sessionToken}` } })).statusCode).toBe(204);
+      expect((await mfa.status(accountId))).toMatchObject({ totpEnabled: true, recoveryCodesRemaining: 10 });
+
+      expect((await app.inject({ method: "DELETE", url: "/v1/auth/mfa/totp", headers: { authorization: `Bearer ${sessionToken}` } })).statusCode).toBe(204);
+      expect((await mfa.status(accountId))).toMatchObject({ totpEnabled: false, recoveryCodesRemaining: 0 });
+      expect((await app.inject({ method: "POST", url: "/v1/auth/mfa/totp/enrollment", headers: { authorization: `Bearer ${sessionToken}` } })).statusCode).toBe(200);
+      expect((await mfa.status(accountId)).enrollmentPending).toBe(true);
+      expect((await app.inject({ method: "DELETE", url: "/v1/auth/mfa/totp/enrollment", headers: { authorization: `Bearer ${sessionToken}` } })).statusCode).toBe(204);
+      expect(await mfa.status(accountId)).toMatchObject({ totpEnabled: false, recoveryCodesRemaining: 0, enrollmentPending: false });
     } finally {
       await app.close();
     }

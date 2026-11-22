@@ -48,9 +48,11 @@ export class PostgresNativeAuthStore implements NativeAuthStore {
       id: string;
       password_hash: string | null;
       email_verified_at: Date | null;
+      mfa_enabled: boolean;
     }>(
-      `SELECT id, password_hash, email_verified_at FROM accounts
-        WHERE lower(email) = $1 AND deleted_at IS NULL`,
+      `SELECT a.id, a.password_hash, a.email_verified_at,
+              EXISTS (SELECT 1 FROM account_totp_factors t WHERE t.account_id = a.id AND t.enabled_at IS NOT NULL) AS mfa_enabled
+         FROM accounts a WHERE lower(a.email) = $1 AND a.deleted_at IS NULL`,
       [email],
     );
     const account = accountResult.rows[0];
@@ -62,6 +64,7 @@ export class PostgresNativeAuthStore implements NativeAuthStore {
       accountId: account?.id ?? null,
       passwordHash: account?.password_hash ?? null,
       emailVerified: account?.email_verified_at !== null && account !== undefined,
+      mfaEnabled: account?.mfa_enabled ?? false,
     };
   }
 
@@ -93,6 +96,17 @@ export class PostgresNativeAuthStore implements NativeAuthStore {
     } finally {
       client.release();
     }
+  }
+
+  async requireMfa(input: { flowId: string; cookieDigest: string; csrfDigest: string; accountId: string }): Promise<boolean> {
+    const result = await this.pool.query(
+      `UPDATE native_auth_flows AS f SET mfa_account_id = $4
+        WHERE f.id = $1 AND f.cookie_digest = $2 AND f.csrf_digest = $3
+          AND f.consumed_at IS NULL AND f.expires_at > now() AND f.attempts < 5
+          AND EXISTS (SELECT 1 FROM account_totp_factors t WHERE t.account_id = $4 AND t.enabled_at IS NOT NULL)`,
+      [input.flowId, input.cookieDigest, input.csrfDigest, input.accountId],
+    );
+    return result.rowCount === 1;
   }
 
   async completeLogin(input: {

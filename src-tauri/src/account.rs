@@ -10,6 +10,7 @@ use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use futures_util::StreamExt;
 use keyring::Entry;
 use reqwest::{Client, redirect::Policy};
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Emitter};
@@ -77,6 +78,27 @@ struct AccountSessionsResponse {
 #[serde(deny_unknown_fields)]
 struct RevokedSessionsResponse {
     revoked: u32,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AccountMfaStatus {
+    pub totp_enabled: bool,
+    pub recovery_codes_remaining: u8,
+    pub enrollment_pending: bool,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TotpEnrollment {
+    pub secret: String,
+    pub provisioning_uri: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct RecoveryCodesResponse {
+    recovery_codes: Vec<String>,
 }
 
 #[tauri::command]
@@ -192,6 +214,142 @@ pub async fn revoke_other_account_sessions() -> Result<u32, String> {
         .await
         .map(|body| body.revoked)
         .map_err(|_| "La respuesta de revocación no tiene un formato válido.".into())
+}
+
+#[tauri::command]
+pub async fn get_account_mfa_status() -> Result<AccountMfaStatus, String> {
+    let token = session_token()?;
+    let response = account_api_client()?
+        .get(format!("{SYNC_ORIGIN}/v1/auth/mfa"))
+        .bearer_auth(token.as_str())
+        .send()
+        .await
+        .map_err(|_| "No se pudo consultar la seguridad de la cuenta.".to_string())?;
+    bounded_response_json(response, "No se pudo consultar la seguridad de la cuenta.").await
+}
+
+#[tauri::command]
+pub async fn start_totp_enrollment() -> Result<TotpEnrollment, String> {
+    let token = session_token()?;
+    let response = account_api_client()?
+        .post(format!("{SYNC_ORIGIN}/v1/auth/mfa/totp/enrollment"))
+        .bearer_auth(token.as_str())
+        .send()
+        .await
+        .map_err(|_| "No se pudo iniciar la configuración de TOTP.".to_string())?;
+    bounded_response_json(response, "Vuelve a iniciar sesión e inténtalo de nuevo.").await
+}
+
+#[tauri::command]
+pub async fn confirm_totp_enrollment(code: String) -> Result<Vec<String>, String> {
+    if !valid_totp_code(&code) {
+        return Err("Introduce el código de seis dígitos de tu aplicación.".into());
+    }
+    let token = session_token()?;
+    let response = account_api_client()?
+        .post(format!("{SYNC_ORIGIN}/v1/auth/mfa/totp/enrollment/confirm"))
+        .bearer_auth(token.as_str())
+        .json(&serde_json::json!({ "code": code }))
+        .send()
+        .await
+        .map_err(|_| "No se pudo verificar el código TOTP.".to_string())?;
+    bounded_response_json::<RecoveryCodesResponse>(
+        response,
+        "El código caducó o no es válido. Inicia sesión de nuevo si hace más de diez minutos.",
+    )
+    .await
+    .map(|body| body.recovery_codes)
+}
+
+#[tauri::command]
+pub async fn complete_totp_enrollment() -> Result<(), String> {
+    let token = session_token()?;
+    let response = account_api_client()?
+        .post(format!(
+            "{SYNC_ORIGIN}/v1/auth/mfa/totp/enrollment/complete"
+        ))
+        .bearer_auth(token.as_str())
+        .send()
+        .await
+        .map_err(|_| "No se pudo activar TOTP.".to_string())?;
+    if response.status() == reqwest::StatusCode::NO_CONTENT {
+        Ok(())
+    } else {
+        Err("No se pudo activar TOTP. Confirma que guardaste los códigos e inicia sesión de nuevo si es necesario.".into())
+    }
+}
+
+#[tauri::command]
+pub async fn cancel_totp_enrollment() -> Result<(), String> {
+    let token = session_token()?;
+    let response = account_api_client()?
+        .delete(format!("{SYNC_ORIGIN}/v1/auth/mfa/totp/enrollment"))
+        .bearer_auth(token.as_str())
+        .send()
+        .await
+        .map_err(|_| "No se pudo cancelar el enrolamiento TOTP.".to_string())?;
+    if response.status() == reqwest::StatusCode::NO_CONTENT {
+        Ok(())
+    } else {
+        Err("No se pudo cancelar el enrolamiento TOTP.".into())
+    }
+}
+
+#[tauri::command]
+pub async fn rotate_account_recovery_codes() -> Result<Vec<String>, String> {
+    let token = session_token()?;
+    let response = account_api_client()?
+        .post(format!("{SYNC_ORIGIN}/v1/auth/mfa/recovery-codes/rotate"))
+        .bearer_auth(token.as_str())
+        .send()
+        .await
+        .map_err(|_| "No se pudieron renovar los códigos de recuperación.".to_string())?;
+    bounded_response_json::<RecoveryCodesResponse>(
+        response,
+        "Vuelve a iniciar sesión e inténtalo de nuevo.",
+    )
+    .await
+    .map(|body| body.recovery_codes)
+}
+
+#[tauri::command]
+pub async fn disable_account_totp() -> Result<(), String> {
+    let token = session_token()?;
+    let response = account_api_client()?
+        .delete(format!("{SYNC_ORIGIN}/v1/auth/mfa/totp"))
+        .bearer_auth(token.as_str())
+        .send()
+        .await
+        .map_err(|_| "No se pudo desactivar TOTP.".to_string())?;
+    if response.status() == reqwest::StatusCode::NO_CONTENT {
+        Ok(())
+    } else {
+        Err("Vuelve a iniciar sesión y vuelve a intentarlo.".into())
+    }
+}
+
+async fn bounded_response_json<T: DeserializeOwned>(
+    response: reqwest::Response,
+    failure: &str,
+) -> Result<T, String> {
+    if !response.status().is_success() || response.content_length().is_some_and(|size| size > 4096)
+    {
+        return Err(failure.to_string());
+    }
+    let mut stream = response.bytes_stream();
+    let mut body = Vec::with_capacity(1024);
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|_| failure.to_string())?;
+        if body.len() + chunk.len() > 4096 {
+            return Err(failure.to_string());
+        }
+        body.extend_from_slice(&chunk);
+    }
+    serde_json::from_slice(&body).map_err(|_| failure.to_string())
+}
+
+fn valid_totp_code(value: &str) -> bool {
+    value.len() == 6 && value.bytes().all(|byte| byte.is_ascii_digit())
 }
 
 fn account_api_client() -> Result<Client, String> {

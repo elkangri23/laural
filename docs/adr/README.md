@@ -41,7 +41,7 @@ Los ADR registran por qué se eligió una opción y qué costes trae. Un ADR ace
 | [0035](0035-retencion-de-registros-transitorios.md) | Limpieza periódica de PINs, PKCE, sesiones e idempotencias | Aceptada; servicio y pruebas implementados, VPS pendiente |
 | [0036](0036-gestion-de-sesiones-de-cuenta.md) | Consultar y revocar sesiones propias de otros dispositivos | Aceptada; API, cliente y pruebas implementados, VPS pendiente |
 | [0037](0037-restablecimiento-de-contrasena-por-pin.md) | Cambiar la contraseña con PIN de correo, sin crear sesión ni quitar MFA | Aceptada; servicio implementado, Resend/VPS pendiente |
-| [0038](0038-fundamentos-de-mfa-totp.md) | TOTP RFC 6238, semilla cifrada y códigos de recuperación | Aceptada; primitivas implementadas, integración de cuenta pendiente |
+| [0038](0038-fundamentos-de-mfa-totp.md) | TOTP RFC 6238, semilla cifrada y códigos de recuperación | Aceptada; integración local, validación de despliegue/avisos pendiente |
 
 ## Crear un ADR
 

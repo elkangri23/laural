@@ -1,6 +1,7 @@
 import pg from "pg";
 import { createApp } from "./app.js";
 import { createAccountSessionLister, createAccountSessionRevoker, createOtherSessionsRevoker, createSessionAuthenticator, createSessionRevoker } from "./auth.js";
+import { AccountMfaService } from "./account-mfa.js";
 import { readConfig, readEmailAuthConfig } from "./config.js";
 import { EmailAuthService } from "./email-auth.js";
 import { PostgresEmailAuthStore } from "./postgres-email-auth-store.js";
@@ -22,7 +23,12 @@ const emailAuth = emailAuthConfig
     emailAuthConfig.pinPepper,
   )
   : undefined;
-const nativeAuth = emailAuthConfig ? new NativeAuthService(new PostgresNativeAuthStore(pool)) : undefined;
+const accountMfa = emailAuthConfig
+  ? new AccountMfaService(pool, emailAuthConfig.totpEncryptionKey, emailAuthConfig.recoveryPepper)
+  : undefined;
+const nativeAuth = emailAuthConfig && accountMfa
+  ? new NativeAuthService(new PostgresNativeAuthStore(pool), accountMfa)
+  : undefined;
 const app = createApp({
   store: preferenceStore,
   authenticate: createSessionAuthenticator(pool),
@@ -34,6 +40,7 @@ const app = createApp({
   requestRateLimiter: new PostgresRequestRateLimiter(pool, config.rateLimitPepper),
   ...(emailAuth ? { emailAuth } : {}),
   ...(nativeAuth ? { nativeAuth } : {}),
+  ...(accountMfa ? { accountMfa } : {}),
 });
 
 await app.listen({ host: config.host, port: config.port });

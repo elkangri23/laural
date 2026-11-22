@@ -151,6 +151,78 @@ test("confirma el cierre remoto cuando el servidor revoca la sesión", async () 
   window.removeEventListener("laural:account-disconnected", disconnected);
 });
 
+test("activa TOTP solo después de verificar el código y confirmar que guardó la recuperación", async () => {
+  mocks.invoke.mockImplementation(async (command: string) => {
+    if (command === "account_session_status") return true;
+    if (command === "list_account_sessions") return [];
+    if (command === "get_account_mfa_status") return { totpEnabled: false, recoveryCodesRemaining: 0, enrollmentPending: false };
+    if (command === "start_totp_enrollment") return { secret: "JBSWY3DPEHPK3PXP", provisioningUri: "otpauth://totp/Laural:test?secret=JBSWY3DPEHPK3PXP" };
+    if (command === "confirm_totp_enrollment") return ["AAAA-BBBB-CCCC-DDDD", "EEEE-FFFF-GGGG-HHHH"];
+    if (command === "complete_totp_enrollment") return undefined;
+    return undefined;
+  });
+  await act(async () => root.render(renderAccountSettings()));
+  await act(async () => new Promise((resolve) => window.setTimeout(resolve, 0)));
+  await act(async () => [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Configurar TOTP")?.click());
+  expect(host.querySelectorAll<HTMLInputElement>("input[readonly]")[1]?.value).toBe("JBSWY3DPEHPK3PXP");
+  const codeInput = host.querySelector<HTMLInputElement>('input[autocomplete="one-time-code"]');
+  await act(async () => {
+    if (codeInput) {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(codeInput, "123456");
+      codeInput.dispatchEvent(new Event("input", { bubbles: true }));
+      codeInput.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+  });
+  await act(async () => [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Verificar y mostrar códigos")?.click());
+  expect(host.textContent).toContain("AAAA-BBBB-CCCC-DDDD");
+  expect(mocks.invoke).toHaveBeenCalledWith("confirm_totp_enrollment", { code: "123456" });
+  const activate = [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Confirmar y activar TOTP");
+  expect(activate?.disabled).toBe(true);
+  const checkbox = host.querySelector<HTMLInputElement>('.account-recovery-confirm input');
+  await act(async () => { if (checkbox) checkbox.click(); });
+  await act(async () => activate?.click());
+  expect(mocks.invoke).toHaveBeenCalledWith("complete_totp_enrollment");
+});
+
+test("mantiene los códigos antiguos durante la rotación y confirma antes de activarlos", async () => {
+  mocks.invoke.mockImplementation(async (command: string) => {
+    if (command === "account_session_status") return true;
+    if (command === "list_account_sessions") return [];
+    if (command === "get_account_mfa_status") return { totpEnabled: true, recoveryCodesRemaining: 4, enrollmentPending: false };
+    if (command === "rotate_account_recovery_codes") return ["1111-2222-3333-4444", "5555-6666-7777-8888"];
+    return undefined;
+  });
+  await act(async () => root.render(renderAccountSettings()));
+  await act(async () => new Promise((resolve) => window.setTimeout(resolve, 0)));
+  await act(async () => [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Renovar códigos de recuperación")?.click());
+  expect(host.textContent).toContain("Los anteriores siguen activos hasta que confirmes");
+  expect(host.textContent).toContain("1111-2222-3333-4444");
+  const confirm = [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Confirmar y renovar");
+  expect(confirm?.disabled).toBe(true);
+  await act(async () => host.querySelector<HTMLInputElement>('.account-recovery-confirm input')?.click());
+  await act(async () => confirm?.click());
+  expect(mocks.invoke).toHaveBeenCalledWith("complete_totp_enrollment");
+  expect(host.textContent).toContain("Códigos renovados");
+});
+
+test("permite cancelar un enrolamiento pendiente y presenta errores de seguridad", async () => {
+  mocks.invoke.mockImplementation(async (command: string) => {
+    if (command === "account_session_status") return true;
+    if (command === "list_account_sessions") return [];
+    if (command === "get_account_mfa_status") return { totpEnabled: false, recoveryCodesRemaining: 0, enrollmentPending: true };
+    if (command === "cancel_totp_enrollment") return undefined;
+    if (command === "start_totp_enrollment") throw new Error("recent session required");
+    return undefined;
+  });
+  await act(async () => root.render(renderAccountSettings()));
+  await act(async () => new Promise((resolve) => window.setTimeout(resolve, 0)));
+  expect(host.textContent).toContain("Hay una configuración pendiente");
+  await act(async () => [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Cancelar configuración pendiente")?.click());
+  expect(mocks.invoke).toHaveBeenCalledWith("cancel_totp_enrollment");
+  await act(async () => [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Reiniciar configuración")?.click());
+  expect(host.textContent).toContain("No se pudo iniciar TOTP");
+});
+
 test("compara el snapshot y ofrece elección sin revelar los cambios", async () => {
   const local = { schemaVersion: 1, preferences, activeProviderId: "local", providers: [{ id: "local", kind: "ollama", name: "Ollama", model: "qwen", customEndpoint: undefined }] };
   const cloud = { ...local, preferences: { ...preferences, themeId: "ocean" } };

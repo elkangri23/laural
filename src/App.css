@@ -1022,6 +1022,17 @@ svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width:
 .account-session-list strong { color: var(--text); font-size: 12px; }
 .account-session-list span { color: var(--muted); font-size: 11px; }
 .account-session-list .secondary-button { flex: 0 0 auto; }
+.account-mfa { display: grid; gap: 9px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+.account-mfa h4 { margin: 0; color: var(--text); font-size: 14px; }
+.account-mfa-status { margin: 0; color: var(--muted); font-size: 12px; }
+.account-mfa-enrollment { display: grid; gap: 10px; }
+.account-mfa-enrollment > p, .account-recovery-codes > p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.account-mfa-enrollment label { display: grid; gap: 5px; color: var(--muted); font-size: 11px; }
+.account-mfa-enrollment input { width: 100%; min-width: 0; padding: 8px; border: 1px solid var(--line); border-radius: 7px; color: var(--text); background: var(--surface); font: 11px ui-monospace, monospace; }
+.account-recovery-codes { display: grid; gap: 10px; }
+.account-recovery-codes pre { overflow: auto; margin: 0; padding: 12px; border: 1px solid var(--line); border-radius: 8px; color: var(--text); background: var(--surface); font: 12px/1.8 ui-monospace, monospace; }
+.account-recovery-confirm { display: flex; align-items: flex-start; gap: 8px; color: var(--text); font-size: 12px; }
+.account-recovery-confirm input { margin: 2px 0 0; accent-color: var(--theme-accent); }
 .sync-notice { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 7px; margin: 8px 0; padding: 8px; border: 1px solid var(--line); border-radius: 8px; color: var(--muted); background: var(--surface-raised); font-size: 10px; line-height: 1.4; }
 .sync-notice button { border: 0; padding: 2px; color: var(--theme-accent-muted); background: transparent; font-size: 10px; cursor: pointer; }
 .sync-notice .sync-notice-close { color: var(--muted); font-size: 15px; }

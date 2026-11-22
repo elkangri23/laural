@@ -15,6 +15,7 @@ function fakeStore(candidate: NativeLoginCandidate | null = null) {
     isFlowActive: vi.fn(async () => true),
     findLoginCandidate: vi.fn(async () => candidate),
     failLogin: vi.fn(async () => undefined),
+    requireMfa: vi.fn(async () => true),
     completeLogin: vi.fn(async () => ({ redirectUri: parameters.redirectUri, state: parameters.state })),
     exchangeCode: vi.fn(async () => new Date("2026-12-01T00:00:00.000Z")),
   };
@@ -58,7 +59,7 @@ describe("autenticación nativa con navegador y PKCE", () => {
     const passwordHash = await argon2.hash(password);
     const candidate: NativeLoginCandidate = {
       flowId: "flow-1", redirectUri: parameters.redirectUri, state: parameters.state,
-      codeChallenge: parameters.codeChallenge, accountId: "account-1", passwordHash, emailVerified: true,
+      codeChallenge: parameters.codeChallenge, accountId: "account-1", passwordHash, emailVerified: true, mfaEnabled: false,
     };
     const store = fakeStore(candidate);
     const service = new NativeAuthService(store);
@@ -75,7 +76,7 @@ describe("autenticación nativa con navegador y PKCE", () => {
     const passwordHash = await argon2.hash("correct password 2026");
     const base: NativeLoginCandidate = {
       flowId: "flow-1", redirectUri: parameters.redirectUri, state: parameters.state,
-      codeChallenge: parameters.codeChallenge, accountId: "account-1", passwordHash, emailVerified: true,
+      codeChallenge: parameters.codeChallenge, accountId: "account-1", passwordHash, emailVerified: true, mfaEnabled: false,
     };
     const wrong = fakeStore(base);
     expect(await new NativeAuthService(wrong).login({
@@ -100,6 +101,29 @@ describe("autenticación nativa con navegador y PKCE", () => {
     expect(await new NativeAuthService(expiredFlow).login({
       cookieToken: "a".repeat(43), csrfToken: "b".repeat(43), email: "user@example.test", password: "correct password 2026",
     })).toBeNull();
+  });
+
+  it("detiene el login tras la contraseña y solo emite callback al completar MFA", async () => {
+    const password = "correct password 2026";
+    const candidate: NativeLoginCandidate = {
+      flowId: "flow-mfa", redirectUri: parameters.redirectUri, state: parameters.state,
+      codeChallenge: parameters.codeChallenge, accountId: "account-1", passwordHash: await argon2.hash(password),
+      emailVerified: true, mfaEnabled: true,
+    };
+    const store = fakeStore(candidate);
+    const verifier = {
+      completeMfaLogin: vi.fn(async () => ({ redirectUri: parameters.redirectUri, state: parameters.state })),
+    };
+    const service = new NativeAuthService(store, verifier);
+    const credentials = { cookieToken: "a".repeat(43), csrfToken: "b".repeat(43) };
+    await expect(service.login({ ...credentials, email: "user@example.test", password })).resolves.toEqual({ kind: "mfa_required" });
+    expect(store.requireMfa).toHaveBeenCalledWith(expect.objectContaining({ flowId: "flow-mfa", accountId: "account-1" }));
+    expect(store.completeLogin).not.toHaveBeenCalled();
+
+    const result = await service.completeMfa({ ...credentials, email: "user@example.test", proof: "123456" });
+    expect(result).toMatchObject({ kind: "authorized", redirectUri: parameters.redirectUri, state: parameters.state });
+    expect(result?.kind === "authorized" && result.code).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(verifier.completeMfaLogin).toHaveBeenCalledWith(expect.objectContaining({ email: "user@example.test", proof: "123456" }));
   });
 
   it("intercambia el código una sola vez usando el verificador PKCE y crea token de sesión opaco", async () => {

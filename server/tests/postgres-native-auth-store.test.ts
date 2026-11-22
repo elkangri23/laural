@@ -39,7 +39,7 @@ describe("almacén PostgreSQL de autenticación nativa", () => {
     const store = new PostgresNativeAuthStore(test.pool);
     await expect(store.findLoginCandidate("cookie", "csrf", "user@example.test")).resolves.toEqual({
       flowId: "flow-id", redirectUri: flow.redirect_uri, state: flow.state,
-      codeChallenge: flow.code_challenge, accountId: "account-id", passwordHash: "argon-hash", emailVerified: true,
+      codeChallenge: flow.code_challenge, accountId: "account-id", passwordHash: "argon-hash", emailVerified: true, mfaEnabled: false,
     });
     expect(test.queries).toHaveLength(2);
 
@@ -47,7 +47,8 @@ describe("almacén PostgreSQL de autenticación nativa", () => {
       ? { rows: [{ id: "flow-id", ...flow }] }
       : { rows: [] });
     await expect(new PostgresNativeAuthStore(noAccount.pool).findLoginCandidate("cookie", "csrf", "unknown@example.test"))
-      .resolves.toMatchObject({ accountId: null, passwordHash: null, emailVerified: false });
+      .resolves.toMatchObject({ accountId: null, passwordHash: null, emailVerified: false, mfaEnabled: false });
+    expect(test.queries[1]).toContain("account_totp_factors");
   });
 
   it("no devuelve credenciales si el flow ya expiró o no coincide", async () => {
