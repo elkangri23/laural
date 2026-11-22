@@ -1762,6 +1762,33 @@ fn command_is_high_risk(shell: &str, command: &str) -> bool {
         "attrib", "mklink", "icacls", "cacls", "takeown", "cipher", "format", "diskpart",
         "shutdown", "bcdedit",
     ];
+    let powershell_system_changes = [
+        "set-executionpolicy",
+        "new-localuser",
+        "set-localuser",
+        "remove-localuser",
+        "enable-localuser",
+        "disable-localuser",
+        "add-localgroupmember",
+        "remove-localgroupmember",
+        "set-service",
+        "start-service",
+        "stop-service",
+        "restart-service",
+        "register-scheduledtask",
+        "unregister-scheduledtask",
+        "set-scheduledtask",
+        "enable-scheduledtask",
+        "disable-scheduledtask",
+        "start-scheduledtask",
+        "stop-scheduledtask",
+        "new-netfirewallrule",
+        "set-netfirewallrule",
+        "remove-netfirewallrule",
+        "enable-netfirewallrule",
+        "disable-netfirewallrule",
+        "set-netfirewallprofile",
+    ];
     let script_launchers = [
         "bash",
         "cmd",
@@ -1785,6 +1812,7 @@ fn command_is_high_risk(shell: &str, command: &str) -> bool {
         "powershell" => {
             common_risky_commands.contains(&executable.as_str())
                 || powershell_risky_commands.contains(&executable.as_str())
+                || powershell_system_changes.contains(&executable.as_str())
         }
         "cmd" => {
             common_risky_commands.contains(&executable.as_str())
@@ -2914,6 +2942,31 @@ mod tests {
                 !external_tool_is_high_risk(command, executable),
                 "falso positivo: {command}"
             );
+        }
+    }
+
+    #[test]
+    fn exige_revision_para_cambios_de_politicas_cuentas_tareas_y_firewall_powershell() {
+        for command in [
+            "Set-ExecutionPolicy Unrestricted",
+            "Remove-LocalUser cuenta",
+            "Add-LocalGroupMember Administrators cuenta",
+            "Restart-Service servicio",
+            "Register-ScheduledTask -TaskName Laural",
+            "Set-NetFirewallProfile -Enabled False",
+            "Remove-NetFirewallRule -All",
+        ] {
+            assert!(command_is_high_risk("powershell", command), "{command}");
+        }
+
+        for command in [
+            "Get-ExecutionPolicy",
+            "Get-LocalUser",
+            "Get-Service",
+            "Get-ScheduledTask",
+            "Get-NetFirewallRule",
+        ] {
+            assert!(!command_is_high_risk("powershell", command), "{command}");
         }
     }
 
