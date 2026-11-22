@@ -1865,15 +1865,30 @@ fn has_leading_shell_assignment(shell: &str, command: &str) -> bool {
         return false;
     };
     if shell == "powershell" {
-        if token.starts_with("++$") || token.starts_with("--$") {
+        let is_variable_expression = |expression: &str| {
+            expression.starts_with('$')
+                || (expression.starts_with('(')
+                    && expression.ends_with(')')
+                    && expression.contains('$'))
+        };
+        if ["++", "--"].iter().any(|operator| {
+            token
+                .strip_prefix(operator)
+                .is_some_and(is_variable_expression)
+        }) {
             return true;
         }
-        if !token.starts_with('$') {
+        if ["++", "--"].iter().any(|operator| {
+            token
+                .strip_suffix(operator)
+                .is_some_and(is_variable_expression)
+        }) {
+            return true;
+        }
+        if !is_variable_expression(token) {
             return false;
         }
         return token.contains('=')
-            || token.ends_with("++")
-            || token.ends_with("--")
             || command.split_whitespace().nth(1).is_some_and(|operator| {
                 matches!(
                     operator,
@@ -3321,6 +3336,10 @@ mod tests {
             ("powershell", "--$global:contador"),
             ("powershell", "$contador ++"),
             ("powershell", "$global:contador --"),
+            ("powershell", "($contador)++"),
+            ("powershell", "++($contador)"),
+            ("powershell", "($env:PATH) = 'C:\\tools'"),
+            ("powershell", "($env:PATH) += ';C:\\tools'"),
         ] {
             assert!(command_is_high_risk(shell, command), "{shell}: {command}");
         }
@@ -3332,6 +3351,7 @@ mod tests {
             ("git-bash", "echo PATH+=/tmp"),
             ("powershell", "$env:PATH"),
             ("powershell", "$contador"),
+            ("powershell", "($env:PATH)"),
         ] {
             assert!(!command_is_high_risk(shell, command), "{shell}: {command}");
         }
@@ -3487,6 +3507,7 @@ mod tests {
                 "PATH+=/tmp rm -rf proyecto".into(),
                 "$global:prompt = { 'alterado' }".into(),
                 "++$contador".into(),
+                "($contador)++".into(),
                 "declare -x PATH=/tmp".into(),
                 "enable -n printf".into(),
             ],
@@ -3503,6 +3524,7 @@ mod tests {
             ("git-bash", "PATH+=/tmp rm -rf proyecto"),
             ("powershell", "$global:prompt = { 'alterado' }"),
             ("powershell", "++$contador"),
+            ("powershell", "($contador)++"),
             ("git-bash", "declare -x PATH=/tmp"),
             ("wsl", "enable -n printf"),
         ] {
