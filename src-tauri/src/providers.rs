@@ -1854,8 +1854,27 @@ fn command_is_high_risk(shell: &str, command: &str) -> bool {
     };
     shell_specific_risky
         || script_launchers.contains(&executable.as_str())
+        || has_leading_shell_assignment(shell, command)
         || git_command_is_high_risk(command.trim())
         || external_tool_is_high_risk(&normalized_command, &executable)
+}
+
+fn has_leading_shell_assignment(shell: &str, command: &str) -> bool {
+    if !matches!(shell, "wsl" | "git-bash") {
+        return false;
+    }
+    let Some(token) = command.split_whitespace().next() else {
+        return false;
+    };
+    let Some((name, _)) = token.split_once('=') else {
+        return false;
+    };
+    let mut characters = name.chars();
+    let Some(first) = characters.next() else {
+        return false;
+    };
+    (first == '_' || first.is_ascii_alphabetic())
+        && characters.all(|character| character == '_' || character.is_ascii_alphanumeric())
 }
 
 fn git_command_is_high_risk(command: &str) -> bool {
@@ -3233,6 +3252,9 @@ mod tests {
             ),
             ("powershell", "git --exec-path=C:\\tools\\git inspect"),
             ("powershell", "git --exec-path C:\\tools\\git inspect"),
+            ("git-bash", "PATH=/tmp rm -rf proyecto"),
+            ("wsl", "GIT_CONFIG_COUNT=1 git status --short"),
+            ("git-bash", "FOO=bar npm view react version"),
         ] {
             assert!(command_is_high_risk(shell, command), "{shell}: {command}");
         }
@@ -3240,6 +3262,7 @@ mod tests {
         for (shell, command) in [
             ("wsl", "find . -name '*.rs'"),
             ("git-bash", "git -C proyecto status --short"),
+            ("git-bash", "echo PATH=/tmp"),
         ] {
             assert!(!command_is_high_risk(shell, command), "{shell}: {command}");
         }
@@ -3344,17 +3367,27 @@ mod tests {
     fn el_riesgo_prevalece_sobre_las_reglas_permitidas() {
         let settings = AgentSettings {
             mode: "rules".into(),
-            allowed_prefixes: vec!["reg delete HKCU\\Software\\Laural /f".into()],
+            allowed_prefixes: vec![
+                "reg delete HKCU\\Software\\Laural /f".into(),
+                "PATH=/tmp rm -rf proyecto".into(),
+                "find . -type f -delete".into(),
+                "git -c color.ui=false status --short".into(),
+            ],
             backup_retention: None,
         };
 
-        let result = authorize_agent_command_with_settings(
-            "powershell",
-            "reg delete HKCU\\Software\\Laural /f",
-            &settings,
-        );
-
-        assert!(result.unwrap_err().contains("confirmación manual"));
+        for (shell, command) in [
+            ("powershell", "reg delete HKCU\\Software\\Laural /f"),
+            ("git-bash", "PATH=/tmp rm -rf proyecto"),
+            ("wsl", "find . -type f -delete"),
+            ("powershell", "git -c color.ui=false status --short"),
+        ] {
+            let result = authorize_agent_command_with_settings(shell, command, &settings);
+            assert!(
+                result.unwrap_err().contains("confirmación manual"),
+                "{shell}: {command}"
+            );
+        }
     }
 
     #[test]
