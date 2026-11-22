@@ -1746,9 +1746,18 @@ fn command_is_high_risk(shell: &str, command: &str) -> bool {
         "clc",
         "clear-item",
         "cli",
+        "clear-variable",
+        "clv",
         "new-item",
         "ni",
+        "new-variable",
+        "nv",
+        "remove-variable",
+        "rv",
         "set-acl",
+        "set-variable",
+        "sv",
+        "set",
         "set-itemproperty",
         "set-content",
         "sc",
@@ -3365,6 +3374,27 @@ mod tests {
     }
 
     #[test]
+    fn exige_revision_para_cmdlets_que_mutan_variables_de_powershell() {
+        for command in [
+            "Set-Variable -Name prompt -Scope Global -Value oculto",
+            "sv contador 1",
+            "New-Variable persistente -Value activo",
+            "nv persistente -Value activo",
+            "Clear-Variable contador",
+            "clv contador",
+            "Remove-Variable prompt",
+            "rv prompt",
+            "set prompt oculto",
+        ] {
+            assert!(command_is_high_risk("powershell", command), "{command}");
+        }
+
+        for command in ["Get-Variable prompt", "gv contador"] {
+            assert!(!command_is_high_risk("powershell", command), "{command}");
+        }
+    }
+
+    #[test]
     fn exige_revision_para_evaluacion_y_cambios_de_estado_del_shell() {
         for (shell, command) in [
             ("cmd", "set PATH=C:\\tools"),
@@ -3516,6 +3546,9 @@ mod tests {
                 "++$contador".into(),
                 "++ $contador".into(),
                 "($contador)++".into(),
+                "sv prompt oculto".into(),
+                "clv contador".into(),
+                "set prompt oculto".into(),
                 "declare -x PATH=/tmp".into(),
                 "enable -n printf".into(),
             ],
@@ -3534,6 +3567,9 @@ mod tests {
             ("powershell", "++$contador"),
             ("powershell", "++ $contador"),
             ("powershell", "($contador)++"),
+            ("powershell", "sv prompt oculto"),
+            ("powershell", "clv contador"),
+            ("powershell", "set prompt oculto"),
             ("git-bash", "declare -x PATH=/tmp"),
             ("wsl", "enable -n printf"),
         ] {
