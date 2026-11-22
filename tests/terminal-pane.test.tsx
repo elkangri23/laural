@@ -184,6 +184,25 @@ test("captura el comando enviado y el código de salida del bloque", async () =>
   expect(finished).toHaveBeenLastCalledWith("uno", null);
 });
 
+test("captura el texto corregido con ambos códigos de Retroceso", async () => {
+  await act(async () => root!.render(pane()));
+  const input = onData.mock.calls[0][0];
+
+  await act(async () => {
+    input("git statuX");
+    input("\x7f");
+    input("s\r");
+    input("echo listx");
+    input("\b");
+    input("o\r");
+  });
+
+  expect(submit.mock.calls).toEqual([
+    ["uno", "git status"],
+    ["uno", "echo listo"],
+  ]);
+});
+
 test("marca como editada la línea que el usuario modifica dentro del shell", async () => {
   await act(async () => root!.render(pane()));
   const input = onData.mock.calls[0][0];
