@@ -51,6 +51,8 @@
 - Renderizado del asistente: los deltas de respuesta se agrupan en lotes de 50 ms y el componente Markdown queda memorizado por contenido, evitando volver a parsear mensajes anteriores en cada actualización.
 - Las regresiones cubren el límite de sesiones, el enrutamiento de eventos PTY y la agregación del streaming. Queda pendiente medir CPU/memoria en una instalación Windows limpia con carga simultánea sostenida.
 - Verificación local: UI 128/128 (76,59 % de líneas); servicio 114 pasadas y 7 omitidas por requerir `TEST_DATABASE_URL` (80,35 % de líneas); Rust 114 pasadas y 1 ignorada. `npm run build`, pruebas de política de cobertura (7/7), `cargo fmt --check` y auditorías npm pasan. `cargo llvm-cov` ejecuta las pruebas, pero no genera perfiles con Windows/MSVC (`no coverage data found`); la cobertura Rust se mide en CI Linux.
+- Robustecido el mantenimiento de contadores del rate limit: la limpieza oportunista no puede solaparse dentro de una instancia y borra hasta 1.000 filas por ejecución; si queda retraso, los lotes se procesan gradualmente con el tráfico. No cambia los límites que observa el usuario ni los hashes almacenados.
+- Verificación del 22-11-2026: servicio con `npm run test:coverage` (116 pasadas, 8 omitidas por no configurar `TEST_DATABASE_URL`; 80,50 % de líneas, 79,04 % sentencias, 79,61 % ramas y 89,50 % funciones) y `npm run build`, ambos correctos. La suite de integración nueva crea 1.001 contadores vencidos y comprueba que una purga real deja uno para el lote siguiente; CI debe ejecutarla con PostgreSQL.
 
 ## Verificación
 

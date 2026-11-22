@@ -1,12 +1,16 @@
 import { createHmac } from "node:crypto";
 import type { Pool } from "pg";
 
+const CLEANUP_AFTER_CALLS = 512;
+const MAX_CLEANUP_BATCH = 1_000;
+
 export interface RequestRateLimiter {
   consume(scope: string, clientAddress: string, maximum: number, windowSeconds: number): Promise<boolean>;
 }
 
 export class PostgresRequestRateLimiter implements RequestRateLimiter {
   private callsSinceCleanup = 0;
+  private cleanupInProgress = false;
 
   constructor(private readonly pool: Pick<Pool, "query">, private readonly pepper: string) {
     const pepperBytes = Buffer.byteLength(pepper, "utf8");
@@ -41,9 +45,27 @@ export class PostgresRequestRateLimiter implements RequestRateLimiter {
     );
 
     this.callsSinceCleanup += 1;
-    if (this.callsSinceCleanup >= 512) {
+    if (this.callsSinceCleanup >= CLEANUP_AFTER_CALLS) {
       this.callsSinceCleanup = 0;
-      void this.pool.query("DELETE FROM request_rate_limits WHERE window_started_at < now() - interval '24 hours'").catch(() => undefined);
+      if (!this.cleanupInProgress) {
+        this.cleanupInProgress = true;
+        void Promise.resolve()
+          .then(() => this.pool.query(
+            `WITH expired AS (
+               SELECT scope, key_digest
+               FROM request_rate_limits
+               WHERE window_started_at < now() - interval '24 hours'
+               ORDER BY window_started_at
+               LIMIT $1
+             )
+             DELETE FROM request_rate_limits AS limits
+             USING expired
+             WHERE limits.scope = expired.scope AND limits.key_digest = expired.key_digest`,
+            [MAX_CLEANUP_BATCH],
+          ))
+          .catch(() => undefined)
+          .finally(() => { this.cleanupInProgress = false; });
+      }
     }
     return result.rows[0]?.allowed === true;
   }

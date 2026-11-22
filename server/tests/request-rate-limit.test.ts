@@ -35,7 +35,47 @@ describe("limitador persistente de solicitudes", () => {
       expect(await limiter.consume("preferences-read", "127.0.0.1", 120, 60)).toBe(true);
     }
 
-    expect(query).toHaveBeenCalledTimes(513);
+    await vi.waitFor(() => expect(query).toHaveBeenCalledTimes(513));
     expect(String(query.mock.calls[512]?.[0])).toContain("DELETE FROM request_rate_limits");
+    expect(String(query.mock.calls[512]?.[0])).toContain("LIMIT $1");
+    expect(query.mock.calls[512]?.[1]).toEqual([1_000]);
+  });
+
+  it("no solapa limpiezas y reintenta en lotes posteriores", async () => {
+    const cleanupResolvers: Array<() => void> = [];
+    const query = vi.fn((sql: string) => {
+      if (sql.includes("DELETE FROM request_rate_limits")) {
+        return new Promise((resolve) => cleanupResolvers.push(() => resolve({ rows: [] })));
+      }
+      return Promise.resolve({ rows: [{ allowed: true }] });
+    });
+    const limiter = new PostgresRequestRateLimiter({ query } as unknown as Pick<Pool, "query">, "x".repeat(32));
+
+    for (let index = 0; index < 512; index += 1) await limiter.consume("preferences-read", "127.0.0.1", 120, 60);
+    await vi.waitFor(() => expect(cleanupResolvers).toHaveLength(1));
+    for (let index = 0; index < 512; index += 1) await limiter.consume("preferences-read", "127.0.0.1", 120, 60);
+    expect(cleanupResolvers).toHaveLength(1);
+
+    cleanupResolvers[0]?.();
+    for (let index = 0; index < 512; index += 1) await limiter.consume("preferences-read", "127.0.0.1", 120, 60);
+    await vi.waitFor(() => expect(cleanupResolvers).toHaveLength(2));
+    cleanupResolvers[1]?.();
+  });
+
+  it("vuelve a permitir la purga cuando la consulta de limpieza falla", async () => {
+    let failCleanup: (() => void) | undefined;
+    const query = vi.fn((sql: string) => {
+      if (sql.includes("DELETE FROM request_rate_limits")) {
+        return new Promise((_resolve, reject) => { failCleanup = () => reject(new Error("database unavailable")); });
+      }
+      return Promise.resolve({ rows: [{ allowed: true }] });
+    });
+    const limiter = new PostgresRequestRateLimiter({ query } as unknown as Pick<Pool, "query">, "x".repeat(32));
+
+    for (let index = 0; index < 512; index += 1) await limiter.consume("preferences-read", "127.0.0.1", 120, 60);
+    await vi.waitFor(() => expect(failCleanup).toBeTypeOf("function"));
+    failCleanup?.();
+    for (let index = 0; index < 512; index += 1) await limiter.consume("preferences-read", "127.0.0.1", 120, 60);
+    await vi.waitFor(() => expect(query.mock.calls.filter(([sql]) => sql.includes("DELETE FROM request_rate_limits"))).toHaveLength(2));
   });
 });

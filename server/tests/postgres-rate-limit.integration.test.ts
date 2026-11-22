@@ -1,5 +1,5 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import pg, { type Pool } from "pg";
 import { createApp } from "../src/app.js";
 import { AccountDeletionService } from "../src/account-deletion.js";
@@ -70,6 +70,28 @@ describePostgres("integración real de PostgreSQL para rate limits", () => {
     expect(stored.rows).toHaveLength(2);
     expect(stored.rows.every(({ key_digest }) => /^[a-f0-9]{64}$/.test(key_digest))).toBe(true);
     expect(stored.rows.every(({ request_count }) => request_count >= 1)).toBe(true);
+  });
+
+  it("purga como máximo 1.000 contadores expirados por lote", async () => {
+    await isolatedPool.query(
+      `INSERT INTO request_rate_limits (scope, key_digest, window_started_at, request_count)
+       SELECT 'purge-integration', lpad(to_hex(value), 64, '0'), now() - interval '25 hours', 1
+       FROM generate_series(1, 1001) AS generated(value)`,
+    );
+    const limiter = new PostgresRequestRateLimiter(isolatedPool, "integracion-rate-limit-pepper-32-bytes-minimo");
+
+    for (let index = 0; index < 512; index += 1) {
+      await limiter.consume("purge-integration", "203.0.113.99", 1000, 3600);
+    }
+
+    await vi.waitFor(async () => {
+      const remaining = await isolatedPool.query<{ expired: string; total: string }>(
+        `SELECT count(*) FILTER (WHERE window_started_at < now() - interval '24 hours') AS expired,
+                count(*) AS total
+         FROM request_rate_limits WHERE scope = 'purge-integration'`,
+      );
+      expect(remaining.rows[0]).toEqual({ expired: "1", total: "2" });
+    });
   });
 
   it("reintenta avisos de seguridad pendientes y usa una entrega idempotente", async () => {

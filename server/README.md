@@ -65,7 +65,7 @@ Las rutas de cuenta no deben exponerse públicamente todavía: faltan revisar l�
 
 ### Retención de registros temporales
 
-El servicio limpia registros transitorios en una transacción al iniciar y cada hora: verificadores de PIN de más de 15 minutos, flows y códigos PKCE de más de 24 horas, sesiones vencidas o revocadas, claves de idempotencia de más de 30 días y avisos de seguridad entregados/abandonados de más de 30 días. Los avisos pendientes no se borran por antigüedad. El plazo de PIN conserva la ventana de límite por cuenta de 15 minutos; las idempotencias se retienen el tiempo máximo de vida de una sesión. La limpieza nunca elimina snapshots de preferencias ni cuentas. Si falla una pasada, se registra solo un mensaje genérico y se vuelve a intentar en la siguiente.
+El servicio limpia registros transitorios en una transacción al iniciar y cada hora: verificadores de PIN de más de 15 minutos, flows y códigos PKCE de más de 24 horas, sesiones vencidas o revocadas, claves de idempotencia de más de 30 días y avisos de seguridad entregados/abandonados de más de 30 días. Los avisos pendientes no se borran por antigüedad. Los contadores del rate limit se purgan de forma oportunista cada 512 solicitudes, en lotes de hasta 1.000 filas y con una limpieza simultánea como máximo por instancia; una acumulación mayor se drena progresivamente con el tráfico y se puede solapar entre instancias. El plazo de PIN conserva la ventana de límite por cuenta de 15 minutos; las idempotencias se retienen el tiempo máximo de vida de una sesión. La limpieza nunca elimina snapshots de preferencias ni cuentas. Si falla una pasada, se registra solo un mensaje genérico y se vuelve a intentar en la siguiente.
 
 ### Status público servido por Caddy
 
