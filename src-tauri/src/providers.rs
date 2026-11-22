@@ -1663,102 +1663,98 @@ fn validate_agent_shell_syntax(shell: &str, command: &str) -> Result<(), String>
 }
 
 fn command_is_high_risk(shell: &str, command: &str) -> bool {
-    let command = command.to_ascii_lowercase();
+    let command = command.trim().to_ascii_lowercase();
     let executable = first_command_name(&command);
-    let risky = [
-        "remove-item",
-        "ri ",
-        "rm ",
-        "del /",
-        "del ",
-        "rmdir",
-        "rd ",
-        "erase ",
-        "unlink ",
-        "shred ",
-        "rm -",
-        "copy-item",
-        "cpi ",
-        "copy ",
-        "xcopy ",
-        "robocopy ",
-        "cp ",
-        "move-item",
-        "mi ",
-        "move ",
-        "mv ",
-        "clear-content",
-        "clc ",
-        "new-item",
-        "ni ",
-        "set-acl",
-        "set-itemproperty",
-        "set-content",
-        "add-content",
-        "out-file",
-        "start-process",
-        "set-alias",
-        "new-alias",
-        "alias ",
-        "function ",
-        "truncate ",
-        "tee ",
-        "dd ",
-        "chmod ",
-        "chown ",
-        "icacls ",
-        "cacls ",
-        "attrib ",
-        "mklink ",
-        "ln ",
-        "install ",
-        "sc ",
-        "ac ",
-        "format ",
+    let common_risky_commands = [
+        "rm",
+        "unlink",
+        "shred",
+        "copy",
+        "xcopy",
+        "robocopy",
+        "cp",
+        "move",
+        "mv",
+        "rename",
+        "replace",
+        "truncate",
+        "tee",
+        "dd",
+        "chmod",
+        "chown",
+        "icacls",
+        "cacls",
+        "attrib",
+        "mklink",
+        "ln",
+        "install",
+        "format",
         "diskpart",
         "shutdown",
         "restart-computer",
         "clear-disk",
-        "reg delete",
         "bcdedit",
-        "git clean",
-        "git reset",
-        "git push",
-        "git checkout",
-        "git branch -d",
-        "npm publish",
-        "cargo publish",
-        "docker system prune",
-        "kubectl delete",
-        "terraform apply",
-        "terraform destroy",
-        "curl ",
-        "wget ",
-        "powershell.exe",
-        "pwsh.exe",
-        "cmd.exe /c",
-        "bash.exe",
-        "invoke-webrequest",
-        "invoke-restmethod",
-        "invoke-expression",
-        "iex ",
-        "start-process -verb runas",
-        "sudo ",
-        "takeown /f",
-        "cipher /w",
+        "curl",
+        "wget",
+        "sudo",
+        "takeown",
+        "cipher",
+        "alias",
+        "function",
     ];
-    let powershell_aliases = [
-        "icm",
-        "ihy",
-        "iwr",
-        "irm",
-        "invoke-command",
-        "invoke-history",
-        "kill",
-        "r",
+    let powershell_risky_commands = [
+        "remove-item",
+        "ri",
+        "del",
+        "erase",
+        "rmdir",
+        "rd",
+        "copy-item",
+        "cpi",
+        "move-item",
+        "mi",
+        "rename-item",
+        "clear-content",
+        "clc",
+        "clear-item",
+        "cli",
+        "new-item",
+        "ni",
+        "set-acl",
+        "set-itemproperty",
+        "set-content",
+        "sc",
+        "add-content",
+        "ac",
+        "out-file",
+        "set-alias",
+        "sal",
+        "new-alias",
+        "nal",
+        "set-item",
+        "si",
+        "start-process",
         "saps",
+        "stop-process",
         "spps",
+        "kill",
         "start",
+        "invoke-command",
+        "icm",
+        "invoke-history",
+        "ihy",
+        "r",
+        "invoke-webrequest",
+        "iwr",
+        "invoke-restmethod",
+        "irm",
+        "invoke-expression",
+        "iex",
+    ];
+    let cmd_risky_commands = [
+        "del", "erase", "rmdir", "rd", "copy", "xcopy", "robocopy", "move", "ren", "replace",
+        "attrib", "mklink", "icacls", "cacls", "takeown", "cipher", "format", "diskpart",
+        "shutdown", "bcdedit",
     ];
     let script_launchers = [
         "bash",
@@ -1779,18 +1775,96 @@ fn command_is_high_risk(shell: &str, command: &str) -> bool {
         "wscript",
         "wsl",
     ];
-    risky.iter().any(|token| command.contains(token))
+    let shell_specific_risky = match shell {
+        "powershell" => {
+            common_risky_commands.contains(&executable.as_str())
+                || powershell_risky_commands.contains(&executable.as_str())
+        }
+        "cmd" => {
+            common_risky_commands.contains(&executable.as_str())
+                || cmd_risky_commands.contains(&executable.as_str())
+                || matches!(executable.as_str(), "start" | "call")
+        }
+        "wsl" | "git-bash" => common_risky_commands.contains(&executable.as_str()),
+        _ => true,
+    };
+    shell_specific_risky
         || script_launchers.contains(&executable.as_str())
-        || (shell == "powershell" && powershell_aliases.contains(&executable.as_str()))
-        || command.contains("&&")
-        || command.contains("||")
-        || command.contains(';')
-        || command.contains('|')
-        || command.contains('>')
-        || command.contains('<')
-        || command.contains('&')
-        || command.contains('`')
-        || command.contains("$(")
+        || git_command_is_high_risk(&command)
+        || external_tool_is_high_risk(&command, &executable)
+}
+
+fn git_command_is_high_risk(command: &str) -> bool {
+    let mut tokens = command.split_whitespace();
+    if first_command_name(command) != "git" {
+        return false;
+    }
+    tokens.next();
+    let Some(subcommand) = tokens.next() else {
+        return false;
+    };
+    if subcommand.starts_with('-') {
+        return tokens.any(|argument| {
+            matches!(
+                argument,
+                "clean"
+                    | "reset"
+                    | "push"
+                    | "checkout"
+                    | "switch"
+                    | "restore"
+                    | "rm"
+                    | "rebase"
+                    | "merge"
+                    | "cherry-pick"
+            )
+        });
+    }
+    match subcommand {
+        "clean" | "reset" | "push" | "checkout" | "switch" | "restore" | "rm" | "rebase"
+        | "merge" | "cherry-pick" => true,
+        "branch" => tokens.any(|argument| matches!(argument, "-d" | "-D" | "--delete")),
+        _ => false,
+    }
+}
+
+fn external_tool_is_high_risk(command: &str, executable: &str) -> bool {
+    let mut arguments = command.split_whitespace();
+    arguments.next();
+    let Some(subcommand) = arguments.next() else {
+        return false;
+    };
+    match executable {
+        "npm" => matches!(
+            subcommand,
+            "publish"
+                | "unpublish"
+                | "install"
+                | "i"
+                | "ci"
+                | "update"
+                | "uninstall"
+                | "remove"
+                | "exec"
+                | "run"
+                | "run-script"
+        ),
+        "cargo" => matches!(subcommand, "publish" | "install"),
+        "docker" => matches!(
+            (subcommand, arguments.next()),
+            ("system", Some("prune"))
+                | ("image", Some("prune"))
+                | ("volume", Some("prune"))
+                | ("container", Some("prune"))
+                | ("container", Some("rm"))
+                | ("image", Some("rm"))
+                | ("volume", Some("rm"))
+        ),
+        "kubectl" => matches!(subcommand, "delete" | "apply" | "replace" | "patch"),
+        "terraform" => matches!(subcommand, "apply" | "destroy" | "import"),
+        "reg" => matches!(subcommand, "delete"),
+        _ => false,
+    }
 }
 
 fn first_command_name(command: &str) -> String {
@@ -2709,29 +2783,77 @@ mod tests {
 
     #[test]
     fn detecta_aliases_comunes_de_borrado_y_escritura() {
+        for (shell, command) in [
+            ("powershell", "ri archivo.txt"),
+            ("powershell", "Remove-Item archivo.txt"),
+            ("powershell", "erase archivo.txt"),
+            ("powershell", "rd carpeta"),
+            ("powershell", "cpi origen destino"),
+            ("powershell", "mi origen destino"),
+            ("powershell", "ni archivo.txt"),
+            ("powershell", "sc salida.txt datos"),
+            ("powershell", "ac salida.txt datos"),
+            ("powershell", "clc archivo.txt"),
+            ("powershell", "saps powershell -File script.ps1"),
+            ("powershell", "icacls proyecto /grant usuario:F"),
+            ("powershell", "attrib +R archivo.txt"),
+            ("powershell", "mklink enlace destino"),
+            ("cmd", "del archivo.txt"),
+            ("cmd", "erase archivo.txt"),
+            ("cmd", "rd carpeta"),
+            ("cmd", "copy origen destino"),
+            ("cmd", "move origen destino"),
+            ("cmd", "ren anterior nuevo"),
+            ("cmd", "replace origen destino"),
+            ("git-bash", "rm archivo.txt"),
+            ("git-bash", "unlink archivo.txt"),
+            ("git-bash", "cp origen destino"),
+            ("git-bash", "mv origen destino"),
+            ("git-bash", "truncate -s 0 archivo.txt"),
+            ("git-bash", "tee salida.txt"),
+            ("git-bash", "dd if=entrada of=disco"),
+            ("git-bash", "robocopy origen destino"),
+        ] {
+            assert!(command_is_high_risk(shell, command), "{shell}: {command}");
+        }
+        assert!(!command_is_high_risk("git-bash", "git status --short"));
+    }
+
+    #[test]
+    fn limita_los_falsos_positivos_y_detecta_subcomandos_peligrosos() {
+        for (shell, command) in [
+            ("powershell", "Write-Output Remove-Item"),
+            ("powershell", "Get-Command Invoke-Expression"),
+            ("git-bash", "echo copy destination"),
+            ("git-bash", "git status --short"),
+            ("git-bash", "git log --oneline"),
+            ("cmd", "echo del archivo.txt"),
+            ("git-bash", "npm view react version"),
+            ("git-bash", "docker ps"),
+            ("git-bash", "kubectl get pods"),
+            ("git-bash", "terraform plan"),
+        ] {
+            assert!(!command_is_high_risk(shell, command), "{shell}: {command}");
+        }
+
         for command in [
-            "rm archivo.txt",
-            "ri archivo.txt",
-            "erase archivo.txt",
-            "rd carpeta",
-            "unlink archivo.txt",
-            "cp origen destino",
-            "mv origen destino",
-            "ni archivo.txt",
-            "copy origen destino",
-            "robocopy origen destino",
-            "Move-Item origen destino",
-            "New-Item archivo.txt",
-            "Clear-Content archivo.txt",
-            "truncate -s 0 archivo.txt",
-            "tee salida.txt",
-            "dd if=entrada of=disco",
-            "Set-Content archivo.txt datos",
-            "Out-File archivo.txt",
+            "git clean -fd",
+            "git -C proyecto reset --hard",
+            "git -c advice.detachedHead=false push",
         ] {
             assert!(command_is_high_risk("git-bash", command), "{command}");
         }
-        assert!(!command_is_high_risk("git-bash", "git status --short"));
+        for (command, executable) in [
+            ("npm publish", "npm"),
+            ("npm ci", "npm"),
+            ("cargo publish", "cargo"),
+            ("docker system prune -af", "docker"),
+            ("kubectl delete pod x", "kubectl"),
+            ("terraform destroy -auto-approve", "terraform"),
+            ("reg delete HKCU\\Software\\Laural /f", "reg"),
+        ] {
+            assert!(external_tool_is_high_risk(command, executable), "{command}");
+        }
     }
 
     #[test]
@@ -2761,18 +2883,18 @@ mod tests {
 
     #[test]
     fn exige_revision_para_cambios_de_permisos_y_enlaces() {
-        for command in [
-            "chmod -R 777 proyecto",
-            "chown usuario archivo",
-            "icacls proyecto /grant usuario:F",
-            "cacls archivo /E /G usuario:F",
-            "attrib +R archivo",
-            "mklink enlace destino",
-            "ln -s destino enlace",
-            "Set-Acl archivo acl.xml",
-            "Set-ItemProperty archivo -Name valor",
+        for (shell, command) in [
+            ("git-bash", "chmod -R 777 proyecto"),
+            ("git-bash", "chown usuario archivo"),
+            ("cmd", "icacls proyecto /grant usuario:F"),
+            ("cmd", "cacls archivo /E /G usuario:F"),
+            ("cmd", "attrib +R archivo"),
+            ("cmd", "mklink enlace destino"),
+            ("git-bash", "ln -s destino enlace"),
+            ("powershell", "Set-Acl archivo acl.xml"),
+            ("powershell", "Set-ItemProperty archivo -Name valor"),
         ] {
-            assert!(command_is_high_risk("git-bash", command), "{command}");
+            assert!(command_is_high_risk(shell, command), "{shell}: {command}");
         }
         assert!(!command_is_high_risk("git-bash", "git status --short"));
     }
