@@ -1,6 +1,6 @@
 # Hoja de ruta
 
-Estado al 22 de noviembre de 2026. «Implementado» describe código presente; «validación pendiente» señala que hace falta ejecutar y comprobar el flujo en Windows.
+Estado al 23 de noviembre de 2026. «Implementado» describe código presente; «validación pendiente» señala que hace falta ejecutar y comprobar el flujo en Windows.
 
 ## M0 — Esqueleto de producto (implementado; validación de uso pendiente)
 
@@ -159,6 +159,7 @@ Las regresiones Rust cubren fallo de formato/versión/secciones, parámetros y c
 - El streaming acumula fragmentos en un buffer y concatena el texto al solicitar la siguiente instantánea visual, como máximo cinco veces por segundo; libera enseguida los fragmentos ya integrados. La regresión comprueba orden, Unicode, respuesta de 1.500 fragmentos y limpieza. Suite UI: 150/150 pruebas, 78,87 % de líneas; `streamingText.ts` tiene 100 % de líneas y ramas. Build correcto: entrada principal 301,36 KB.
 - Microbenchmark comparativo en Node 24.22.1: 1.500 fragmentos de 180 caracteres, con lectura de texto cada cuatro fragmentos (375 instantáneas); mediana de 15,62 ms con concatenación por fragmento y 14,13 ms con el buffer (≈9,6 % menos). La medición sintética incluye acumulación y lectura del contenido; no mide React/Markdown, IPC ni recursos del proceso instalado.
 - `TerminalPane` recuerda las filas y columnas enviadas al crear la sesión y omite IPC de resize si un aviso de `ResizeObserver` repite esas dimensiones; un cambio real de filas o columnas sigue notificándose inmediatamente. La regresión prueba tamaño inicial, duplicados, cambios e inválidos. UI: 151/151 pruebas y 78,78 % de líneas; build correcto con terminal en 336,14 KB. Pendiente medir la reducción de IPC en una sesión de escritorio real.
+- La prueba de componente confirma que tras `create_terminal` no se envía un resize redundante con las mismas 28×100 dimensiones iniciales. Suite UI actual: 152/152 pruebas, 79,02 % de líneas; `TerminalPane` alcanza 92,36 % de líneas.
 
 ## No planificado para el MVP
 

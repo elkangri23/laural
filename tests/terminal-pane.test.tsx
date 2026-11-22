@@ -14,6 +14,7 @@ vi.mock("@xterm/addon-fit", () => ({ FitAddon: class { fit() {} } }));
 vi.mock("@xterm/xterm", () => ({
   Terminal: class {
     options = {}; parser = { registerOscHandler };
+    rows = 28; cols = 100;
     constructor(options: unknown) { terminalOptions(options); }
     write = write; writeln = write;
     loadAddon() {} open() {} focus() {} dispose() {}
@@ -54,6 +55,24 @@ async function unmount() {
   root = undefined;
 }
 afterEach(async () => { await unmount(); vi.unstubAllGlobals(); });
+
+test("no repite el IPC de resize con el tamaño usado al crear la terminal", async () => {
+  const width = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientWidth");
+  const height = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientHeight");
+  Object.defineProperty(HTMLElement.prototype, "clientWidth", { configurable: true, value: 800 });
+  Object.defineProperty(HTMLElement.prototype, "clientHeight", { configurable: true, value: 600 });
+
+  try {
+    await act(async () => root!.render(pane()));
+    expect(invoke.mock.calls.map(([name]) => name)).toEqual(["create_terminal"]);
+  } finally {
+    await unmount();
+    if (width) Object.defineProperty(HTMLElement.prototype, "clientWidth", width);
+    else delete (HTMLElement.prototype as { clientWidth?: number }).clientWidth;
+    if (height) Object.defineProperty(HTMLElement.prototype, "clientHeight", height);
+    else delete (HTMLElement.prototype as { clientHeight?: number }).clientHeight;
+  }
+});
 
 test("ocultar la pestaña conserva el proceso y su salida; salir permite reiniciar", async () => {
   await act(async () => root!.render(pane()));
