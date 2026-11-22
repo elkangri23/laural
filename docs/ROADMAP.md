@@ -153,7 +153,8 @@ Las regresiones Rust cubren fallo de formato/versión/secciones, parámetros y c
 - Suite UI tras este cambio: 141/141 pruebas, 78,01 % de cobertura de líneas; `CommandBlockItem` logra 100 % de líneas y ramas en su prueba dirigida.
 - El estado en memoria del chat se limita a 100 mensajes en todas las rutas (chat y agente), compartiendo el mismo límite que la persistencia y el backend Rust. Así la sesión no acumula mensajes sin tope ni construye peticiones que el backend rechaza. La prueba verifica retención del sufijo sin copia cuando ya está dentro del límite.
 - El cliente prepara el historial enviado al backend con los mismos límites que Rust: últimos 20 mensajes, 8.000 puntos de código Unicode por mensaje y solo campos rol/contenido. Evita serializar el historial entero y que respuestas de más de 64 KiB provoquen rechazo en la consulta siguiente. Las regresiones prueban orden, límite de mensajes y recorte sin partir pares sustitutos.
-- Suite UI actual: 145/145 pruebas, 78,15 % de cobertura de líneas; las pruebas dirigidas cubren el recorte de historial y el payload acotado para backend.
+- Durante el streaming, la fila del asistente activo también omite los renders de React provocados por cada lote de 50 ms. Lee un acumulador compartido y refresca Markdown cada 200 ms; el primer fragmento y la respuesta final permanecen inmediatos. La regresión usa reloj simulado; falta medir CPU en una conversación real.
+- Verificación de este ajuste: interfaz 145/145 pruebas y 78,23 % de cobertura de líneas; `ChatMessageItem`, 100 % de líneas y 96,29 % de ramas. Rust: 114 pasadas y 1 ignorada; `cargo llvm-cov` ejecuta las pruebas pero no genera perfiles válidos en Windows/MSVC. `npm run build` pasa; la entrada JavaScript queda en 300,84 KB, Markdown 164,77 KB y terminal 336,08 KB.
 
 ## No planificado para el MVP
 

@@ -116,6 +116,7 @@ function App() {
   if (chatHistoryPersistenceRef.current === null) chatHistoryPersistenceRef.current = createChatHistoryPersistence(localStorage);
   const [chatBusy, setChatBusy] = useState(false);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
+  const streamingContentRef = useRef("");
   const [contextFiles, setContextFiles] = useState<string[]>([]);
   const [gitDiffContext, setGitDiffContext] = useState("");
   const [gitDiffTruncated, setGitDiffTruncated] = useState(false);
@@ -663,6 +664,7 @@ function App() {
     setChatMessages(nextMessages);
     setPrompt("");
     setChatBusy(true);
+    streamingContentRef.current = "";
     setStreamingMessageId(assistantMessageId);
     activeChatRequestRef.current = requestId;
     let unlisten: (() => void) | undefined;
@@ -676,6 +678,7 @@ function App() {
       if (!pendingDelta) return;
       const delta = pendingDelta;
       pendingDelta = "";
+      streamingContentRef.current += delta;
       setChatMessages((current) => current.map((message) => message.id === assistantMessageId ? { ...message, content: message.content + delta } : message));
     };
     const queueDelta = (delta: string) => {
@@ -1097,7 +1100,7 @@ function App() {
                 <button onClick={() => setPrompt("Dame un comando para revisar el estado de Git")}><span className="suggestion-icon"><TerminalIcon /></span><span>Genera un comando con contexto</span><ArrowUpRightIcon /></button>
               </div>
             </div> : <div className="message-thread">
-              {chatMessages.map((message, index) => <ChatMessageItem key={message.id ?? `${index}-${message.role}`} message={message} isStreaming={message.id === streamingMessageId} />)}
+              {chatMessages.map((message, index) => <ChatMessageItem key={message.id ?? `${index}-${message.role}`} message={message} isStreaming={message.id === streamingMessageId} streamingContentRef={message.id === streamingMessageId ? streamingContentRef : undefined} />)}
               {agentPlan && <div className="agent-plan-card">
                 <div className="agent-plan-header"><span className="plan-icon-small"><AgentIcon /></span><strong>Plan del agente</strong><span>{agentPlan.actions.length} acciones</span></div>
                 <p className="agent-plan-summary">{agentPlan.summary}</p>

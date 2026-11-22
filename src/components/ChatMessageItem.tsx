@@ -1,22 +1,24 @@
-import { lazy, memo, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, memo, Suspense, useEffect, useState } from "react";
 import { SparkIcon } from "./SparkIcon";
 
 const AssistantMarkdown = lazy(() => import("./AssistantMarkdown").then(module => ({ default: module.AssistantMarkdown })));
 
 export type ChatMessage = { role: "user" | "assistant"; content: string; id?: string };
+type StreamingContentRef = { current: string };
 const STREAM_MARKDOWN_REFRESH_MS = 200;
 
-export const ChatMessageItem = memo(function ChatMessageItem({ message, isStreaming = false }: { message: ChatMessage; isStreaming?: boolean }) {
+type ChatMessageItemProps = { message: ChatMessage; isStreaming?: boolean; streamingContentRef?: StreamingContentRef };
+
+export const ChatMessageItem = memo(function ChatMessageItem({ message, isStreaming = false, streamingContentRef }: ChatMessageItemProps) {
   const [renderedStreamContent, setRenderedStreamContent] = useState(message.content);
-  const latestContent = useRef(message.content);
-  latestContent.current = message.content;
 
   useEffect(() => {
     if (!isStreaming) return;
-    setRenderedStreamContent(message.content);
-    const timer = window.setInterval(() => setRenderedStreamContent(latestContent.current), STREAM_MARKDOWN_REFRESH_MS);
+    const currentContent = () => streamingContentRef?.current ?? message.content;
+    setRenderedStreamContent(currentContent());
+    const timer = window.setInterval(() => setRenderedStreamContent(currentContent()), STREAM_MARKDOWN_REFRESH_MS);
     return () => window.clearInterval(timer);
-  }, [isStreaming, message.id]);
+  }, [isStreaming, message.id, streamingContentRef]);
 
   useEffect(() => {
     if (isStreaming && renderedStreamContent.length === 0 && message.content.length > 0) {
@@ -29,4 +31,10 @@ export const ChatMessageItem = memo(function ChatMessageItem({ message, isStream
     <span className="message-avatar">{message.role === "user" ? "Tú" : <SparkIcon />}</span>
     <div className="message-content">{message.role === "assistant" ? <Suspense fallback={<span role="status">Preparando respuesta…</span>}><AssistantMarkdown content={content} /></Suspense> : message.content}</div>
   </article>;
+}, (previous, next) => {
+  if (previous.isStreaming && next.isStreaming && previous.message.id === next.message.id) {
+    if (previous.message.content.length === 0 && next.message.content.length > 0) return false;
+    return previous.streamingContentRef === next.streamingContentRef;
+  }
+  return previous.message === next.message && previous.isStreaming === next.isStreaming;
 });

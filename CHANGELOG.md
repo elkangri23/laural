@@ -2,6 +2,7 @@
 
 ## Sin publicar
 
+- Durante el streaming del asistente, la fila activa omite los renders causados por cada lote de 50 ms: lee un acumulador compartido y actualiza Markdown cada 200 ms; el primer fragmento y la respuesta final siguen siendo inmediatos.
 - El historial del chat agrupa escrituras locales cada 500 ms durante streaming, hasta diez veces menos frecuentes, y fuerza el guardado al ocultar la ventana.
 - Las filas del chat ya no se vuelven a renderizar cuando un delta solo actualiza otra respuesta.
 - El Markdown de la respuesta activa se actualiza como máximo cada 200 ms durante el streaming; el primer fragmento y el resultado final aparecen de inmediato.

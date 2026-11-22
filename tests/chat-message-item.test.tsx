@@ -45,18 +45,25 @@ test("limita a cinco por segundo el render Markdown mientras llega el streaming"
   document.body.append(host);
   root = createRoot(host);
   const message: ChatMessage = { id: "stream", role: "assistant", content: "fragmento 1" };
+  const streamingContentRef = { current: "fragmento 1" };
 
-  await act(async () => root!.render(<ChatMessageItem message={message} isStreaming />));
+  await act(async () => root!.render(<ChatMessageItem message={message} isStreaming streamingContentRef={streamingContentRef} />));
   await act(async () => { await Promise.resolve(); });
   expect(host.textContent).toContain("fragmento 1");
+  mocks.sparkIconRender.mockClear();
 
-  await act(async () => root!.render(<ChatMessageItem message={{ ...message, content: "fragmento 2" }} isStreaming />));
+  streamingContentRef.current = "fragmento 2";
+  await act(async () => root!.render(<ChatMessageItem message={{ ...message, content: "fragmento 2" }} isStreaming streamingContentRef={streamingContentRef} />));
   expect(host.textContent).toContain("fragmento 1");
+  expect(mocks.sparkIconRender).not.toHaveBeenCalled();
   await act(async () => { await vi.advanceTimersByTimeAsync(199); });
   expect(host.textContent).toContain("fragmento 1");
+  expect(mocks.sparkIconRender).not.toHaveBeenCalled();
   await act(async () => { await vi.advanceTimersByTimeAsync(1); });
   expect(host.textContent).toContain("fragmento 2");
+  expect(mocks.sparkIconRender).toHaveBeenCalledTimes(1);
 
-  await act(async () => root!.render(<ChatMessageItem message={{ ...message, content: "respuesta final" }} isStreaming={false} />));
+  await act(async () => root!.render(<ChatMessageItem message={{ ...message, content: "respuesta final" }} isStreaming={false} streamingContentRef={streamingContentRef} />));
   expect(host.textContent).toContain("respuesta final");
+  expect(mocks.sparkIconRender).toHaveBeenCalledTimes(2);
 });
