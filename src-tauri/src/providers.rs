@@ -1868,7 +1868,31 @@ fn external_tool_is_high_risk(command: &str, executable: &str) -> bool {
         ),
         "kubectl" => matches!(subcommand, "delete" | "apply" | "replace" | "patch"),
         "terraform" => matches!(subcommand, "apply" | "destroy" | "import"),
-        "reg" => matches!(subcommand, "delete"),
+        "reg" => matches!(
+            subcommand,
+            "add" | "delete" | "import" | "load" | "restore" | "save" | "copy"
+        ),
+        "schtasks" => {
+            matches!(
+                subcommand,
+                "/create" | "/change" | "/delete" | "/run" | "/end"
+            ) || arguments.any(|argument| {
+                matches!(
+                    argument,
+                    "/create" | "/change" | "/delete" | "/run" | "/end"
+                )
+            })
+        }
+        "sc" => matches!(
+            subcommand,
+            "create" | "config" | "delete" | "start" | "stop" | "failure"
+        ),
+        "net" => {
+            matches!(subcommand, "start" | "stop")
+                || (matches!(subcommand, "user" | "localgroup")
+                    && arguments.any(|argument| matches!(argument, "/add" | "/delete")))
+        }
+        "wevtutil" => matches!(subcommand, "cl" | "clear-log" | "dl" | "delete-log" | "sl"),
         _ => false,
     }
 }
@@ -2859,6 +2883,37 @@ mod tests {
             ("reg delete HKCU\\Software\\Laural /f", "reg"),
         ] {
             assert!(external_tool_is_high_risk(command, executable), "{command}");
+        }
+    }
+
+    #[test]
+    fn exige_revision_para_cambios_de_registro_servicios_usuarios_y_tareas() {
+        for (shell, command) in [
+            (
+                "cmd",
+                "reg.exe add HKCU\\Software\\Laural /v modo /d seguro /f",
+            ),
+            ("powershell", "reg import preferencias.reg"),
+            ("cmd", "schtasks /Create /TN tarea /TR programa.exe"),
+            ("git-bash", "sc.exe config servicio start= disabled"),
+            ("wsl", "net.exe user cuenta clave /add"),
+            ("cmd", "net localgroup Administrators cuenta /delete"),
+            ("powershell", "wevtutil cl Security"),
+        ] {
+            assert!(command_is_high_risk(shell, command), "{shell}: {command}");
+        }
+
+        for (command, executable) in [
+            ("reg query HKCU\\Software\\Laural", "reg"),
+            ("schtasks /Query /FO LIST", "schtasks"),
+            ("sc.exe query servicio", "sc"),
+            ("net user", "net"),
+            ("wevtutil gl Security", "wevtutil"),
+        ] {
+            assert!(
+                !external_tool_is_high_risk(command, executable),
+                "falso positivo: {command}"
+            );
         }
     }
 
