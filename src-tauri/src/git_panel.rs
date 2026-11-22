@@ -50,6 +50,7 @@ pub fn get_git_status(project_path: String) -> Result<GitStatus, String> {
             "--porcelain=v1",
             "--branch",
             "--untracked-files=normal",
+            "-z",
         ],
         MAX_STATUS_BYTES,
     )?;
@@ -128,11 +129,10 @@ fn repository_root(project_path: &Path) -> Result<PathBuf, String> {
 }
 
 fn parse_status(root: &Path, bytes: &[u8]) -> Result<GitStatus, String> {
-    let output = std::str::from_utf8(bytes)
-        .map_err(|_| "Git devolvió un estado que no se pudo interpretar.".to_string())?;
-    let mut lines = output.lines();
-    let branch_line = lines
+    let mut records = bytes.split(|byte| *byte == 0);
+    let branch_line = records
         .next()
+        .and_then(|record| std::str::from_utf8(record).ok())
         .and_then(|line| line.strip_prefix("## "))
         .ok_or_else(|| "Git devolvió un estado incompleto.".to_string())?;
     let branch = branch_line
@@ -140,16 +140,22 @@ fn parse_status(root: &Path, bytes: &[u8]) -> Result<GitStatus, String> {
         .next()
         .unwrap_or(branch_line)
         .to_string();
-    let changes = lines
-        .filter_map(|line| {
-            let status = line.get(..2)?;
-            let path = line.get(3..)?;
-            Some(GitChange {
-                code: status.trim().to_string(),
-                path: path.to_string(),
-            })
-        })
-        .collect();
+    let mut changes = Vec::new();
+    while let Some(record) = records.next() {
+        if record.is_empty() {
+            continue;
+        }
+        if record.len() < 4 || record[2] != b' ' {
+            return Err("Git devolvió un cambio que no se pudo interpretar.".into());
+        }
+        let code = String::from_utf8_lossy(&record[..2]).trim().to_string();
+        let path = String::from_utf8_lossy(&record[3..]).into_owned();
+        let has_second_path = code.contains('R') || code.contains('C');
+        changes.push(GitChange { code, path });
+        if has_second_path {
+            records.next();
+        }
+    }
     Ok(GitStatus {
         root: root.to_string_lossy().into_owned(),
         branch,
@@ -264,15 +270,49 @@ mod tests {
     use super::*;
     use std::fs;
 
+    fn run_test_git(repository: &Path, args: &[&str]) -> std::process::Output {
+        Command::new("git")
+            .current_dir(repository)
+            .args(args)
+            .output()
+            .unwrap()
+    }
+
+    fn init_test_repository(repository: &Path) {
+        assert!(run_test_git(repository, &["init", "-q"]).status.success());
+    }
+
+    fn commit_test_repository(repository: &Path, message: &str) {
+        assert!(run_test_git(repository, &["add", "--all"]).status.success());
+        assert!(
+            run_test_git(
+                repository,
+                &[
+                    "-c",
+                    "user.name=Laural Tests",
+                    "-c",
+                    "user.email=laural-tests@example.invalid",
+                    "commit",
+                    "-qm",
+                    message,
+                ]
+            )
+            .status
+            .success()
+        );
+    }
+
     #[test]
     fn interpreta_rama_y_cambios_porcelain_sin_invocar_shell() {
-        let status = b"## feature/panel...origin/feature/panel [ahead 1]\n M src/App.tsx\nA  tests/git-panel.test.tsx\n?? docs/git/\n";
+        let status = b"## feature/panel...origin/feature/panel [ahead 1]\0 M src/App.tsx\0A  tests/git-panel.test.tsx\0?? docs/git/\0R  nuevo nombre.txt\0nombre anterior.txt\0";
         let parsed = parse_status(Path::new("C:/proyecto"), status).unwrap();
         assert_eq!(parsed.branch, "feature/panel");
-        assert_eq!(parsed.changes.len(), 3);
+        assert_eq!(parsed.changes.len(), 4);
         assert_eq!(parsed.changes[0].code, "M");
         assert_eq!(parsed.changes[0].path, "src/App.tsx");
         assert_eq!(parsed.changes[2].code, "??");
+        assert_eq!(parsed.changes[3].code, "R");
+        assert_eq!(parsed.changes[3].path, "nuevo nombre.txt");
     }
 
     #[test]
@@ -287,7 +327,8 @@ mod tests {
 
     #[test]
     fn no_acepta_salida_de_estado_sin_cabecera_de_rama() {
-        assert!(parse_status(Path::new("."), b" M src/App.tsx\n").is_err());
+        assert!(parse_status(Path::new("."), b" M src/App.tsx\0").is_err());
+        assert!(parse_status(Path::new("."), b"## main\0x\0").is_err());
     }
 
     #[test]
@@ -301,68 +342,76 @@ mod tests {
     fn consulta_un_repositorio_real_sin_alterar_su_indice() {
         let directory = tempfile::tempdir().unwrap();
         let repository = directory.path();
-        let init = Command::new("git")
-            .current_dir(repository)
-            .args(["init", "-q"])
-            .status();
-        let Ok(init) = init else { return };
-        assert!(init.success());
+        init_test_repository(repository);
         fs::write(repository.join("archivo.txt"), "primera versión\n").unwrap();
-        assert!(
-            Command::new("git")
-                .current_dir(repository)
-                .args(["add", "archivo.txt"])
-                .status()
-                .unwrap()
-                .success()
-        );
-        assert!(
-            Command::new("git")
-                .current_dir(repository)
-                .args([
-                    "-c",
-                    "user.name=Laural Tests",
-                    "-c",
-                    "user.email=laural-tests@example.invalid",
-                    "commit",
-                    "-qm",
-                    "base",
-                ])
-                .status()
-                .unwrap()
-                .success()
-        );
+        commit_test_repository(repository, "base");
         fs::write(repository.join("archivo.txt"), "versión modificada\n").unwrap();
 
-        let root = repository_root(repository).unwrap();
-        let status = run_git(
-            &root,
-            &[
-                "status",
-                "--porcelain=v1",
-                "--branch",
-                "--untracked-files=normal",
-            ],
-            MAX_STATUS_BYTES,
-        )
-        .unwrap();
-        let parsed = parse_status(&root, &status.stdout).unwrap();
-        assert_eq!(parsed.changes.len(), 1);
-        assert_eq!(parsed.changes[0].code, "M");
-        assert!(String::from_utf8_lossy(&status.stdout).contains(" M archivo.txt"));
-        let diff = run_git(
-            &root,
-            &[
-                "diff",
-                "--no-ext-diff",
-                "--no-textconv",
-                "--no-color",
-                "--unified=3",
-                "--",
-            ],
-            MAX_DIFF_BYTES,
-        )
-        .unwrap();
-        assert!(String::from_utf8_lossy(&diff.stdout).contains("versión modificada"));
+        let path = repository.to_string_lossy().into_owned();
+        let status = get_git_status(path.clone()).unwrap();
+        assert_eq!(status.changes.len(), 1);
+        assert_eq!(status.changes[0].code, "M");
+        assert_eq!(status.changes[0].path, "archivo.txt");
+        let diff = get_git_diff(path).unwrap();
+        assert!(diff.content.contains("versión modificada"));
+        assert!(
+            run_test_git(repository, &["diff", "--cached", "--quiet"])
+                .status
+                .success()
+        );
+    }
+
+    #[test]
+    fn muestra_repositorio_limpio_sin_cambios() {
+        let directory = tempfile::tempdir().unwrap();
+        let repository = directory.path();
+        init_test_repository(repository);
+        fs::write(repository.join("base.txt"), "base\n").unwrap();
+        commit_test_repository(repository, "base");
+
+        let status = get_git_status(repository.to_string_lossy().into_owned()).unwrap();
+
+        assert!(!status.branch.is_empty());
+        assert!(status.changes.is_empty());
+    }
+
+    #[test]
+    fn conserva_nombres_de_archivo_con_espacios_y_unicode() {
+        let directory = tempfile::tempdir().unwrap();
+        let repository = directory.path();
+        init_test_repository(repository);
+        fs::write(repository.join("base.txt"), "base\n").unwrap();
+        commit_test_repository(repository, "base");
+        let unusual_name = "archivo con espacios ñ [prueba].txt";
+        fs::write(repository.join(unusual_name), "contenido\n").unwrap();
+
+        let status = get_git_status(repository.to_string_lossy().into_owned()).unwrap();
+
+        assert_eq!(status.changes.len(), 1);
+        assert_eq!(status.changes[0].path, unusual_name);
+        assert_eq!(status.changes[0].code, "??");
+    }
+
+    #[test]
+    fn limita_y_marca_diffs_grandes_de_un_repositorio_real() {
+        let directory = tempfile::tempdir().unwrap();
+        let repository = directory.path();
+        init_test_repository(repository);
+        let path = repository.join("grande.txt");
+        let original = (0..5_000)
+            .map(|index| format!("original-{index:05}-abcdefghijklmno\n"))
+            .collect::<String>();
+        fs::write(&path, original).unwrap();
+        commit_test_repository(repository, "base grande");
+        let modified = (0..5_000)
+            .map(|index| format!("modificado-{index:05}-zyxwvutsrqponml\n"))
+            .collect::<String>();
+        fs::write(path, modified).unwrap();
+
+        let diff = get_git_diff(repository.to_string_lossy().into_owned()).unwrap();
+
+        assert!(diff.truncated);
+        assert!(diff.content.len() <= MAX_DIFF_BYTES);
+        assert!(diff.content.starts_with("# Cambios sin preparar\n"));
     }
 }
