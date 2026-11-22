@@ -95,3 +95,5 @@ Verificación del ajuste: 126/126 pruebas UI, 112 pruebas Rust pasadas y 1 ignor
 Ampliación M3: el shell interactivo permite cargar alias y funciones desde perfiles de usuario. Los modos automático y por reglas ahora requieren confirmación en PowerShell, WSL y Git Bash. CMD se inicia con `/d` para desactivar AutoRun, y `doskey` exige aprobación al poder crear macros que sustituyen comandos. Pendientes los perfiles personalizados dentro de la ventana instalada.
 
 Verificación: 112 pruebas Rust pasan y 1 queda ignorada; UI 126/126, con 74,81 % de cobertura de líneas en CI. Cobertura Rust CI: 65,02 % total y 68,71 % en `providers.rs`. `npm run build`, `cargo fmt --check` y `git diff --check` pasan. El workflow `45027189166` terminó en verde. La cobertura Rust local sigue limitada por Windows/MSVC.
+
+Regresión M3: una macro `doskey` que coincida con una regla permitida continúa exigiendo aprobación manual. Esto verifica que la clasificación de comandos de riesgo prevalezca sobre reglas exactas.

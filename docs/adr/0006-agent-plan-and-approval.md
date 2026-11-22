@@ -32,3 +32,5 @@ Actualización: antes de aplicar reglas o ejecución automática, Rust rechaza m
 Actualización M3: para herramientas de gestión conocidas, una opción global antes del subcomando exige revisión manual. Así se evita que opciones de selección de proyecto/contexto desplacen un subcomando de cambio fuera de la primera posición que inspecciona la regla. Se permiten llamadas exactas de ayuda/versión y la consulta `pacman -Ss`; el clasificador sigue siendo heurístico y no sustituye un sandbox.
 
 Actualización M3: PowerShell, WSL y Git Bash ejecutan perfiles interactivos que pueden redefinir comandos, así que sus modos automático y por reglas ahora requieren confirmación manual. CMD inicia con `/d` para desactivar `AutoRun`; `doskey` requiere revisión porque crea macros de sesión.
+
+Regresión M3: una orden `doskey` que define una macro de comando debe seguir pidiendo aprobación aunque coincida exactamente con una regla permitida. La clasificación de riesgo se evalúa antes de las reglas.

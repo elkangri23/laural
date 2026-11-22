@@ -3656,6 +3656,7 @@ mod tests {
                 "set prompt oculto".into(),
                 "declare -x PATH=/tmp".into(),
                 "enable -n printf".into(),
+                "doskey git=del *".into(),
             ],
             backup_retention: None,
         };
@@ -3677,6 +3678,7 @@ mod tests {
             ("powershell", "set prompt oculto"),
             ("git-bash", "declare -x PATH=/tmp"),
             ("wsl", "enable -n printf"),
+            ("cmd", "doskey git=del *"),
         ] {
             let result = authorize_agent_command_with_settings(shell, command, &settings);
             assert!(
