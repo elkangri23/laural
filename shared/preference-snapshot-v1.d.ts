@@ -1,11 +1,21 @@
-export type SnapshotAppearance = "dark" | "light";
-export type SnapshotUpdateMode = "manual" | "automatic";
-export type SnapshotProviderKind = "freellmapi" | "ollama" | "lmstudio" | "custom";
+import type {
+  SnapshotAppearance,
+  SnapshotProviderKind,
+  SnapshotThemeId,
+  SnapshotUpdateMode,
+} from "./preference-snapshot-v1-enums.js";
+
+export type {
+  SnapshotAppearance,
+  SnapshotProviderKind,
+  SnapshotThemeId,
+  SnapshotUpdateMode,
+};
 
 export type PreferenceSnapshot = {
   schemaVersion: 1;
   preferences: {
-    themeId: string;
+    themeId: SnapshotThemeId;
     appearance: SnapshotAppearance;
     updateMode: SnapshotUpdateMode;
   };

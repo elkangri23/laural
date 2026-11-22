@@ -7,6 +7,9 @@ const THEMES: &[&str] = &[
     "laurel", "ocean", "indigo", "lavender", "rose", "coral", "amber", "teal", "sky", "ruby",
     "graphite", "sand",
 ];
+const APPEARANCES: &[&str] = &["dark", "light"];
+const UPDATE_MODES: &[&str] = &["manual", "automatic"];
+const PROVIDER_KINDS: &[&str] = &["freellmapi", "ollama", "lmstudio", "custom"];
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -61,11 +64,8 @@ fn validate(snapshot: &PreferenceSnapshot) -> Result<(), String> {
         return Err("La versión del snapshot de sincronización no es compatible.".into());
     }
     if !THEMES.contains(&snapshot.preferences.theme_id.as_str())
-        || !matches!(snapshot.preferences.appearance.as_str(), "dark" | "light")
-        || !matches!(
-            snapshot.preferences.update_mode.as_str(),
-            "manual" | "automatic"
-        )
+        || !APPEARANCES.contains(&snapshot.preferences.appearance.as_str())
+        || !UPDATE_MODES.contains(&snapshot.preferences.update_mode.as_str())
     {
         return Err("Las preferencias del snapshot no son válidas.".into());
     }
@@ -78,10 +78,7 @@ fn validate(snapshot: &PreferenceSnapshot) -> Result<(), String> {
         if provider.id.trim().is_empty()
             || provider.id.len() > 64
             || provider.id.chars().any(char::is_control)
-            || !matches!(
-                provider.kind.as_str(),
-                "freellmapi" | "ollama" | "lmstudio" | "custom"
-            )
+            || !PROVIDER_KINDS.contains(&provider.kind.as_str())
             || provider.name.trim().is_empty()
             || provider.name.len() > 128
             || provider.model.trim().is_empty()
@@ -127,6 +124,115 @@ mod tests {
             roundtrip.providers[1].custom_endpoint.as_deref(),
             Some("https://llm.example/v1")
         );
+    }
+
+    #[test]
+    fn esquema_canonico_acepta_todos_los_valores_que_admite_rust() {
+        let schema: serde_json::Value = serde_json::from_slice(include_bytes!(
+            "../../../shared/preference-snapshot-v1.schema.json"
+        ))
+        .unwrap();
+        let validator = jsonschema::validator_for(&schema).unwrap();
+
+        for (schema_values, rust_values) in [
+            (
+                schema["properties"]["preferences"]["properties"]["themeId"]["enum"]
+                    .as_array()
+                    .unwrap(),
+                THEMES,
+            ),
+            (
+                schema["properties"]["preferences"]["properties"]["appearance"]["enum"]
+                    .as_array()
+                    .unwrap(),
+                APPEARANCES,
+            ),
+            (
+                schema["properties"]["preferences"]["properties"]["updateMode"]["enum"]
+                    .as_array()
+                    .unwrap(),
+                UPDATE_MODES,
+            ),
+            (
+                schema["properties"]["providers"]["items"]["properties"]["kind"]["enum"]
+                    .as_array()
+                    .unwrap(),
+                PROVIDER_KINDS,
+            ),
+        ] {
+            let schema_values: Vec<_> = schema_values
+                .iter()
+                .map(|value| value.as_str().unwrap())
+                .collect();
+            assert_eq!(schema_values, rust_values);
+        }
+
+        for (field, values) in [
+            (
+                "themeId",
+                schema["properties"]["preferences"]["properties"]["themeId"]["enum"]
+                    .as_array()
+                    .unwrap(),
+            ),
+            (
+                "appearance",
+                schema["properties"]["preferences"]["properties"]["appearance"]["enum"]
+                    .as_array()
+                    .unwrap(),
+            ),
+            (
+                "updateMode",
+                schema["properties"]["preferences"]["properties"]["updateMode"]["enum"]
+                    .as_array()
+                    .unwrap(),
+            ),
+        ] {
+            for value in values {
+                let mut instance: serde_json::Value = serde_json::from_slice(&fixture()).unwrap();
+                instance["preferences"][field] = value.clone();
+                assert!(
+                    validator.is_valid(&instance),
+                    "schema rechaza {field}={value}"
+                );
+                assert!(decode(&serde_json::to_vec(&instance).unwrap()).is_ok());
+            }
+        }
+
+        let provider_kinds =
+            schema["properties"]["providers"]["items"]["properties"]["kind"]["enum"]
+                .as_array()
+                .unwrap();
+        for kind in provider_kinds {
+            let mut instance: serde_json::Value = serde_json::from_slice(&fixture()).unwrap();
+            instance["providers"][0]["kind"] = kind.clone();
+            assert!(validator.is_valid(&instance), "schema rechaza kind={kind}");
+            assert!(decode(&serde_json::to_vec(&instance).unwrap()).is_ok());
+        }
+    }
+
+    #[test]
+    fn esquema_canonico_y_rust_rechazan_campos_secretos_y_enumeraciones_invalidas() {
+        let schema: serde_json::Value = serde_json::from_slice(include_bytes!(
+            "../../../shared/preference-snapshot-v1.schema.json"
+        ))
+        .unwrap();
+        let validator = jsonschema::validator_for(&schema).unwrap();
+
+        let mut instances: Vec<serde_json::Value> = Vec::new();
+        let mut secret: serde_json::Value = serde_json::from_slice(&fixture()).unwrap();
+        secret["providers"][0]["apiKey"] = "secreto".into();
+        instances.push(secret);
+        let mut invalid_appearance: serde_json::Value = serde_json::from_slice(&fixture()).unwrap();
+        invalid_appearance["preferences"]["appearance"] = "system".into();
+        instances.push(invalid_appearance);
+        let mut invalid_kind: serde_json::Value = serde_json::from_slice(&fixture()).unwrap();
+        invalid_kind["providers"][0]["kind"] = "provider-desconocido".into();
+        instances.push(invalid_kind);
+
+        for instance in instances {
+            assert!(!validator.is_valid(&instance));
+            assert!(decode(&serde_json::to_vec(&instance).unwrap()).is_err());
+        }
     }
 
     #[test]
