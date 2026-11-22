@@ -8,7 +8,7 @@ import "@xterm/xterm/css/xterm.css";
 
 type Shell = "powershell" | "cmd" | "wsl" | "git-bash";
 const TERMINAL_SCROLLBACK_LINES = 2_500;
-const UNTRACKED_LINE_EDIT_KEYS = /[\u0001\u0004\u0005\u000b\u0015\u0016\u0017\u001f]/;
+const UNTRACKED_LINE_EDIT_KEYS = /[\u0001-\u0002\u0004-\u0007\u0009\u000b\u000c\u000e-\u001f]/;
 type OutputEvent = { terminalId: string; data: number[] };
 type TerminalRequest = { sequence: number; terminalId: string };
 type TerminalPaneProps = { terminalId: string; shell: Shell; cwd: string | null; visible: boolean; active: boolean; copyRequest: TerminalRequest; clearRequest: TerminalRequest; onActionNotice: (message: string) => void; onRestart: (terminalId: string) => void; theme: ThemeDefinition; appearance: AppearanceMode; onTextOutput: (terminalId: string, text: string) => void; onCommandSubmit: (terminalId: string, command: string) => void; onCommandFinish: (terminalId: string, exitCode: number | null) => void };

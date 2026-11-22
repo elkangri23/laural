@@ -203,19 +203,19 @@ test("captura el texto corregido con ambos códigos de Retroceso", async () => {
   ]);
 });
 
-test("no atribuye un comando incorrecto tras atajos de edición de línea", async () => {
+test("no atribuye un comando incorrecto tras controles de edición, historial y autocompletado", async () => {
   await act(async () => root!.render(pane()));
   const input = onData.mock.calls[0][0];
 
   await act(async () => {
-    for (const key of ["\x01", "\x05", "\x0b", "\x15", "\x16", "\x17", "\x1f", "\x1b[A"]) {
+    for (const key of ["\x01", "\x02", "\x05", "\x06", "\x07", "\x09", "\x0b", "\x0c", "\x0e", "\x0f", "\x10", "\x12", "\x13", "\x14", "\x15", "\x16", "\x17", "\x19", "\x1f", "\x1b[A"]) {
       input("git status");
       input(key);
       input("--short\r");
     }
   });
 
-  expect(submit.mock.calls).toEqual(Array.from({ length: 8 }, () => [
+  expect(submit.mock.calls).toEqual(Array.from({ length: 20 }, () => [
     "uno",
     "Comando editado en el shell; texto no capturado",
   ]));
