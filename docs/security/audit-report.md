@@ -90,4 +90,4 @@ Se añadió una prueba de integración local del streaming de proveedor: un serv
 
 Auditoría M3: el clasificador dejaba de inspeccionar un subcomando de alto riesgo si un gestor aceptaba opciones globales antes del verbo (por ejemplo, `npm --prefix proyecto install` o `terraform -chdir=infra apply`). Esas invocaciones ahora exigen aprobación; solo ayuda/versión exactas y la búsqueda de solo lectura `pacman -Ss` se exceptúan. Las regresiones cubren npm, Cargo, Docker, kubectl, Terraform y winget, además de consultas seguras.
 
-Verificación local del ajuste: 126/126 pruebas UI, 112 pruebas Rust pasadas y 1 ignorada; `npm run build` y `cargo fmt --check` pasan. `cargo llvm-cov` ejecutó los tests, pero no pudo generar el informe en Windows/MSVC porque no produjo datos de instrumentación; el CI queda como fuente de cobertura Rust.
+Verificación del ajuste: 126/126 pruebas UI, 112 pruebas Rust pasadas y 1 ignorada; `npm run build` y `cargo fmt --check` pasan. `cargo llvm-cov` ejecutó los tests, pero no pudo generar el informe en Windows/MSVC. CI del commit `8062fa4` terminó en verde con 74,88 % de cobertura UI, 65,02 % Rust y 68,73 % en `providers.rs`.
