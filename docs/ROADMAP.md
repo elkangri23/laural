@@ -151,6 +151,8 @@ Las regresiones Rust cubren fallo de formato/versión/secciones, parámetros y c
 - El estado React de los bloques secundarios se agrupa cada 50 ms (20 Hz) en vez de 33 ms (≈30 Hz), reduciendo hasta un tercio esas actualizaciones durante salida continua; xterm conserva la escritura inmediata y el cierre vacía la salida final. La regresión usa reloj simulado para comprobar el límite y el flush final.
 - El panel extrae cada bloque en `CommandBlockItem` memoizado. Como las actualizaciones conservan la identidad de los bloques inactivos, una salida nueva evita volver a limpiar/renderizar hasta 29 bloques visibles anteriores. La regresión cubre estados, limpieza ANSI y formato de salida.
 - Suite UI tras este cambio: 141/141 pruebas, 78,01 % de cobertura de líneas; `CommandBlockItem` logra 100 % de líneas y ramas en su prueba dirigida.
+- El estado en memoria del chat se limita a 100 mensajes en todas las rutas (chat y agente), compartiendo el mismo límite que la persistencia y el backend Rust. Así la sesión no acumula mensajes sin tope ni construye peticiones que el backend rechaza. La prueba verifica retención del sufijo sin copia cuando ya está dentro del límite.
+- Suite UI actual: 142/142 pruebas, 78,03 % de cobertura de líneas; la prueba dirigida del historial cubre el recorte, la retención de los mensajes recientes y el caso sin copia.
 
 ## No planificado para el MVP
 

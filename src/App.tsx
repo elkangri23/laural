@@ -1,5 +1,5 @@
 import { appendTerminalOutput, COMMAND_BLOCK_OUTPUT_LIMIT } from "./terminalOutput";
-import { createChatHistoryPersistence } from "./chatPersistence";
+import { createChatHistoryPersistence, limitChatMessages } from "./chatPersistence";
 import { HelpDialog, HelpIcon } from "./components/HelpDialog";
 import { BellIcon, NotificationCenter } from "./components/NotificationCenter";
 import { SettingsDialog } from "./components/SettingsDialog";
@@ -108,7 +108,7 @@ function App() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>(() => {
     try {
       const stored: unknown = JSON.parse(localStorage.getItem("laural.chat.v1") ?? "[]");
-      return Array.isArray(stored) ? stored.filter((item): item is ChatMessage => item && (item.role === "user" || item.role === "assistant") && typeof item.content === "string").slice(-100) : [];
+      return Array.isArray(stored) ? limitChatMessages(stored.filter((item): item is ChatMessage => item && (item.role === "user" || item.role === "assistant") && typeof item.content === "string")) : [];
     } catch { return []; }
   });
   const chatHistoryPersistenceRef = useRef<ReturnType<typeof createChatHistoryPersistence> | null>(null);
@@ -619,7 +619,7 @@ function App() {
       const requestId = crypto.randomUUID();
       activeAgentRequestRef.current = requestId;
       agentStopRequestedRef.current = false;
-      setChatMessages((current) => [...current, { role: "user", content: question }]);
+      setChatMessages((current) => limitChatMessages([...current, { role: "user", content: question }]));
       const planTerminalId = activeTabId;
       const shell = activeTab?.shell ?? "powershell";
       void invoke<AgentPlan>("plan_agent", {
@@ -634,22 +634,22 @@ function App() {
         if (agentStopRequestedRef.current) return;
         const prepared: AgentPlan = { ...plan, actions: plan.actions.map((action) => ({ ...action, status: "pending" })) };
         setAgentPlan(prepared);
-        setChatMessages((current) => [...current, { role: "assistant", content: `Plan preparado con ${plan.actions.length} acciones.` }]);
+        setChatMessages((current) => limitChatMessages([...current, { role: "assistant", content: `Plan preparado con ${plan.actions.length} acciones.` }]));
         if (executionMode !== "review") {
           for (let index = 0; index < prepared.actions.length; index += 1) {
             if (agentStopRequestedRef.current) break;
             if (prepared.actions[index].type === "run_command") {
               const completed = await executeAgentCommand(index, false, prepared, planTerminalId);
               if (!completed) {
-                if (!agentStopRequestedRef.current) setChatMessages((current) => [...current, { role: "assistant", content: "La secuencia automática se detuvo porque un comando no devolvió un código de salida correcto." }]);
+                if (!agentStopRequestedRef.current) setChatMessages((current) => limitChatMessages([...current, { role: "assistant", content: "La secuencia automática se detuvo porque un comando no devolvió un código de salida correcto." }]));
                 break;
               }
             }
           }
-          if (agentStopRequestedRef.current) setChatMessages((current) => [...current, { role: "assistant", content: "Ejecución del agente detenida. Los cambios de archivo pendientes no se aplicaron." }]);
+          if (agentStopRequestedRef.current) setChatMessages((current) => limitChatMessages([...current, { role: "assistant", content: "Ejecución del agente detenida. Los cambios de archivo pendientes no se aplicaron." }]));
         }
       }).catch((error) => {
-        setChatMessages((current) => [...current, { role: "assistant", content: agentStopRequestedRef.current ? "Planificación del agente cancelada." : `No se pudo preparar el plan: ${String(error)}` }]);
+        setChatMessages((current) => limitChatMessages([...current, { role: "assistant", content: agentStopRequestedRef.current ? "Planificación del agente cancelada." : `No se pudo preparar el plan: ${String(error)}` }]));
       }).finally(() => {
         if (activeAgentRequestRef.current === requestId) activeAgentRequestRef.current = null;
         setAgentPlanBusy(false);
@@ -658,7 +658,7 @@ function App() {
     }
     const requestId = crypto.randomUUID();
     const assistantMessageId = crypto.randomUUID();
-    const nextMessages = [...chatMessages, { role: "user" as const, content: question }, { role: "assistant" as const, content: "", id: assistantMessageId }];
+    const nextMessages = limitChatMessages([...chatMessages, { role: "user" as const, content: question }, { role: "assistant" as const, content: "", id: assistantMessageId }]);
     setChatMessages(nextMessages);
     setPrompt("");
     setChatBusy(true);

@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { createChatHistoryPersistence } from "../src/chatPersistence";
+import { createChatHistoryPersistence, limitChatMessages, MAX_CHAT_MESSAGES } from "../src/chatPersistence";
 
 afterEach(() => vi.useRealTimers());
 
@@ -39,6 +39,21 @@ test("mantiene los límites actuales de mensajes e ignora fallos del almacenamie
     failing.schedule([{ role: "user", content: "seguir disponible" }]);
     vi.advanceTimersByTime(500);
   }).not.toThrow();
+});
+
+test("limita también el historial activo a 100 mensajes sin copiarlo si ya cumple el límite", () => {
+  const messages = Array.from({ length: MAX_CHAT_MESSAGES + 3 }, (_, index) => ({
+    role: "user" as const,
+    content: String(index),
+  }));
+  const limited = limitChatMessages(messages);
+
+  expect(limited).toHaveLength(MAX_CHAT_MESSAGES);
+  expect(limited[0]?.content).toBe("3");
+  expect(messages).toHaveLength(MAX_CHAT_MESSAGES + 3);
+
+  const bounded = messages.slice(-MAX_CHAT_MESSAGES);
+  expect(limitChatMessages(bounded)).toBe(bounded);
 });
 
 test("flush escribe inmediatamente y cancel descarta el trabajo pendiente", () => {
