@@ -4,6 +4,8 @@ import { HelpDialog, HelpIcon } from "./components/HelpDialog";
 import { BellIcon, NotificationCenter } from "./components/NotificationCenter";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { UpdateManager } from "./components/UpdateManager";
+import { ChatMessageItem, type ChatMessage } from "./components/ChatMessageItem";
+import { SparkIcon } from "./components/SparkIcon";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -16,7 +18,6 @@ const TerminalPane = lazy(() => import("./components/TerminalPane"));
 const BackupRetentionControl = lazy(() => import("./components/BackupRetentionControl").then(module => ({ default: module.BackupRetentionControl })));
 const AgentActivity = lazy(() => import("./components/AgentActivity").then(module => ({ default: module.AgentActivity })));
 const AccountSettings = lazy(() => import("./components/AccountSettings").then(module => ({ default: module.AccountSettings })));
-const AssistantMarkdown = lazy(() => import("./components/AssistantMarkdown").then(module => ({ default: module.AssistantMarkdown })));
 const CommandPalette = lazy(() => import("./components/CommandPalette").then(module => ({ default: module.CommandPalette })));
 const GitPanel = lazy(() => import("./components/GitPanel").then(module => ({ default: module.GitPanel })));
 const TaskRecipes = lazy(() => import("./components/TaskRecipes").then(module => ({ default: module.TaskRecipes })));
@@ -24,7 +25,6 @@ const ConfigurationTransfer = lazy(() => import("./components/ConfigurationTrans
 
 type Shell = "powershell" | "cmd" | "wsl" | "git-bash";
 type TerminalTab = { id: string; shell: Shell; title: string; cwd: string | null };
-type ChatMessage = { role: "user" | "assistant"; content: string; id?: string };
 type CommandBlock = { id: string; terminalId: string; command: string; output: string; status: "running" | "finished"; exitCode: number | null };
 type CommandHistoryEntry = { id: string; terminalId: string; command: string; shell: Shell };
 type ContextPreview = { terminal: string; project: string; selectedFiles: string; gitDiff: string; totalCharacters: number };
@@ -1097,10 +1097,7 @@ function App() {
                 <button onClick={() => setPrompt("Dame un comando para revisar el estado de Git")}><span className="suggestion-icon"><TerminalIcon /></span><span>Genera un comando con contexto</span><ArrowUpRightIcon /></button>
               </div>
             </div> : <div className="message-thread">
-              {chatMessages.map((message, index) => <article className={`chat-message ${message.role}`} key={message.id ?? `${index}-${message.role}`}>
-                <span className="message-avatar">{message.role === "user" ? "Tú" : <SparkIcon />}</span>
-                <div className="message-content">{message.role === "assistant" ? <Suspense fallback={<span role="status">Preparando respuesta…</span>}><AssistantMarkdown content={message.content} /></Suspense> : message.content}</div>
-              </article>)}
+              {chatMessages.map((message, index) => <ChatMessageItem key={message.id ?? `${index}-${message.role}`} message={message} />)}
               {agentPlan && <div className="agent-plan-card">
                 <div className="agent-plan-header"><span className="plan-icon-small"><AgentIcon /></span><strong>Plan del agente</strong><span>{agentPlan.actions.length} acciones</span></div>
                 <p className="agent-plan-summary">{agentPlan.summary}</p>
@@ -1266,7 +1263,6 @@ function App() {
 }
 
 function TerminalIcon() { return <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2.5" y="3" width="15" height="14" rx="3"/><path d="m6 8 2.3 2-2.3 2M10.5 12h3.5"/></svg>; }
-function SparkIcon() { return <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m10 2 1.7 5.2L17 9l-5.3 1.8L10 16l-1.7-5.2L3 9l5.3-1.8L10 2Z"/><path d="m16 13 .8 2.2L19 16l-2.2.8L16 19l-.8-2.2L13 16l2.2-.8L16 13Z"/></svg>; }
 function PaletteIcon() { return <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.5a7.5 7.5 0 1 0 0 15h1.1a1.7 1.7 0 0 0 1.2-2.9l-.5-.5a1.4 1.4 0 0 1 1-2.4h1.3A4.4 4.4 0 0 0 18.5 7c0-2.5-3.8-4.5-8.5-4.5Z"/><circle cx="6.2" cy="9.7" r=".8"/><circle cx="9.2" cy="6.2" r=".8"/><circle cx="13.1" cy="6.4" r=".8"/></svg>; }
 function SunIcon() { return <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="3.2"/><path d="M10 2v2m0 12v2M2 10h2m12 0h2M4.35 4.35l1.4 1.4m8.5 8.5 1.4 1.4m0-11.3-1.4 1.4m-8.5 8.5-1.4 1.4"/></svg>; }
 function MoonIcon() { return <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M16.8 12.3A7.2 7.2 0 0 1 7.7 3.2 7.5 7.5 0 1 0 16.8 12.3Z"/></svg>; }
