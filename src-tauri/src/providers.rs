@@ -3385,11 +3385,24 @@ mod tests {
             "Remove-Variable prompt",
             "rv prompt",
             "set prompt oculto",
+            "Set-Item variable:prompt oculto",
+            "si Env:PATH C:\\tools",
+            "New-Item variable:persistente -Value activo",
+            "ni Env:LAURAL_TEST -Value activo",
+            "Remove-Item variable:prompt",
+            "ri Env:LAURAL_TEST",
+            "Clear-Item variable:prompt",
+            "cli Env:LAURAL_TEST",
         ] {
             assert!(command_is_high_risk("powershell", command), "{command}");
         }
 
-        for command in ["Get-Variable prompt", "gv contador"] {
+        for command in [
+            "Get-Variable prompt",
+            "gv contador",
+            "Get-Item variable:prompt",
+            "Get-Item Env:PATH",
+        ] {
             assert!(!command_is_high_risk("powershell", command), "{command}");
         }
     }
