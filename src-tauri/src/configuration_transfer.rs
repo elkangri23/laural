@@ -453,4 +453,148 @@ mod tests {
         unsupported_theme.preferences.theme_id = "unknown".into();
         assert!(validate_data(&unsupported_theme, &[]).is_err());
     }
+
+    #[test]
+    fn rechaza_archivos_vacios_invalidos_incompatibles_o_de_otra_version() {
+        assert!(decode(&[], None).is_err());
+        assert!(decode(b"no-json", None).is_err());
+
+        let (data, _) = sample();
+        let bytes = encode(data, Vec::new(), None).unwrap();
+        for (field, value) in [
+            ("format", serde_json::Value::String("otro-formato".into())),
+            ("version", serde_json::Value::from(VERSION + 1)),
+            ("mode", serde_json::Value::String("desconocido".into())),
+        ] {
+            let mut file: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+            file[field] = value;
+            assert!(
+                decode(&serde_json::to_vec(&file).unwrap(), None).is_err(),
+                "{field}"
+            );
+        }
+
+        let mut missing_data: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        missing_data["data"] = serde_json::Value::Null;
+        assert!(decode(&serde_json::to_vec(&missing_data).unwrap(), None).is_err());
+
+        let mut conflicting_sections: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        conflicting_sections["encrypted"] = serde_json::json!({});
+        assert!(decode(&serde_json::to_vec(&conflicting_sections).unwrap(), None).is_err());
+    }
+
+    #[test]
+    fn rechaza_parametros_cifrados_no_admitidos_y_codificacion_invalida() {
+        let (data, keys) = sample();
+        let bytes = encode(data, keys, Some("clave segura de prueba")).unwrap();
+        for (field, value) in [
+            (
+                "algorithm",
+                serde_json::Value::String("otro-cifrado".into()),
+            ),
+            ("kdf", serde_json::Value::String("otro-kdf".into())),
+            ("salt", serde_json::Value::String("%%%".into())),
+            ("salt", serde_json::Value::String(BASE64.encode([1_u8; 8]))),
+            ("nonce", serde_json::Value::String("%%%".into())),
+            ("nonce", serde_json::Value::String(BASE64.encode([1_u8; 8]))),
+            ("ciphertext", serde_json::Value::String("%%%".into())),
+        ] {
+            let mut file: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+            file["encrypted"][field] = value;
+            assert!(
+                decode(
+                    &serde_json::to_vec(&file).unwrap(),
+                    Some("clave segura de prueba")
+                )
+                .is_err(),
+                "{field}"
+            );
+        }
+    }
+
+    #[test]
+    fn valida_todos_los_campos_de_preferencias_perfiles_y_claves() {
+        let invalid_preferences: [fn(&mut TransferData); 2] = [
+            |data| data.preferences.appearance = "system".into(),
+            |data| data.preferences.update_mode = "always".into(),
+        ];
+        for mutate in invalid_preferences {
+            let mut data = sample().0;
+            mutate(&mut data);
+            assert!(validate_data(&data, &[]).is_err());
+        }
+
+        let invalid_providers: [fn(&mut TransferProvider); 10] = [
+            |provider| provider.id = " ".into(),
+            |provider| provider.id = "x".repeat(65),
+            |provider| provider.id = "id\ncontrol".into(),
+            |provider| provider.provider_kind = Some("unknown".into()),
+            |provider| provider.name = " ".into(),
+            |provider| provider.name = "n".repeat(129),
+            |provider| provider.model = " ".into(),
+            |provider| provider.model = "m".repeat(257),
+            |provider| provider.base_url = " ".into(),
+            |provider| provider.base_url = "u".repeat(2_049),
+        ];
+        for mutate in invalid_providers {
+            let mut data = sample().0;
+            mutate(&mut data.providers[0]);
+            assert!(validate_data(&data, &[]).is_err());
+        }
+
+        let mut data = sample().0;
+        data.active_provider_id = Some("missing".into());
+        assert!(validate_data(&data, &[]).is_err());
+
+        for keys in [
+            vec![ApiKeyEntry {
+                provider_id: "provider-1".into(),
+                api_key: " ".into(),
+            }],
+            vec![ApiKeyEntry {
+                provider_id: "provider-1".into(),
+                api_key: "k".repeat(16_385),
+            }],
+            vec![ApiKeyEntry {
+                provider_id: "missing".into(),
+                api_key: "clave".into(),
+            }],
+            vec![
+                ApiKeyEntry {
+                    provider_id: "provider-1".into(),
+                    api_key: "primera".into(),
+                },
+                ApiKeyEntry {
+                    provider_id: "provider-1".into(),
+                    api_key: "segunda".into(),
+                },
+            ],
+        ] {
+            assert!(validate_data(&sample().0, &keys).is_err());
+        }
+    }
+
+    #[test]
+    fn aplica_limites_y_conteo_de_caracteres_de_contrasena() {
+        assert!(validate_password("            ").is_err());
+        assert!(validate_password(&"x".repeat(MAX_PASSWORD_BYTES + 1)).is_err());
+        assert!(validate_password("clave segura de prueba").is_ok());
+
+        let mut data = sample().0;
+        data.providers = (0..=MAX_PROVIDERS)
+            .map(|index| TransferProvider {
+                id: format!("provider-{index}"),
+                provider_kind: Some("custom".into()),
+                name: format!("Proveedor {index}"),
+                base_url: "https://example.invalid/v1".into(),
+                model: "modelo".into(),
+                share_custom_endpoint: false,
+            })
+            .collect();
+        assert!(validate_data(&data, &[]).is_err());
+
+        let (_, keys) = sample();
+        let bytes = encode(sample().0, keys, Some("clave segura de prueba")).unwrap();
+        assert!(decode(&bytes, Some(&"x".repeat(MAX_PASSWORD_BYTES + 1))).is_err());
+    }
 }
