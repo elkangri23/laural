@@ -6,6 +6,7 @@ import { ChatMessageItem, type ChatMessage } from "../src/components/ChatMessage
 
 const mocks = vi.hoisted(() => ({ sparkIconRender: vi.fn() }));
 vi.mock("../src/components/SparkIcon", () => ({ SparkIcon: () => { mocks.sparkIconRender(); return null; } }));
+vi.mock("../src/components/AssistantMarkdown", () => ({ AssistantMarkdown: ({ content }: { content: string }) => <span className="test-markdown">{content}</span> }));
 
 let root: Root | undefined;
 let host: HTMLDivElement;
@@ -35,4 +36,27 @@ test("no vuelve a renderizar mensajes cuya identidad no cambió durante el strea
   expect(mocks.sparkIconRender).toHaveBeenCalledTimes(1);
   expect(rendersAfterInitialMount).toBeGreaterThanOrEqual(2);
   expect(host.querySelectorAll(".chat-message")).toHaveLength(2);
+});
+
+test("limita a cinco por segundo el render Markdown mientras llega el streaming", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.useFakeTimers();
+  host = document.createElement("div");
+  document.body.append(host);
+  root = createRoot(host);
+  const message: ChatMessage = { id: "stream", role: "assistant", content: "fragmento 1" };
+
+  await act(async () => root!.render(<ChatMessageItem message={message} isStreaming />));
+  await act(async () => { await Promise.resolve(); });
+  expect(host.textContent).toContain("fragmento 1");
+
+  await act(async () => root!.render(<ChatMessageItem message={{ ...message, content: "fragmento 2" }} isStreaming />));
+  expect(host.textContent).toContain("fragmento 1");
+  await act(async () => { await vi.advanceTimersByTimeAsync(199); });
+  expect(host.textContent).toContain("fragmento 1");
+  await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+  expect(host.textContent).toContain("fragmento 2");
+
+  await act(async () => root!.render(<ChatMessageItem message={{ ...message, content: "respuesta final" }} isStreaming={false} />));
+  expect(host.textContent).toContain("respuesta final");
 });
