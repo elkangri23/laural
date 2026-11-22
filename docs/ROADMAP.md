@@ -19,8 +19,8 @@ Estado al 22 de noviembre de 2026. «Implementado» describe código presente; �
 
 ## M1 — Estabilidad de terminal (parcial)
 
-- Prueba manual de PTY superada en PowerShell, CMD, Git Bash y WSL Ubuntu: entrada, redimensionamiento, recepción de las 1.500 líneas y código de salida 37. Los controles Copiar y Limpiar actúan sobre la selección/pantalla de la pestaña activa. El reinicio y la comprobación de bloques en la interfaz instalada siguen pendientes.
-- Las regresiones de interfaz comprueban la captura de comandos, marcadores OSC de bloques/código de salida y líneas editadas en el shell. La ventana instalada está disponible, pero esta sesión quedó en la elección inicial de actualizaciones; siguen pendientes la revisión visual de bloques, interrupción, cierre y reinicio desde la ventana instalada.
+- Prueba de ciclo de vida PTY ejecutada el 22-11-2026 en PowerShell, CMD, Git Bash y WSL Ubuntu: entrada, redimensionamiento, 1.500 líneas, marcador final y salida 37; los cuatro shells cerraron correctamente.
+- Las regresiones de interfaz comprueban la captura de comandos, marcadores OSC de bloques/código de salida y líneas editadas en el shell. Siguen pendientes la revisión visual de bloques, interrupción y cierre desde la ventana instalada y el reinicio con perfiles personalizados.
 - La salida visible de los bloques del agente se agrupa a un máximo aproximado de 30 actualizaciones por segundo; el contexto de terminal se mantiene inmediato y el lote final se vacía al completar el comando.
 - Los paneles xterm no se vuelven a renderizar cuando solo cambia la salida de los bloques; una regresión cuenta los renders y confirma que permanecen estables.
 - Acotada la memoria del historial visual: 2.500 líneas por xterm, 80 bloques globales y 8.000 caracteres por salida de bloque. El contexto independiente para el asistente conserva 24.000 caracteres.
@@ -134,7 +134,7 @@ Backend obligatorio, cuentas de usuario, monetización, telemetría por defecto,
 El centro de configuración está implementado en el código posterior a alpha.4. Consulta el [backlog con criterios de cierre](BACKLOG.md).
 
 M2 y M3 incorporan vinculación del perfil a su URL y un conjunto acotado de consultas automáticas de Git. Consulta el backlog para el estado de validación.
-M1: prueba de PTY real superada en los cuatro shells locales el 20 de noviembre de 2026. La prueba que queda ignorada por defecto en CI se ejecutó explícitamente y pasó; la comprobación visual de bloques en la ventana de Laural sigue pendiente.
+M1: prueba PTY real superada en los cuatro shells locales el 22 de noviembre de 2026, incluida la prueba ignorada por defecto en CI ejecutada explícitamente. La comprobación visual de bloques y los controles de interrupción/cierre desde la ventana de Laural siguen pendientes.
 La interfaz y el backend disponen de informes automáticos de cobertura en cada push y pull request. Última ejecución local: interfaz, 115/115 pruebas y 74,71 % de líneas; servicio, 121/121 con PostgreSQL local, 93,07 % de líneas y 86,90 % de ramas; Rust, 91 pruebas y 1 ignorada. La cobertura de líneas del componente Git es 92 % y la del componente de recetas es 98,86 %. `cargo llvm-cov` sigue sin datos válidos en el entorno Windows/MSVC; CI genera el informe Rust.
 M3 incorpora escritura temporal, reemplazo con backup por versión, creación exclusiva y pruebas de archivo bloqueado y aprobaciones concurrentes. La interfaz permite restaurar y limpiar copias manualmente con confirmación. La retención automática configurable está implementada y cubre pruebas de límite y limpieza.
 La interfaz lista las veinte copias más recientes por fecha. La retención automática por archivo es optativa y está implementada; su valor inicial conserva todas las versiones.
