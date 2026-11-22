@@ -1617,18 +1617,24 @@ pub fn authorize_agent_command(
             "El comando está vacío, es demasiado largo o contiene varias líneas.".to_string(),
         );
     }
-    if !approved {
-        validate_agent_shell_syntax(shell, command)?;
-    }
     if approved {
         return Ok(());
     }
+    let settings = read_agent_settings(app)?;
+    authorize_agent_command_with_settings(shell, command, &settings)
+}
+
+fn authorize_agent_command_with_settings(
+    shell: &str,
+    command: &str,
+    settings: &AgentSettings,
+) -> Result<(), String> {
+    validate_agent_shell_syntax(shell, command)?;
     if command_is_high_risk(shell, command) {
         return Err(
             "Este comando requiere confirmación manual por su alcance o sus efectos.".to_string(),
         );
     }
-    let settings = read_agent_settings(app)?;
     match settings.mode.as_str() {
         "automatic" if matches!(command, "git status" | "git status --short" | "git rev-parse --show-toplevel") => Ok(()),
         "automatic" => Err("Este comando requiere revisión. La ejecución automática admite consultas de estado de Git.".into()),
@@ -2854,6 +2860,72 @@ mod tests {
         ] {
             assert!(external_tool_is_high_risk(command, executable), "{command}");
         }
+    }
+
+    #[test]
+    fn el_riesgo_prevalece_sobre_las_reglas_permitidas() {
+        let settings = AgentSettings {
+            mode: "rules".into(),
+            allowed_prefixes: vec!["reg delete HKCU\\Software\\Laural /f".into()],
+            backup_retention: None,
+        };
+
+        let result = authorize_agent_command_with_settings(
+            "powershell",
+            "reg delete HKCU\\Software\\Laural /f",
+            &settings,
+        );
+
+        assert!(result.unwrap_err().contains("confirmación manual"));
+    }
+
+    #[test]
+    fn automatico_solo_acepta_las_consultas_git_exactas() {
+        let settings = AgentSettings {
+            mode: "automatic".into(),
+            allowed_prefixes: Vec::new(),
+            backup_retention: None,
+        };
+
+        for command in [
+            "git status",
+            "git status --short",
+            "git rev-parse --show-toplevel",
+        ] {
+            assert!(authorize_agent_command_with_settings("git-bash", command, &settings).is_ok());
+        }
+        assert!(
+            authorize_agent_command_with_settings("git-bash", "git status --ignored", &settings)
+                .is_err()
+        );
+        assert!(
+            authorize_agent_command_with_settings("git-bash", "echo listo", &settings).is_err()
+        );
+    }
+
+    #[test]
+    fn las_reglas_son_exactas_y_rechazan_operadores_de_shell() {
+        let settings = AgentSettings {
+            mode: "rules".into(),
+            allowed_prefixes: vec!["echo listo".into()],
+            backup_retention: None,
+        };
+
+        assert!(
+            authorize_agent_command_with_settings("powershell", "echo listo", &settings).is_ok()
+        );
+        assert!(
+            authorize_agent_command_with_settings("powershell", "echo listo ahora", &settings)
+                .is_err()
+        );
+        assert!(
+            authorize_agent_command_with_settings(
+                "powershell",
+                "echo listo; Remove-Item *",
+                &settings
+            )
+            .is_err()
+        );
     }
 
     #[test]
