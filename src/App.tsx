@@ -5,6 +5,7 @@ import { BellIcon, NotificationCenter } from "./components/NotificationCenter";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { UpdateManager } from "./components/UpdateManager";
 import { ChatMessageItem, type ChatMessage } from "./components/ChatMessageItem";
+import { CommandBlockItem, type CommandBlock } from "./components/CommandBlockItem";
 import { SparkIcon } from "./components/SparkIcon";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
@@ -25,7 +26,6 @@ const ConfigurationTransfer = lazy(() => import("./components/ConfigurationTrans
 
 type Shell = "powershell" | "cmd" | "wsl" | "git-bash";
 type TerminalTab = { id: string; shell: Shell; title: string; cwd: string | null };
-type CommandBlock = { id: string; terminalId: string; command: string; output: string; status: "running" | "finished"; exitCode: number | null };
 type CommandHistoryEntry = { id: string; terminalId: string; command: string; shell: Shell };
 type ContextPreview = { terminal: string; project: string; selectedFiles: string; gitDiff: string; totalCharacters: number };
 type Provider = { id: string; providerKind: string; name: string; baseUrl: string; model: string; hasApiKey: boolean; shareCustomEndpoint: boolean };
@@ -1072,11 +1072,7 @@ function App() {
             </div>
             {blocksOpen && <section className="command-blocks-panel" aria-label="Bloques de comandos">
               {visibleBlocks.length === 0 ? <p className="blocks-empty">Los comandos que envíes desde esta terminal aparecerán aquí con su salida.</p> : visibleBlocks.map((block) => {
-                const cleanOutput = block.output.replace(/\u001b\][^\u0007]*(?:\u0007|\u001b\\)/g, "").replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, "").replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "");
-                return <details className="command-block" key={block.id}>
-                  <summary><span className="block-status-dot" data-status={block.status} /><code>{block.command}</code><span className="block-exit">{block.status === "running" ? "En curso" : block.exitCode === null ? "Finalizado" : `Salida ${block.exitCode}`}</span></summary>
-                  <pre>{cleanOutput.trim() || "Sin salida capturada."}</pre>
-                </details>;
+                return <CommandBlockItem block={block} key={block.id} />;
               })}
             </section>}
             <div className="terminal-footer"><div className="footer-left"><button className="footer-branch" onClick={() => setGitPanelOpen(true)} title="Consultar rama y cambios reales del proyecto"><BranchIcon /> Consultar Git</button></div><div className="footer-right"><span>UTF-8</span><span>{activeTab?.title ?? "PowerShell"}</span><span>100%</span></div></div>
