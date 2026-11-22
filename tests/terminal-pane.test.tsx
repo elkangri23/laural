@@ -148,6 +148,20 @@ test("entrega la respuesta del cursor cuando termina el arranque", async () => {
   expect(invoke).toHaveBeenCalledWith("write_terminal", { terminalId: "uno", data: "\x1b[1;1R" });
 });
 
+test("reenvía Ctrl+C como ETX a la sesión y no lo registra como comando", async () => {
+  await act(async () => root!.render(pane()));
+  const input = onData.mock.calls[0][0];
+
+  await act(async () => {
+    input("\x03");
+    input("\r");
+    await new Promise(resolve => setTimeout(resolve, 0));
+  });
+
+  expect(invoke).toHaveBeenCalledWith("write_terminal", { terminalId: "uno", data: "\x03" });
+  expect(submit).not.toHaveBeenCalled();
+});
+
 test("captura el comando enviado y el código de salida del bloque", async () => {
   await act(async () => root!.render(pane()));
   const input = onData.mock.calls[0][0];
