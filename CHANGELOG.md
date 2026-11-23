@@ -2,6 +2,7 @@
 
 ## Sin publicar
 
+- El formato de evento PTY Base64 ahora usa un fixture compartido por Rust y TypeScript, con una prueba en cada runtime para evitar divergencias del contrato.
 - Las terminales inactivas detienen el parpadeo del cursor; solo la visible y activa mantiene la animación, que se reactiva al volver a ella.
 - El gate de CI Rust exige ahora 85 % de cobertura de líneas en el módulo de transporte Base64 de terminal; el gate de ramas continúa limitado a módulos con decisiones de código medibles.
 - La salida de terminal viaja como Base64 en vez de arrays JSON numéricos, con límite estricto de 32 KiB al decodificar. Una carga de 32 KiB se serializa en menos de la mitad de bytes y mantiene el round-trip exacto.

@@ -38,4 +38,15 @@ mod tests {
 
         assert!(base64_json.len() * 2 < array_json.len());
     }
+
+    #[test]
+    fn evento_coincide_con_el_fixture_compartido_de_typescript() {
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../shared/fixtures/terminal-output-event.json"
+        ))
+        .unwrap();
+        let emitted = serde_json::to_value(TerminalOutput::from_bytes("🌍".as_bytes())).unwrap();
+
+        assert_eq!(emitted, fixture);
+    }
 }
