@@ -747,7 +747,7 @@ mod terminal_tests {
 
             let output_tx = output_tx.clone();
             readers.push(thread::spawn(move || {
-                let mut buffer = [0_u8; 8 * 1024];
+                let mut buffer = [0_u8; 32 * 1024];
                 loop {
                     match reader.read(&mut buffer) {
                         Ok(0) | Err(_) => break,
@@ -765,6 +765,7 @@ mod terminal_tests {
             masters.push(pair.master);
             children.push(TestChild(child));
         }
+        let sessions_spawned_at = Instant::now();
         drop(output_tx);
 
         let markers: Vec<_> = (0..session_count)
@@ -776,8 +777,12 @@ mod terminal_tests {
         let mut outputs = vec![Vec::new(); session_count];
         let mut cursor_answered = vec![false; session_count];
         let mut script_sent = vec![false; session_count];
+        let mut marker_received = vec![false; session_count];
         let mut exit_sent = vec![false; session_count];
         let mut completed = vec![false; session_count];
+        let mut first_script_sent_at = None;
+        let mut last_script_sent_at = None;
+        let mut output_completed_at = None;
         let mut total_bytes = 0;
         while completed.iter().any(|done| !done) {
             let (session, bytes) = output_rx
@@ -803,14 +808,21 @@ mod terminal_tests {
                 writers[session].write_all(script.as_bytes()).unwrap();
                 writers[session].write_all(b"\r").unwrap();
                 writers[session].flush().unwrap();
+                let now = Instant::now();
+                first_script_sent_at.get_or_insert(now);
+                last_script_sent_at = Some(now);
                 script_sent[session] = true;
             }
             if script_sent[session]
-                && !exit_sent[session]
+                && !marker_received[session]
                 && outputs[session]
                     .windows(markers[session].len())
                     .any(|window| window == markers[session])
             {
+                marker_received[session] = true;
+                if marker_received.iter().all(|received| *received) {
+                    output_completed_at = Some(Instant::now());
+                }
                 writers[session].write_all(b"exit 0\r").unwrap();
                 writers[session].flush().unwrap();
                 exit_sent[session] = true;
@@ -831,6 +843,7 @@ mod terminal_tests {
             };
             assert_eq!(status.exit_code(), 0, "La sesión PTY {session} falló");
         }
+        let children_exited_at = Instant::now();
 
         drop(masters);
         for reader in readers {
@@ -867,11 +880,33 @@ mod terminal_tests {
         }
 
         let elapsed = started.elapsed();
+        let first_script_sent_at = first_script_sent_at.expect("ningún shell llegó al prompt");
+        let last_script_sent_at = last_script_sent_at.expect("no se inició ningún comando");
+        let output_completed_at =
+            output_completed_at.expect("no se recibió la marca de todas las sesiones");
+        let spawn_seconds = sessions_spawned_at.duration_since(started).as_secs_f64();
+        let prompt_seconds = first_script_sent_at
+            .duration_since(sessions_spawned_at)
+            .as_secs_f64();
+        let dispatch_seconds = last_script_sent_at
+            .duration_since(first_script_sent_at)
+            .as_secs_f64();
+        let output_seconds = output_completed_at
+            .duration_since(first_script_sent_at)
+            .as_secs_f64();
+        let shutdown_seconds = children_exited_at
+            .duration_since(output_completed_at)
+            .as_secs_f64();
         println!(
-            "{session_count} sesiones CMD; {} líneas; {total_bytes} bytes en {:.2} s ({:.1} KiB/s)",
+            "{session_count} sesiones CMD; {} líneas; {total_bytes} bytes; creación {:.2} s; primer prompt {:.2} s; despacho {:.2} s; salida hasta última marca {:.2} s ({:.1} KiB/s); cierre {:.2} s; total {:.2} s",
             session_count * line_count,
+            spawn_seconds,
+            prompt_seconds,
+            dispatch_seconds,
+            output_seconds,
+            total_bytes as f64 / output_seconds / 1024.0,
+            shutdown_seconds,
             elapsed.as_secs_f64(),
-            total_bytes as f64 / elapsed.as_secs_f64() / 1024.0
         );
     }
 
