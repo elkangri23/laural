@@ -1,5 +1,9 @@
 # Registro de cambios
 
+## Sin publicar
+
+- El agente requiere aprobación para comandos de BitLocker que cifran, descifran, bloquean o desbloquean unidades y que administran protectores; conserva ayuda y consultas de estado acotadas.
+
 ## 0.1.0-alpha.15
 
 - Publicada el 23-11-2026 como pre-release NSIS x64 con firma del updater, manifiesto `latest.json` y suma SHA-256 del instalador.

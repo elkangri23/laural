@@ -2118,6 +2118,9 @@ fn external_tool_is_high_risk(command: &str, executable: &str) -> bool {
     if matches!(executable, "vssadmin" | "wbadmin" | "diskshadow") {
         return windows_backup_tool_is_high_risk(command, executable);
     }
+    if executable == "manage-bde" {
+        return manage_bde_command_is_high_risk(command);
+    }
     let mut arguments = command.split_whitespace();
     arguments.next();
     let Some(subcommand) = arguments.next() else {
@@ -2313,6 +2316,40 @@ fn windows_backup_tool_is_high_risk(command: &str, executable: &str) -> bool {
         "diskshadow" => true,
         _ => true,
     }
+}
+
+fn manage_bde_command_is_high_risk(command: &str) -> bool {
+    let arguments = command
+        .split_whitespace()
+        .skip(1)
+        .map(|argument| argument.trim_matches('"').to_ascii_lowercase())
+        .collect::<Vec<_>>();
+    let Some(operation) = arguments.first() else {
+        return false;
+    };
+    if arguments.len() == 1 && matches!(operation.as_str(), "-?" | "/?" | "-help" | "-h") {
+        return false;
+    }
+    if operation != "-status" {
+        return true;
+    }
+    let mut skip_computer_name = false;
+    for argument in arguments.iter().skip(1) {
+        if skip_computer_name {
+            skip_computer_name = false;
+            continue;
+        }
+        match argument.as_str() {
+            "-protectionaserrorlevel" | "-p" | "-?" | "/?" | "-help" | "-h" => {}
+            "-computername" | "-cn" => skip_computer_name = true,
+            drive
+                if drive.len() == 2
+                    && drive.as_bytes()[0].is_ascii_alphabetic()
+                    && drive.as_bytes()[1] == b':' => {}
+            _ => return true,
+        }
+    }
+    skip_computer_name
 }
 
 fn netsh_command_is_high_risk(command: &str) -> bool {
@@ -3826,6 +3863,45 @@ mod tests {
         ] {
             assert!(
                 !external_tool_is_high_risk(command, executable),
+                "{command}"
+            );
+        }
+    }
+
+    #[test]
+    fn exige_revision_para_cambios_de_bitlocker() {
+        for command in [
+            "manage-bde -on C:",
+            "manage-bde -off C:",
+            "manage-bde -pause C:",
+            "manage-bde -resume C:",
+            "manage-bde -lock D:",
+            "manage-bde -unlock D: -recoverypassword 123456",
+            "manage-bde -protectors -add C: -recoverypassword",
+            "manage-bde -protectors -delete C: -type recoverypassword",
+            "manage-bde -protectors -disable C:",
+            "manage-bde -autounlock -enable D:",
+            "manage-bde -forcerecovery C:",
+            "manage-bde -keypackage C: -path C:\\recovery",
+            "manage-bde -unknown-operation C:",
+        ] {
+            assert!(
+                external_tool_is_high_risk(command, "manage-bde"),
+                "{command}"
+            );
+        }
+
+        for command in [
+            "manage-bde",
+            "manage-bde -?",
+            "manage-bde -help",
+            "manage-bde -status",
+            "manage-bde -status C:",
+            "manage-bde -status -protectionaserrorlevel C:",
+            "manage-bde -status -computername equipo-remoto C:",
+        ] {
+            assert!(
+                !external_tool_is_high_risk(command, "manage-bde"),
                 "{command}"
             );
         }
