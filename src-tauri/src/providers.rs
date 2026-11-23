@@ -2198,6 +2198,9 @@ fn external_tool_is_high_risk(command: &str, executable: &str) -> bool {
     if executable == "bootrec" {
         return bootrec_command_is_high_risk(command);
     }
+    if executable == "bootsect" {
+        return bootsect_command_is_high_risk(command);
+    }
     if executable == "manage-bde" {
         return manage_bde_command_is_high_risk(command);
     }
@@ -2649,6 +2652,18 @@ fn bootrec_command_is_high_risk(command: &str) -> bool {
         .as_slice()
     {
         [] | ["/?"] | ["-?"] | ["/scanos"] => false,
+        _ => true,
+    }
+}
+
+fn bootsect_command_is_high_risk(command: &str) -> bool {
+    match command
+        .split_whitespace()
+        .skip(1)
+        .collect::<Vec<_>>()
+        .as_slice()
+    {
+        [] | ["/help"] | ["/?"] | ["-?"] => false,
         _ => true,
     }
 }
@@ -4570,6 +4585,24 @@ mod tests {
     }
 
     #[test]
+    fn exige_revision_para_escribir_codigo_de_arranque_con_bootsect() {
+        for command in [
+            "bootsect /nt52 SYS",
+            "bootsect /nt60 ALL",
+            "bootsect /nt60 S: /force",
+            "bootsect /nt60 SYS /mbr",
+            "bootsect /nt60 SYS /help",
+            "bootsect /opcion-desconocida",
+        ] {
+            assert!(command_is_high_risk("cmd", command), "{command}");
+        }
+
+        for command in ["bootsect", "bootsect /help", "bootsect /?", "bootsect -?"] {
+            assert!(!command_is_high_risk("cmd", command), "{command}");
+        }
+    }
+
+    #[test]
     fn exige_revision_para_modificar_credenciales_de_windows() {
         for (command, executable) in [
             (
@@ -4979,6 +5012,7 @@ mod tests {
                 "reagentc /disable".into(),
                 "bcdboot C:\\Windows /s S: /f UEFI".into(),
                 "bootrec /fixmbr".into(),
+                "bootsect /nt60 SYS /mbr".into(),
                 "ssh servidor hostname".into(),
                 "Enter-PSSession servidor".into(),
                 "msiexec /i paquete.msi /quiet".into(),
@@ -5041,6 +5075,7 @@ mod tests {
             ("cmd", "reagentc /disable"),
             ("cmd", "bcdboot C:\\Windows /s S: /f UEFI"),
             ("cmd", "bootrec /fixmbr"),
+            ("cmd", "bootsect /nt60 SYS /mbr"),
             ("git-bash", "ssh servidor hostname"),
             ("powershell", "Enter-PSSession servidor"),
             ("cmd", "msiexec /i paquete.msi /quiet"),
