@@ -2,6 +2,7 @@
 
 ## Sin publicar
 
+- El agente ahora exige revisión para cmdlets PowerShell que crean, limitan, borran o escriben en registros clásicos de eventos; las consultas de eventos siguen siendo de lectura.
 - La revisión del agente ahora cubre cmdlets y aliases de PowerShell que modifican propiedades de elementos, incluidos valores del Registro; las consultas de lectura siguen sin revisión adicional.
 - La regresión del transporte PTY cubre el máximo exacto de 32 KiB y el rechazo del byte adicional.
 - El decodificador PTY acepta solo Base64 estándar con relleno canónico; rechaza espacios, caracteres ajenos al alfabeto y relleno omitido antes de decodificar.

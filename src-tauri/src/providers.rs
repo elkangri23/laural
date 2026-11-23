@@ -1887,6 +1887,11 @@ fn command_is_high_risk(shell: &str, command: &str) -> bool {
         "enable-netfirewallrule",
         "disable-netfirewallrule",
         "set-netfirewallprofile",
+        "clear-eventlog",
+        "limit-eventlog",
+        "new-eventlog",
+        "remove-eventlog",
+        "write-eventlog",
     ];
     let script_launchers = [
         "bash",
@@ -3633,6 +3638,27 @@ mod tests {
             "Get-ItemPropertyValue HKLM:\\Software\\Laural -Name prueba",
             "gp HKLM:\\Software\\Laural",
             "gpv HKLM:\\Software\\Laural -Name prueba",
+        ] {
+            assert!(!command_is_high_risk("powershell", command), "{command}");
+        }
+    }
+
+    #[test]
+    fn exige_revision_para_mutaciones_de_registros_de_eventos_powershell() {
+        for command in [
+            "Clear-EventLog -LogName Security",
+            "Limit-EventLog -LogName Security -OverflowAction OverwriteAsNeeded",
+            "New-EventLog -LogName Laural -Source Laural",
+            "Remove-EventLog -LogName Laural",
+            "Write-EventLog -LogName Application -Source Laural -EventId 1 -EntryType Information -Message inicio",
+        ] {
+            assert!(command_is_high_risk("powershell", command), "{command}");
+        }
+
+        for command in [
+            "Get-EventLog -LogName Security -Newest 5",
+            "Get-EventLog -List",
+            "Get-WinEvent -LogName Security -MaxEvents 5",
         ] {
             assert!(!command_is_high_risk("powershell", command), "{command}");
         }
