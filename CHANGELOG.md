@@ -1,6 +1,7 @@
 # Registro de cambios
 
 ## Sin publicar
+- Microbenchmark en Chromium con el parser real de xterm: 64 eventos de 32 KiB con líneas CRLF (2 MiB) completaron en una mediana de 295,6 ms con 64 escrituras y 268,3 ms con 8 (−9,2 %), cinco muestras por modo. No mide Base64, React, IPC, WebView2 ni la app instalada. La CI del commit `b53ccfb` pasó los tres jobs, incluida cobertura Rust de líneas y ramas.
 - La salida PTY se agrupa antes de escribir en xterm y decodificar el contexto: ventana de 16 ms, flush inmediato a 256 KiB y flush al cerrar/desmontar. En una prueba de componente, 64 eventos de 32 KiB producen 8 escrituras xterm y 8 decodificaciones/contextos, conservando los 2 MiB; también se prueban Unicode dividido, límites, finalización y cancelación.
 - Verificación de la agrupación: UI 167/167, 79,77 % de líneas; `terminalOutput.ts` 98,94 % de líneas / 96,55 % de ramas y `TerminalPane` 92,76 % de líneas. Rust 131/131 pasaron y 2 pruebas manuales quedaron ignoradas; `cargo check`, formato, build y gates pasan. `cargo llvm-cov` ejecuta las pruebas, pero MSVC no produce datos de cobertura.
 - Repetido dos veces el ensayo manual de 16 terminales CMD/ConPTY: 16.000 líneas, 2,10 MB y 41,48–44,55 s (48,9–51,9 KiB/s); creación de shells 0,78–1,13 s, primer prompt 0,15–0,19 s, despacho 0,55–0,61 s y cierre 0,02 s. Un muestreo exploratorio de memoria/CPU no capturó el árbol completo durante suficiente tiempo, así que no se usa como métrica de recursos. El ensayo no incluye UI ni IPC de la app.
