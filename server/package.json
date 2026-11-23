@@ -13,6 +13,7 @@
     "migrate": "node --env-file-if-exists=.env dist/server/src/migrate.js",
     "admin:recovery": "node --env-file-if-exists=.env dist/server/src/admin-account-recovery.js",
     "status:validate": "node scripts/validate-status.mjs",
+    "status:publish": "node scripts/publish-status.mjs",
     "test": "vitest run",
     "test:postgres": "node scripts/assert-test-database.mjs && vitest run tests/postgres-rate-limit.integration.test.ts",
     "test:coverage": "vitest run --coverage"

@@ -22,7 +22,7 @@ Los casos describen el comportamiento esperado del producto. Los estados disting
 | UC-19 | Activar cuenta y escoger snapshot inicial | Usuario | Login Tauri y elección manual inicial disponibles; VPS pendiente |
 | UC-20 | Sincronizar cambios y resolver conflicto | Usuario | Cliente manual/automático inicial; VPS y reconexión real pendientes |
 | UC-21 | Recuperar acceso tras perder factores | Usuario/administrador | Flujo completo local implementado: PIN de buzón, decisión por CLI y reenrolamiento TOTP de un uso; ensayo VPS pendiente |
-| UC-22 | Consultar estado público del servicio | Visitante | Página y contrato iniciales; despliegue y operación pendientes |
+| UC-22 | Consultar estado público del servicio | Visitante | Página y contrato iniciales; publicador SSH validado localmente; instalación VPS pendiente |
 | UC-23 | Consultar rama, cambios y diff Git | Desarrollador | Implementación inicial de solo lectura |
 | UC-24 | Preparar una tarea repetible con una receta del agente | Desarrollador | Implementación inicial; se guarda localmente |
 | UC-25 | Restablecer contraseña mediante PIN de correo | Titular de cuenta | Implementado localmente; despliegue Resend/VPS pendiente |

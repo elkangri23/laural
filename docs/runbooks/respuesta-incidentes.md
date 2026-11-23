@@ -23,7 +23,7 @@ El servicio aún no está desplegado. No habilitar cuentas externas hasta ensaya
 1. Asignar un identificador aleatorio al incidente y registrar hora UTC de detección, responsable, severidad y síntomas observables. No copiar claves, tokens, PIN, códigos MFA, cuerpos de solicitudes ni snapshots en el ticket.
 2. Confirmar si el VPS y el acceso SSH siguen bajo control. Si hay indicios de compromiso del propio host o de la cuenta del proveedor, tratar el host y sus secretos como comprometidos; no declarar resuelto el incidente tras reiniciar procesos.
 3. Reducir el impacto: pausar el componente o las escrituras afectadas mediante el mecanismo operativo del VPS. Si el alcance aún no se conoce, priorizar poner la API en mantenimiento antes que arriesgar más cambios de snapshots. No usar una ruta administrativa web; el estado público solo se modifica mediante SSH y archivos validados.
-4. Publicar un aviso general en `/status` si Caddy y el VPS están disponibles. Usar únicamente estado, título, resumen y fecha UTC permitidos; no incluir datos de cuentas, direcciones, IP, rutas internas, causa explotable ni detalles de investigación. El documento estático no demuestra que API/PostgreSQL estén operativos.
+4. Publicar un aviso general en `/status` si Caddy y el VPS están disponibles. Preparar un JSON con los campos allowlist y ejecutar desde el release: `cd /opt/laural/current/server && npm run status:publish -- /ruta/segura/status.json`. El comando valida y reemplaza atómicamente el archivo público; si falla, conserva el publicado. No incluir datos de cuentas, direcciones, IP, rutas internas, causa explotable ni detalles de investigación. El documento estático no demuestra que API/PostgreSQL estén operativos.
 5. Mantener la configuración local de Laural como fuente recuperable por cada usuario y explicar que la sincronización puede estar pausada. No pedir que envíen archivos de configuración, claves API, chats, historial de terminal ni datos de proyectos.
 
 ## Procedimientos por tipo
@@ -40,7 +40,7 @@ El servicio aún no está desplegado. No habilitar cuentas externas hasta ensaya
 1. Identificar qué secreto se expuso sin pegar su valor en el ticket. Invalidarlo en el proveedor cuando aplique y generar un reemplazo mediante el canal seguro establecido para el VPS.
 2. Actualizar la configuración del servicio y reiniciar/revalidar solo mediante el gestor real documentado para ese despliegue. Revocar sesiones si existe posibilidad de exposición de tokens o acceso a la base de datos.
 3. Probar health, autenticación afectada, envío de correo si corresponde y una operación de sync controlada antes de retirar el aviso de mantenimiento.
-4. **No sustituir `TOTP_ENCRYPTION_KEY` de forma aislada:** las semillas actuales están cifradas con esa clave. La rotación requiere una migración probada que descifre y vuelva a cifrar los factores. Si la clave se expuso y no existe esa migración, pausar el flujo de cuenta/MFA afectado y mantener la autenticación deshabilitada hasta definir una salida segura; la recuperación administrativa aún no está implementada. Nunca improvisar una sustitución en producción.
+4. **No sustituir `TOTP_ENCRYPTION_KEY` de forma aislada:** las semillas actuales están cifradas con esa clave. La rotación requiere una migración probada que descifre y vuelva a cifrar los factores. Si la clave se expuso y no existe esa migración, pausar el flujo de cuenta/MFA afectado y mantener la autenticación deshabilitada hasta definir una salida segura. La revisión/reenrolamiento administrativo existe localmente, pero requiere ensayo con VPS y Resend antes de producción. Nunca improvisar una sustitución en producción.
 5. Rotar claves del updater/firma solo si la clave de publicación está realmente afectada; la rotación cambia la confianza de las actualizaciones y debe seguir el procedimiento de release.
 
 ### Caída de API, PostgreSQL o Resend
@@ -60,7 +60,7 @@ El servicio aún no está desplegado. No habilitar cuentas externas hasta ensaya
 
 1. Mantener el aviso de incidente hasta verificar salud de API y base, login/MFA cuando estén habilitados, correo si aplica y lectura/escritura controlada de un snapshot de prueba.
 2. Comparar los resultados de la prueba con los registros previos y revisar que no haya escrituras duplicadas o cambios de cuenta cruzados.
-3. Retirar el aviso público mediante actualización atómica y validada del documento de estado. No publicar cronología técnica sensible.
+3. Retirar el aviso público preparando el nuevo documento y publicándolo con `npm run status:publish`; el archivo queda validado y se reemplaza atómicamente. No publicar cronología técnica sensible.
 4. Registrar causa categorizada, impacto estimado, duración, secretos rotados, sesiones revocadas, validaciones realizadas y tareas preventivas. No guardar secretos, PIN, códigos, tokens, IP ni contenido de snapshots en el informe.
 5. Revisar si el modelo de amenazas, el backlog, la guía de recuperación o este runbook necesitan cambios. El cierre técnico no equivale a certificar que los datos se recuperaron.
 

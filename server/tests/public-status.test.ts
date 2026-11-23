@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readPublicStatus, unavailableStatus } from "../src/public-status.js";
+import { publishPublicStatus, readPublicStatus, unavailableStatus } from "../src/public-status.js";
 
 const directories: string[] = [];
 const components = [
@@ -55,5 +55,41 @@ describe("documento de estado público", () => {
     expect(fallback.notices).toEqual([]);
     expect(fallback.components.every((component) => component.state === "unknown")).toBe(true);
     expect(JSON.stringify(fallback)).not.toContain("Error");
+  });
+
+  it("publica solo documentos válidos y reemplaza el destino con una escritura completa", async () => {
+    const data = { state: "operational", summary: "Servicio disponible.", updatedAt: "2026-11-21T10:15:00Z", components, notices: [] };
+    const sourcePath = await statusFile(JSON.stringify(data));
+    const directory = await mkdtemp(join(tmpdir(), "laural-status-publish-"));
+    directories.push(directory);
+    const targetPath = join(directory, "status.json");
+    await writeFile(targetPath, "documento anterior", "utf8");
+
+    await publishPublicStatus(sourcePath, targetPath);
+
+    expect(await readPublicStatus(targetPath)).toEqual(data);
+  });
+
+  it("conserva el estado publicado cuando la fuente es inválida y restringe el nombre de destino", async () => {
+    const sourcePath = await statusFile("{\"state\":\"debug\"}");
+    const directory = await mkdtemp(join(tmpdir(), "laural-status-publish-"));
+    directories.push(directory);
+    const targetPath = join(directory, "status.json");
+    await writeFile(targetPath, "estado válido anterior", "utf8");
+
+    await expect(publishPublicStatus(sourcePath, targetPath)).rejects.toThrow();
+    await expect(publishPublicStatus(sourcePath, join(directory, "otro.json"))).rejects.toThrow("status.json");
+    expect(await readFile(targetPath, "utf8")).toBe("estado válido anterior");
+  });
+
+  it("limpia el temporal si no puede reemplazar el destino", async () => {
+    const data = { state: "operational", summary: "Servicio disponible.", updatedAt: "2026-11-21T10:15:00Z", components, notices: [] };
+    const sourcePath = await statusFile(JSON.stringify(data));
+    const directory = await mkdtemp(join(tmpdir(), "laural-status-publish-"));
+    directories.push(directory);
+    await mkdir(join(directory, "status.json"));
+
+    await expect(publishPublicStatus(sourcePath, join(directory, "status.json"))).rejects.toThrow();
+    expect(await readdir(directory)).toEqual(["status.json"]);
   });
 });

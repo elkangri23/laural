@@ -1,6 +1,8 @@
 # Registro de cambios
 
 ## Sin publicar
+- Añadido `npm run status:publish -- <archivo-status.json>` para publicar el estado público desde Linux/SSH. Valida el esquema cerrado antes de escribir, sincroniza un temporal con permisos 0644 y sustituye el archivo de forma atómica; limpia temporales ante fallos y conserva el documento anterior. Actualizados ADR-0032, runbook, requisitos, diseño, roadmap y backlog. No añade sondeos en vivo ni una ruta web de escritura.
+- Verificación local: servicio 180/180 pruebas con PostgreSQL 16, cobertura 90,26 % de líneas / 80,01 % de ramas; `public-status.ts` alcanza 100 % de líneas. UI 162/162 con 79,37 % de líneas (repetición con timeout ampliado tras un timeout aislado al ejecutar en paralelo); builds de UI y servicio correctos.
 - Añadido el reenrolamiento TOTP tras aprobación administrativa: enlace temporal de un uso, ticket cifrado en outbox, CSRF y cookie segura. Solo al confirmar el TOTP nuevo sustituye factores, elimina passkeys anteriores, revoca sesiones/códigos pendientes y encola aviso. No crea sesión y entrega códigos nuevos una sola vez. Migración 014, ADR-0050, UC-21, roadmap, backlog y runbook actualizados.
 - Verificación actual: servicio 177/177 pruebas con PostgreSQL 16; cobertura 90,17 % de líneas y 80 % de ramas; build de servicio correcto.
 - La CLI administrativa ahora informa que una aprobación emite un enlace temporal y que los factores solo cambian tras confirmar el TOTP nuevo.
