@@ -2,6 +2,8 @@
 
 ## Sin publicar
 
+- Los cambios de preferencias de Microsoft Defender mediante `Add-MpPreference`, `Set-MpPreference` o `Remove-MpPreference` ahora requieren aprobación; las consultas `Get-MpPreference` siguen siendo de lectura.
+- Verificación: Rust 131 pasadas y 1 ignorada; UI 161/161 (79,18 % de líneas), ocho gates y formato correctos. LLVM ejecuta Rust, pero MSVC no genera el informe local.
 - El agente exige aprobación manual para `runas`, `gsudo`, `doas`, `su` y `pkexec`, que pueden cambiar de usuario o ejecutar procesos con privilegios elevados; las reglas permitidas no eluden esta revisión.
 - Verificación local: Rust 131 pasadas y 1 ignorada; UI 161/161 (79,18 % de líneas), 8 gates de cobertura y formato correctos. `cargo llvm-cov` ejecuta Rust, pero MSVC no genera datos para el informe local.
 - En Windows, las ediciones del agente ahora rechazan el reemplazo cuando otro editor mantiene el archivo abierto para escritura, conservando el contenido y sin crear una copia inconsistente.

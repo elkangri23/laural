@@ -1901,6 +1901,9 @@ fn command_is_high_risk(shell: &str, command: &str) -> bool {
         "new-service",
         "remove-service",
         "set-service",
+        "add-mppreference",
+        "set-mppreference",
+        "remove-mppreference",
         "start-service",
         "sasv",
         "stop-service",
@@ -3740,6 +3743,7 @@ mod tests {
         for (shell, command) in [
             ("powershell", "Write-Output Remove-Item"),
             ("powershell", "Get-Command Invoke-Expression"),
+            ("powershell", "Get-MpPreference"),
             ("git-bash", "echo copy destination"),
             ("git-bash", "git status --short"),
             ("git-bash", "git log --oneline"),
@@ -4425,6 +4429,9 @@ mod tests {
                 "doas whoami".into(),
                 "su -c 'id'".into(),
                 "pkexec whoami".into(),
+                "Add-MpPreference -ExclusionPath C:\\Temp".into(),
+                "Set-MpPreference -DisableRealtimeMonitoring $true".into(),
+                "Remove-MpPreference -ExclusionProcess ejemplo.exe".into(),
             ],
             backup_retention: None,
         };
@@ -4466,6 +4473,15 @@ mod tests {
             ("wsl", "doas whoami"),
             ("git-bash", "su -c 'id'"),
             ("wsl", "pkexec whoami"),
+            ("powershell", "Add-MpPreference -ExclusionPath C:\\Temp"),
+            (
+                "powershell",
+                "Set-MpPreference -DisableRealtimeMonitoring $true",
+            ),
+            (
+                "powershell",
+                "Remove-MpPreference -ExclusionProcess ejemplo.exe",
+            ),
         ] {
             let result = authorize_agent_command_with_settings(shell, command, &settings);
             assert!(
