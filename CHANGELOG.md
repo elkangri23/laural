@@ -2,7 +2,7 @@
 
 ## Sin publicar
 
-- El agente ahora pide aprobación manual antes de ejecutar `runas` o `gsudo`, incluso con modo automático o reglas permitidas.
+- El agente exige aprobación manual para `runas`, `gsudo`, `doas`, `su` y `pkexec`, que pueden cambiar de usuario o ejecutar procesos con privilegios elevados; las reglas permitidas no eluden esta revisión.
 - Verificación local: Rust 131 pasadas y 1 ignorada; UI 161/161 (79,18 % de líneas), 8 gates de cobertura y formato correctos. `cargo llvm-cov` ejecuta Rust, pero MSVC no genera datos para el informe local.
 - En Windows, las ediciones del agente ahora rechazan el reemplazo cuando otro editor mantiene el archivo abierto para escritura, conservando el contenido y sin crear una copia inconsistente.
 - Verificación local: Rust 131 pasadas y 1 ignorada; UI 161/161 (79,18 % de líneas), 8 gates de cobertura y formato correctos. `cargo llvm-cov` ejecuta Rust pero no genera informe instrumentado en Windows/MSVC.

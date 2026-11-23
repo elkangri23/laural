@@ -1787,7 +1787,10 @@ fn command_is_high_risk(shell: &str, command: &str) -> bool {
         "bcdedit",
         "curl",
         "wget",
+        "doas",
+        "pkexec",
         "sudo",
+        "su",
         "takeown",
         "cipher",
         "alias",
@@ -3838,6 +3841,9 @@ mod tests {
             ("powershell", "runas /user:Administrador powershell.exe"),
             ("git-bash", "gsudo powershell.exe"),
             ("wsl", "gsudo whoami"),
+            ("wsl", "doas whoami"),
+            ("git-bash", "su -c 'id'"),
+            ("wsl", "pkexec whoami"),
             ("cmd", "psftp servidor"),
             ("git-bash", "ssh-add ~/.ssh/id_ed25519"),
             ("powershell", "Enter-PSSession servidor"),
@@ -4416,6 +4422,9 @@ mod tests {
                 "msiexec /i paquete.msi /quiet".into(),
                 "runas /user:Administrador cmd.exe".into(),
                 "gsudo powershell.exe".into(),
+                "doas whoami".into(),
+                "su -c 'id'".into(),
+                "pkexec whoami".into(),
             ],
             backup_retention: None,
         };
@@ -4454,6 +4463,9 @@ mod tests {
             ("cmd", "msiexec /i paquete.msi /quiet"),
             ("cmd", "runas /user:Administrador cmd.exe"),
             ("powershell", "gsudo powershell.exe"),
+            ("wsl", "doas whoami"),
+            ("git-bash", "su -c 'id'"),
+            ("wsl", "pkexec whoami"),
         ] {
             let result = authorize_agent_command_with_settings(shell, command, &settings);
             assert!(
