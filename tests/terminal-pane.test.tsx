@@ -13,9 +13,9 @@ vi.mock("@tauri-apps/api/event", () => ({ listen }));
 vi.mock("@xterm/addon-fit", () => ({ FitAddon: class { fit() {} } }));
 vi.mock("@xterm/xterm", () => ({
   Terminal: class {
-    options = {}; parser = { registerOscHandler };
+    options: { cursorBlink?: boolean; theme?: unknown } = {}; parser = { registerOscHandler };
     rows = 28; cols = 100;
-    constructor(options: unknown) { terminalOptions(options); }
+    constructor(options: { cursorBlink?: boolean; theme?: unknown }) { this.options = options; terminalOptions(options); }
     write = write; writeln = write;
     loadAddon() {} open() {} focus() {} dispose() {}
     clear = clear; getSelection = getSelection;
@@ -100,6 +100,18 @@ test("ocultar la pestaña conserva el proceso y su salida; salir permite reinici
   expect(listen).toHaveBeenCalledWith("terminal-output-uno", expect.any(Function));
   expect(listen).toHaveBeenCalledWith("terminal-exit-uno", expect.any(Function));
   expect(invoke).toHaveBeenCalledWith("close_terminal", { terminalId: "uno" });
+});
+
+test("desactiva el parpadeo al ocultar la terminal y lo restaura al activarla", async () => {
+  await act(async () => root!.render(pane()));
+  const options = terminalOptions.mock.calls[0][0] as { cursorBlink: boolean };
+  expect(options.cursorBlink).toBe(true);
+
+  await act(async () => root!.render(pane(false)));
+  expect(options.cursorBlink).toBe(false);
+
+  await act(async () => root!.render(pane(true)));
+  expect(options.cursorBlink).toBe(true);
 });
 
 test("reconstruye UTF-8 dividido entre eventos PTY codificados en Base64", async () => {

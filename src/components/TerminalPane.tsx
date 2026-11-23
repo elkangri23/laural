@@ -29,7 +29,7 @@ function TerminalPane({ terminalId, shell, cwd, visible, active, copyRequest, cl
     const terminal = new Terminal({
       allowProposedApi: false,
       convertEol: false,
-      cursorBlink: true,
+      cursorBlink: visible && active,
       cursorStyle: "bar",
       fontFamily: "'Cascadia Code', 'JetBrains Mono', Consolas, monospace",
       fontSize: 13,
@@ -167,6 +167,10 @@ function TerminalPane({ terminalId, shell, cwd, visible, active, copyRequest, cl
   useEffect(() => {
     if (terminalRef.current) terminalRef.current.options.theme = terminalTheme(theme, appearance);
   }, [appearance, theme]);
+
+  useEffect(() => {
+    if (terminalRef.current) terminalRef.current.options.cursorBlink = visible && active;
+  }, [active, visible]);
 
   useEffect(() => {
     if (!visible) return;
