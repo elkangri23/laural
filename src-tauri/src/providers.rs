@@ -2183,6 +2183,9 @@ fn external_tool_is_high_risk(command: &str, executable: &str) -> bool {
     if executable == "powercfg" {
         return powercfg_command_is_high_risk(command);
     }
+    if executable == "dism" {
+        return dism_command_is_high_risk(command);
+    }
     if executable == "manage-bde" {
         return manage_bde_command_is_high_risk(command);
     }
@@ -2508,6 +2511,55 @@ fn powercfg_command_is_high_risk(command: &str) -> bool {
         | Some("/a") => false,
         _ => true,
     }
+}
+
+fn dism_command_is_high_risk(command: &str) -> bool {
+    let arguments: Vec<_> = command.split_whitespace().skip(1).collect();
+    if arguments.is_empty() {
+        return false;
+    }
+
+    let mut has_read_operation = false;
+    let mut has_cleanup_container = false;
+    let mut has_read_cleanup_operation = false;
+    for argument in arguments {
+        if argument.starts_with("/get-") {
+            has_read_operation = true;
+            continue;
+        }
+
+        match argument {
+            "/?" | "-?" | "/get-help" => has_read_operation = true,
+            "/cleanup-image" => has_cleanup_container = true,
+            "/checkhealth" | "/scanhealth" | "/analyzecomponentstore" => {
+                has_read_operation = true;
+                has_read_cleanup_operation = true;
+            }
+            "/online" | "/english" | "/all" | "/limitaccess" | "/norestart" | "/quiet"
+            | "/table" => continue,
+            _ if [
+                "/image:",
+                "/format:",
+                "/featurename:",
+                "/packagename:",
+                "/packagepath:",
+                "/source:",
+                "/name:",
+                "/loglevel:",
+                "/mountdir:",
+                "/index:",
+            ]
+            .iter()
+            .any(|prefix| argument.starts_with(prefix)) =>
+            {
+                continue;
+            }
+            _ if argument.starts_with('/') || argument.starts_with('-') => return true,
+            _ => {}
+        }
+    }
+
+    !has_read_operation || (has_cleanup_container && !has_read_cleanup_operation)
 }
 
 fn is_unambiguous_net_user_name(value: &str) -> bool {
@@ -4298,6 +4350,40 @@ mod tests {
     }
 
     #[test]
+    fn exige_revision_para_servicio_de_imagenes_con_dism() {
+        for command in [
+            "dism /Online /Enable-Feature /FeatureName:TelnetClient",
+            "dism /Online /Disable-Feature /FeatureName:SMB1Protocol",
+            "dism /Online /Add-Package /PackagePath:actualizacion.cab",
+            "dism /Online /Remove-Package /PackageName:paquete",
+            "dism /Online /Add-Capability /CapabilityName:RSAT",
+            "dism /Online /Remove-Capability /CapabilityName:RSAT",
+            "dism /Online /Cleanup-Image /RestoreHealth",
+            "dism /Online /Get-Features /LogPath:C:\\Temp\\dism.log",
+            "dism /Online /Cleanup-Image /StartComponentCleanup",
+            "dism /Mount-Image /ImageFile:imagen.wim /Index:1 /MountDir:montaje",
+            "dism /Online",
+            "dism /opcion-desconocida",
+        ] {
+            assert!(command_is_high_risk("cmd", command), "{command}");
+        }
+
+        for command in [
+            "dism",
+            "dism /?",
+            "dism /Get-Help",
+            "dism /Online /Get-Features",
+            "dism /Image:C:\\offline /Get-Packages /Format:Table",
+            "dism /Online /Get-FeatureInfo /FeatureName:TelnetClient",
+            "dism /Online /Cleanup-Image /CheckHealth",
+            "dism /Online /Cleanup-Image /ScanHealth",
+            "dism /Online /Cleanup-Image /AnalyzeComponentStore",
+        ] {
+            assert!(!command_is_high_risk("cmd", command), "{command}");
+        }
+    }
+
+    #[test]
     fn exige_revision_para_modificar_credenciales_de_windows() {
         for (command, executable) in [
             (
@@ -4702,6 +4788,7 @@ mod tests {
                 "netdom join equipo /domain:ejemplo".into(),
                 "netdom query /domain:ejemplo /reset".into(),
                 "powercfg /hibernate off".into(),
+                "dism /Online /Enable-Feature /FeatureName:TelnetClient".into(),
                 "ssh servidor hostname".into(),
                 "Enter-PSSession servidor".into(),
                 "msiexec /i paquete.msi /quiet".into(),
@@ -4756,6 +4843,10 @@ mod tests {
             ("cmd", "netdom join equipo /domain:ejemplo"),
             ("cmd", "netdom query /domain:ejemplo /reset"),
             ("cmd", "powercfg /hibernate off"),
+            (
+                "cmd",
+                "dism /Online /Enable-Feature /FeatureName:TelnetClient",
+            ),
             ("git-bash", "ssh servidor hostname"),
             ("powershell", "Enter-PSSession servidor"),
             ("cmd", "msiexec /i paquete.msi /quiet"),
