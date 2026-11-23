@@ -26,12 +26,12 @@ Laural es una implementación independiente con marca e interfaz propias. No inc
 
 ## Descargas
 
-La pre-release `0.1.0-alpha.15` para Windows x64 está disponible en [Releases](https://github.com/elkangri23/laural/releases). En el checkout del desarrollador, los paquetes producidos por Tauri están en `src-tauri/target/release/bundle/`:
+La pre-release `0.1.0-alpha.16` para Windows x64 está disponible en [Releases](https://github.com/elkangri23/laural/releases/tag/v0.1.0-alpha.16). El instalador NSIS está firmado para el actualizador; el manifiesto también está firmado y el asset `SHA256SUMS.txt` contiene la suma del instalador. En el checkout del desarrollador, los paquetes producidos por Tauri están en `src-tauri/target/release/bundle/`:
 
-- `nsis/Laural_0.1.0-alpha.15_x64-setup.exe`
-- `msi/Laural_0.1.0-alpha.15_x64_es-ES.msi`
+- `nsis/Laural_0.1.0-alpha.16_x64-setup.exe`
+- `msi/Laural_0.1.0-alpha.16_x64_es-ES.msi`
 
-Los instaladores requieren validación manual en una instalación limpia. Desde alpha.14, los paquetes NSIS incorporan actualizaciones firmadas; las versiones anteriores requieren instalar alpha.14 manualmente. Alpha.15 incluye el instalador NSIS firmado, `latest.json` y `SHA256SUMS.txt`. No se considera una versión estable.
+SHA-256 del instalador NSIS: `A49D9017FB060B75DB5726EE4CA4DBE4093C49975B1BA80A57A531E4520A709B`. Desde alpha.14, los paquetes NSIS incorporan actualizaciones firmadas; las versiones anteriores requieren instalar alpha.14 manualmente. Alpha.16 incluye instalador firmado, `latest.json` firmado y `SHA256SUMS.txt`. La actualización real desde alpha.15 y la instalación limpia siguen pendientes de validación manual. No se considera una versión estable.
 
 ## Requisitos para desarrollar
 

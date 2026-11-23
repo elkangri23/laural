@@ -2,6 +2,7 @@
 
 ## 0.1.0-alpha.16
 
+- Publicada el 23-11-2026 como pre-release NSIS x64 con firma del updater, manifiesto `latest.json` firmado y suma SHA-256 del instalador. SHA-256: `A49D9017FB060B75DB5726EE4CA4DBE4093C49975B1BA80A57A531E4520A709B`.
 - Actualizado `cookie` de 0.18.2 a 0.18.3 para corregir el aviso RUSTSEC-2026-0594 publicado el 23-11-2026; la auditoría Rust vuelve a pasar salvo los avisos de crates sin mantenimiento ya documentados.
 - Los mensajes de error de proveedores ocultan la clave API si el servidor la devuelve en la respuesta, tanto al consultar modelos como en chat, streaming y planificación.
 - La tarjeta lateral deja de mostrar «Conecta tu modelo» cuando ya hay un proveedor activo; muestra el perfil y modelo seleccionados.
