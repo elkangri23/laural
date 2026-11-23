@@ -2256,12 +2256,7 @@ fn external_tool_is_high_risk(command: &str, executable: &str) -> bool {
             subcommand,
             "create" | "config" | "delete" | "start" | "stop" | "failure"
         ),
-        "net" => match subcommand {
-            "start" | "stop" => true,
-            "user" => net_user_command_is_high_risk(command),
-            "localgroup" => arguments.any(|argument| matches!(argument, "/add" | "/delete")),
-            _ => false,
-        },
+        "net" => net_command_is_high_risk(command),
         "wevtutil" => matches!(subcommand, "cl" | "clear-log" | "dl" | "delete-log" | "sl"),
         "winget" => matches!(
             subcommand,
@@ -2408,6 +2403,46 @@ fn net_user_command_is_high_risk(command: &str) -> bool {
         [username, "/domain"] | [username, "/?"] if is_unambiguous_net_user_name(username) => false,
         [username, "/domain", "/?"] if is_unambiguous_net_user_name(username) => false,
         _ => true,
+    }
+}
+
+fn net_command_is_high_risk(command: &str) -> bool {
+    let mut tokens = command.split_whitespace();
+    tokens.next();
+    let Some(subcommand) = tokens.next() else {
+        return false;
+    };
+    let arguments: Vec<_> = tokens.collect();
+    match subcommand {
+        "start" | "stop" | "pause" | "continue" | "send" => true,
+        "user" => net_user_command_is_high_risk(command),
+        "accounts" => arguments
+            .iter()
+            .any(|argument| !matches!(*argument, "/?" | "/domain")),
+        "group" | "localgroup" | "computer" | "name" => arguments.iter().any(|argument| {
+            matches!(
+                *argument,
+                "/add" | "/delete" | "/del" | "add" | "delete" | "del"
+            )
+        }),
+        "share" => match arguments.as_slice() {
+            [] | ["/?"] => false,
+            [share] if !share.starts_with('/') && !share.contains('=') => false,
+            _ => true,
+        },
+        "session" => match arguments.as_slice() {
+            [] | ["/?"] => false,
+            [computer] if !computer.starts_with('/') => false,
+            _ => true,
+        },
+        "file" => arguments.iter().any(|argument| argument == &"/close"),
+        "use" => match arguments.as_slice() {
+            [] | ["/?"] => false,
+            [target] if !target.starts_with('/') => false,
+            _ => true,
+        },
+        "time" => arguments.iter().any(|argument| argument == &"/set"),
+        _ => false,
     }
 }
 
@@ -4030,6 +4065,17 @@ mod tests {
             ("cmd", "net user --help"),
             ("cmd", "net user cuenta * /domain"),
             ("cmd", "net localgroup Administrators cuenta /delete"),
+            ("cmd", "net accounts /minpwlen:0"),
+            ("powershell", "net share documentos=C:\\Datos"),
+            ("wsl", "net session \\\\equipo /delete"),
+            ("git-bash", "net use Z: \\\\equipo\\datos"),
+            ("cmd", "net file 12 /close"),
+            ("cmd", "net group Desarrollo laura /add"),
+            ("cmd", "net computer \\\\equipo /add"),
+            ("cmd", "net name equipo /delete"),
+            ("cmd", "net time \\\\servidor /set"),
+            ("powershell", "net pause Servicio"),
+            ("cmd", "net send laura mantenimiento programado"),
             ("powershell", "wevtutil cl Security"),
         ] {
             assert!(command_is_high_risk(shell, command), "{shell}: {command}");
@@ -4044,6 +4090,19 @@ mod tests {
             ("net user cuenta", "net"),
             ("net user cuenta /domain", "net"),
             ("net user cuenta /?", "net"),
+            ("net accounts /domain", "net"),
+            ("net share documentos", "net"),
+            ("net session \\\\equipo", "net"),
+            ("net use Z:", "net"),
+            ("net use \\\\equipo\\datos", "net"),
+            ("net time /querysntp", "net"),
+            ("net share", "net"),
+            ("net session", "net"),
+            ("net use", "net"),
+            ("net accounts", "net"),
+            ("net file 12", "net"),
+            ("net group Desarrollo", "net"),
+            ("net help accounts", "net"),
             ("wevtutil gl Security", "wevtutil"),
         ] {
             assert!(
@@ -4449,6 +4508,10 @@ mod tests {
                 "cmdkey /add:servidor /user:laura /pass:valor-prueba".into(),
                 "vaultcmd /deletecreds /vault:WindowsVault".into(),
                 "net user cuenta nueva-clave".into(),
+                "net accounts /minpwlen:0".into(),
+                "net share documentos=C:\\Datos".into(),
+                "net session \\\\equipo /delete".into(),
+                "net use Z: \\\\equipo\\datos".into(),
                 "ssh servidor hostname".into(),
                 "Enter-PSSession servidor".into(),
                 "msiexec /i paquete.msi /quiet".into(),
@@ -4494,6 +4557,10 @@ mod tests {
             ("cmd", "cmdkey /add:servidor /user:laura /pass:valor-prueba"),
             ("powershell", "vaultcmd /deletecreds /vault:WindowsVault"),
             ("cmd", "net user cuenta nueva-clave"),
+            ("cmd", "net accounts /minpwlen:0"),
+            ("cmd", "net share documentos=C:\\Datos"),
+            ("cmd", "net session \\\\equipo /delete"),
+            ("cmd", "net use Z: \\\\equipo\\datos"),
             ("git-bash", "ssh servidor hostname"),
             ("powershell", "Enter-PSSession servidor"),
             ("cmd", "msiexec /i paquete.msi /quiet"),
