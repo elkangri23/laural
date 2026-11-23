@@ -2177,6 +2177,9 @@ fn external_tool_is_high_risk(command: &str, executable: &str) -> bool {
     if executable == "secedit" {
         return secedit_command_is_high_risk(command);
     }
+    if executable == "netdom" {
+        return netdom_command_is_high_risk(command);
+    }
     if executable == "manage-bde" {
         return manage_bde_command_is_high_risk(command);
     }
@@ -2466,6 +2469,17 @@ fn secedit_command_is_high_risk(command: &str) -> bool {
     arguments.next();
     match arguments.next() {
         None | Some("/?") | Some("/help") | Some("/validate") => false,
+        _ => true,
+    }
+}
+
+fn netdom_command_is_high_risk(command: &str) -> bool {
+    let mut arguments = command.split_whitespace();
+    arguments.next();
+    match arguments.next() {
+        None | Some("/?") | Some("-?") | Some("/help") | Some("help") => false,
+        Some("query") => arguments.any(|argument| argument.starts_with("/reset")),
+        Some("verify") => false,
         _ => true,
     }
 }
@@ -4184,6 +4198,37 @@ mod tests {
     }
 
     #[test]
+    fn exige_revision_para_cambios_de_dominio_y_reset_de_netdom() {
+        for command in [
+            "netdom add equipo /domain:ejemplo",
+            "netdom join equipo /domain:ejemplo",
+            "netdom move equipo /domain:ejemplo",
+            "netdom remove equipo /domain:ejemplo",
+            "netdom renamecomputer equipo /newname:nuevo",
+            "netdom reset equipo /domain:ejemplo",
+            "netdom resetpwd /server:controlador",
+            "netdom trust dominio-a /domain:dominio-b /add",
+            "netdom computername equipo /add:alias",
+            "netdom consulta-desconocida",
+            "netdom query /domain:ejemplo /reset",
+        ] {
+            assert!(command_is_high_risk("cmd", command), "{command}");
+        }
+
+        for command in [
+            "netdom",
+            "netdom /?",
+            "netdom help join",
+            "netdom query",
+            "netdom query /domain:ejemplo",
+            "netdom query /domain:ejemplo /verify",
+            "netdom verify equipo /domain:ejemplo",
+        ] {
+            assert!(!command_is_high_risk("cmd", command), "{command}");
+        }
+    }
+
+    #[test]
     fn exige_revision_para_modificar_credenciales_de_windows() {
         for (command, executable) in [
             (
@@ -4585,6 +4630,8 @@ mod tests {
                 "net use Z: \\\\equipo\\datos".into(),
                 "auditpol /set /subcategory:* /success:enable".into(),
                 "secedit /configure /db politica.sdb".into(),
+                "netdom join equipo /domain:ejemplo".into(),
+                "netdom query /domain:ejemplo /reset".into(),
                 "ssh servidor hostname".into(),
                 "Enter-PSSession servidor".into(),
                 "msiexec /i paquete.msi /quiet".into(),
@@ -4636,6 +4683,8 @@ mod tests {
             ("cmd", "net use Z: \\\\equipo\\datos"),
             ("cmd", "auditpol /set /subcategory:* /success:enable"),
             ("cmd", "secedit /configure /db politica.sdb"),
+            ("cmd", "netdom join equipo /domain:ejemplo"),
+            ("cmd", "netdom query /domain:ejemplo /reset"),
             ("git-bash", "ssh servidor hostname"),
             ("powershell", "Enter-PSSession servidor"),
             ("cmd", "msiexec /i paquete.msi /quiet"),
