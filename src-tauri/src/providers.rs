@@ -2171,6 +2171,9 @@ fn external_tool_is_high_risk(command: &str, executable: &str) -> bool {
     if matches!(executable, "vssadmin" | "wbadmin" | "diskshadow") {
         return windows_backup_tool_is_high_risk(command, executable);
     }
+    if executable == "auditpol" {
+        return auditpol_command_is_high_risk(command);
+    }
     if executable == "manage-bde" {
         return manage_bde_command_is_high_risk(command);
     }
@@ -2444,6 +2447,15 @@ fn net_command_is_high_risk(command: &str) -> bool {
         "time" => arguments.iter().any(|argument| argument == &"/set"),
         _ => false,
     }
+}
+
+fn auditpol_command_is_high_risk(command: &str) -> bool {
+    let mut arguments = command.split_whitespace();
+    arguments.next();
+    let Some(operation) = arguments.next() else {
+        return false;
+    };
+    !matches!(operation, "/?" | "/get" | "/list")
 }
 
 fn is_unambiguous_net_user_name(value: &str) -> bool {
@@ -4113,6 +4125,30 @@ mod tests {
     }
 
     #[test]
+    fn exige_revision_para_modificar_o_exportar_la_politica_de_auditoria() {
+        for command in [
+            "auditpol /set /subcategory:* /success:enable",
+            "auditpol /clear /y",
+            "auditpol /restore /file:politica.csv",
+            "auditpol /remove /user:laura",
+            "auditpol /resourceSACL /clear /type:File",
+            "auditpol /backup /file:politica.csv",
+            "auditpol /operacion-desconocida",
+        ] {
+            assert!(command_is_high_risk("cmd", command), "{command}");
+        }
+
+        for command in [
+            "auditpol",
+            "auditpol /?",
+            "auditpol /get /category:*",
+            "auditpol /list /category",
+        ] {
+            assert!(!command_is_high_risk("cmd", command), "{command}");
+        }
+    }
+
+    #[test]
     fn exige_revision_para_modificar_credenciales_de_windows() {
         for (command, executable) in [
             (
@@ -4512,6 +4548,7 @@ mod tests {
                 "net share documentos=C:\\Datos".into(),
                 "net session \\\\equipo /delete".into(),
                 "net use Z: \\\\equipo\\datos".into(),
+                "auditpol /set /subcategory:* /success:enable".into(),
                 "ssh servidor hostname".into(),
                 "Enter-PSSession servidor".into(),
                 "msiexec /i paquete.msi /quiet".into(),
@@ -4561,6 +4598,7 @@ mod tests {
             ("cmd", "net share documentos=C:\\Datos"),
             ("cmd", "net session \\\\equipo /delete"),
             ("cmd", "net use Z: \\\\equipo\\datos"),
+            ("cmd", "auditpol /set /subcategory:* /success:enable"),
             ("git-bash", "ssh servidor hostname"),
             ("powershell", "Enter-PSSession servidor"),
             ("cmd", "msiexec /i paquete.msi /quiet"),
