@@ -1,6 +1,6 @@
 # Casos de uso: portabilidad y sincronización
 
-- **Estado:** UC-17/18 tienen una implementación inicial; login Tauri, revocación de sesiones y cliente manual/automático están implementados. Pendientes pruebas de reconexión, sondeo real y VPS. TOTP, challenge, códigos y cola transaccional de avisos están integrados localmente; UC-21 conserva pendiente la recuperación administrativa tras perder todos los factores. UC-22 tiene sitio y contrato local estático, con operación VPS pendiente. UC-25 implementa restablecimiento de contraseña con PIN, aún sin despliegue VPS/Resend.
+- **Estado:** UC-17/18 están implementados localmente; login Tauri, revocación de sesiones y cliente manual/automático también. Pendientes pruebas de reconexión, Google OAuth, historial cloud recuperable y VPS. TOTP, challenge, códigos y cola transaccional de avisos están integrados localmente; UC-21 conserva pendiente la recuperación administrativa tras perder todos los factores. UC-22 tiene sitio/contrato local estático, pero no comprobaciones de salud por componente ni operación VPS. UC-25 implementa restablecimiento de contraseña con PIN, aún sin despliegue VPS/Resend.
 - **Especificación:** [plan de sincronización](../plans/sincronizacion-preferencias.md).
 - **Diseño técnico:** [diseño formal](../designs/sincronizacion-preferencias-y-portabilidad.md).
 
@@ -42,7 +42,7 @@
 
 **Pendiente:** ensayar desconexión/reconexión, suspensión/reanudación, conflicto concurrente y despliegue real del VPS en Windows.
 
-**Aceptación:** escritura condicional e idempotente; no hay «última escritura gana» silenciosa; no se muestran diferencias por campo; la copia recuperable se crea antes de reemplazar; un schema futuro/corrupto no se trata como nube vacía.
+**Aceptación:** escritura condicional e idempotente; no hay «última escritura gana» silenciosa; no se muestran diferencias por campo; la implementación actual crea una copia local antes de reemplazar, pero todavía no conserva un historial cloud consultable/restaurable; un schema futuro/corrupto no se trata como nube vacía.
 
 ## UC-21 — Recuperar cuenta tras perder factores
 
@@ -58,7 +58,7 @@
 
 **Flujo:** abre `https://sync.laurafernandezenfermeria.com/status` para consultar salud general, incidentes, acciones en curso y ventanas de mantenimiento.
 
-**Aceptación:** no requiere autenticación; no muestra usuarios, logs, IPs, claves ni diagnósticos internos; si no puede verificar disponibilidad muestra estado desconocido/último chequeo. La página estática sobrevive a una caída de API/DB, pero no a una caída completa del VPS/red.
+**Aceptación objetivo:** no requiere autenticación; no muestra usuarios, logs, IPs, claves ni diagnósticos internos; muestra estados comprobados de API/sync/correo e indica desconocido junto con la hora del último chequeo válido. La implementación actual solo valida estado general y avisos estáticos; faltan estados por componente, comprobación viva y despliegue. La página estática sobrevive a una caída de API/DB, pero no a una caída completa del VPS/red.
 
 ## UC-25 — Restablecer contraseña mediante PIN
 

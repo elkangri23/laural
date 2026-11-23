@@ -142,6 +142,7 @@ Las regresiones Rust cubren fallo de formato/versión/secciones, parámetros y c
 - La nube solo recibe el allowlist aprobado; endpoint personalizado sujeto a consentimiento. Al descargar un endpoint compartido, la app desactiva el consentimiento local para volver a compartirlo.
 - Pruebas de regresión cubren la reanudación automática al regresar la conexión/primer plano y la prohibición de sincronizar antes de aceptar el riesgo. El lector local exige todos los campos del estado y rechaza JSON dañado, snapshots inválidos, estado incompleto y archivos sobredimensionados. Pendiente: probar suspensión/reanudación y conflictos contra el VPS habilitado, y validar visualmente los estados en Windows.
 - Implementado el aviso obligatorio de pérdida total del VPS y ausencia de cifrado de extremo a extremo. La aceptación se guarda solo en el equipo y bloquea auto-sync, comparación, subida y aplicación de snapshots hasta que el usuario la confirme; se mantienen excluidas las claves API.
+- Diferencia pendiente detectada frente al diseño aprobado: el servicio solo guarda el snapshot vigente; todavía no existe historial de copias de preferencias en nube consultable/restaurable por el usuario. No confundir ese historial de versiones con una copia de desastre fuera del VPS, que sigue descartada.
 - Excluir siempre claves, chats, terminal/historial, proyectos/rutas y política del agente.
 
 ## M11 — Preparación para producción (pendiente)
