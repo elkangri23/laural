@@ -6,6 +6,7 @@
 - La integración PostgreSQL comprueba los límites cruzados entre API y formulario desde IP distintas y verifica que los contadores solo guardan el HMAC del correo.
 - La integración PostgreSQL y los gates de cobertura terminaron en verde en CI (`45185068795`).
 - El inicio de sesión limita a diez intentos por correo normalizado y minuto entre IP, después de validar CSRF.
+- Corregida la actualización transaccional de intentos fallidos en PostgreSQL: el contador se incrementa en SQL y no produce una incompatibilidad de tipos.
 
 ## 0.1.0-alpha.17
 

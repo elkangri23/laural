@@ -77,11 +77,11 @@ describe("almacén PostgreSQL de autenticación nativa", () => {
   });
 
   it("consume los intentos de login en una transacción y revoca el flow al quinto", async () => {
-    const test = fakePool((sql) => sql.includes("SELECT id, attempts FROM native_auth_flows")
-      ? { rows: [{ id: "flow-id", attempts: 4 }] }
+    const test = fakePool((sql) => sql.includes("SELECT id FROM native_auth_flows")
+      ? { rows: [{ id: "flow-id" }] }
       : { rows: [] });
     await new PostgresNativeAuthStore(test.pool).failLogin("cookie", "csrf");
-    expect(test.queries.some((sql) => sql.includes("consumed_at = CASE WHEN $2 >= 5"))).toBe(true);
+    expect(test.queries.some((sql) => sql.includes("consumed_at = CASE WHEN attempts + 1 >= 5"))).toBe(true);
     expect(test.queries).toContain("COMMIT");
 
     const absent = fakePool(() => ({ rows: [] }));

@@ -107,8 +107,8 @@ export class PostgresNativeAuthStore implements NativeAuthStore {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
-      const flow = await client.query<{ id: string; attempts: number }>(
-        `SELECT id, attempts FROM native_auth_flows
+      const flow = await client.query<{ id: string }>(
+        `SELECT id FROM native_auth_flows
           WHERE cookie_digest = $1 AND csrf_digest = $2
             AND consumed_at IS NULL AND expires_at > now() AND attempts < 5
           FOR UPDATE`,
@@ -116,12 +116,12 @@ export class PostgresNativeAuthStore implements NativeAuthStore {
       );
       const row = flow.rows[0];
       if (row) {
-        const attempts = row.attempts + 1;
         await client.query(
           `UPDATE native_auth_flows
-              SET attempts = $2, consumed_at = CASE WHEN $2 >= 5 THEN now() ELSE consumed_at END
+              SET attempts = attempts + 1,
+                  consumed_at = CASE WHEN attempts + 1 >= 5 THEN now() ELSE consumed_at END
             WHERE id = $1`,
-          [row.id, attempts],
+          [row.id],
         );
       }
       await client.query("COMMIT");
