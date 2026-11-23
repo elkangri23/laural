@@ -1,6 +1,7 @@
 # Registro de cambios
 
 ## Sin publicar
+- Añadido un gate de tamaño al build: falla si un bundle JavaScript supera 500 KiB. El build actual valida 10 bundles; el mayor mide 336,25 KB. Tests de frontera: 2/2; UI 162/162 (79,37 % de líneas); servicio 180/180 con PostgreSQL 16 (90,26 % de líneas / 80,01 % de ramas); build y gates de cobertura correctos.
 - Revalidada la cadena de dependencias: npm escritorio/servicio sin vulnerabilidades; gate Cargo de CI pasa. Se documentan cinco avisos transitivos sin mantenimiento y la excepción Linux de GLib; no hay actualización corregida disponible.
 - Añadida al roadmap una cuarta muestra pasiva de recursos de la instalación Windows y el resultado de la revisión visual intentada. Siete muestras en 42 s: 9 procesos, 127,3–127,4 MiB de working set, 253,7–253,9 MiB de memoria privada y CPU acumulada estable; no representa carga activa. La herramienta no pudo activar la ventana, por lo que la inspección visual sigue pendiente.
 - Añadido `npm run status:publish -- <archivo-status.json>` para publicar el estado público desde Linux/SSH. Valida el esquema cerrado antes de escribir, sincroniza un temporal con permisos 0644 y sustituye el archivo de forma atómica; limpia temporales ante fallos y conserva el documento anterior. Actualizados ADR-0032, runbook, requisitos, diseño, roadmap y backlog. No añade sondeos en vivo ni una ruta web de escritura.
