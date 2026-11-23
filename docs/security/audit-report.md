@@ -185,6 +185,10 @@ Revisión de ejecutores de paquetes (23-11-2026): varios comandos comunes (`npx`
 
 Verificación de ejecutores: Rust 129 pasadas y 1 ignorada; UI 161/161, 79,18 % de líneas; ocho gates de cobertura y `cargo fmt --check` pasan. `cargo llvm-cov` ejecuta la suite, pero Windows/MSVC no genera datos para el informe.
 
+Revisión de credenciales Windows (23-11-2026): `cmdkey` y `vaultcmd` no requerían revisión al guardar, modificar o eliminar credenciales. Ahora el filtro aprueba solo consultas de listado explícitas y ayuda; las mutaciones y operaciones no reconocidas exigen confirmación. Las pruebas también verifican que las reglas exactas no evadan la aprobación.
+
+Verificación: Rust 130 pasadas y 1 ignorada; UI 161/161, 79,18 % de líneas; ocho gates de cobertura y `cargo fmt --check` pasan. `cargo llvm-cov` ejecuta Rust pero no genera informe en Windows/MSVC.
+
 Verificación de la regresión: Rust 129 pasadas y 1 ignorada; UI 161/161, 79,18 % de líneas; los ocho gates de cobertura y `cargo fmt --check` pasan. En Windows/MSVC `cargo llvm-cov` ejecuta las pruebas, pero no genera el informe porque no hay datos de cobertura instrumentados.
 
 Cobertura local tras esta regresión: servicio 136 pruebas ejecutables, 9 PostgreSQL omitidas, 80,23 % de líneas y 76,07 % de ramas; interfaz 161/161 y 79,18 % de líneas; 8 gates de política pasan. Rust ejecuta 128 pruebas y 1 ignorada; `cargo llvm-cov` no genera perfiles válidos en Windows/MSVC, aunque el workflow Linux mide los gates. La primera pasada de cobertura UI tuvo un timeout de 5 s mientras backend y UI competían por CPU; la repetición de UI en solitario pasó.

@@ -2128,6 +2128,9 @@ fn git_command_is_high_risk(command: &str) -> bool {
 }
 
 fn external_tool_is_high_risk(command: &str, executable: &str) -> bool {
+    if matches!(executable, "cmdkey" | "vaultcmd") {
+        return windows_credential_tool_is_high_risk(command, executable);
+    }
     if executable == "netsh" {
         return netsh_command_is_high_risk(command);
     }
@@ -2359,6 +2362,37 @@ fn docker_command_is_high_risk(command: &str) -> bool {
             Some("create" | "rm" | "connect" | "disconnect")
         ),
         _ => false,
+    }
+}
+
+fn windows_credential_tool_is_high_risk(command: &str, executable: &str) -> bool {
+    let mut arguments = command.split_whitespace().skip(1);
+    let Some(operation) = arguments.next() else {
+        return true;
+    };
+    if matches!(operation, "/?" | "-?" | "/h" | "/help" | "--help") {
+        return false;
+    }
+    match executable {
+        "cmdkey" => {
+            if matches!(operation, "/list") || operation.starts_with("/list:") {
+                arguments.next().is_some()
+            } else {
+                true
+            }
+        }
+        "vaultcmd" => {
+            if matches!(operation, "/list" | "/listcreds") {
+                arguments.any(|argument| {
+                    !matches!(argument, "/all")
+                        && !argument.starts_with("/vault:")
+                        && !argument.starts_with("/guid:")
+                })
+            } else {
+                true
+            }
+        }
+        _ => true,
     }
 }
 
@@ -3931,6 +3965,41 @@ mod tests {
     }
 
     #[test]
+    fn exige_revision_para_modificar_credenciales_de_windows() {
+        for (command, executable) in [
+            (
+                "cmdkey /add:TERMSRV/servidor /user:laura /pass:valor-prueba",
+                "cmdkey",
+            ),
+            (
+                "cmdkey /generic:token /user:laura /pass:valor-prueba",
+                "cmdkey",
+            ),
+            ("cmdkey /delete:TERMSRV/servidor", "cmdkey"),
+            ("cmdkey /operation-unknown", "cmdkey"),
+            ("vaultcmd /deletecreds /vault:WindowsVault", "vaultcmd"),
+            ("vaultcmd /updatecreds /vault:WindowsVault", "vaultcmd"),
+            ("vaultcmd /operation-unknown", "vaultcmd"),
+        ] {
+            assert!(external_tool_is_high_risk(command, executable), "{command}");
+        }
+
+        for (command, executable) in [
+            ("cmdkey /?", "cmdkey"),
+            ("cmdkey /list", "cmdkey"),
+            ("cmdkey /list:TERMSRV/servidor", "cmdkey"),
+            ("vaultcmd /?", "vaultcmd"),
+            ("vaultcmd /list", "vaultcmd"),
+            ("vaultcmd /listcreds /vault:WindowsVault", "vaultcmd"),
+        ] {
+            assert!(
+                !external_tool_is_high_risk(command, executable),
+                "{command}"
+            );
+        }
+    }
+
+    #[test]
     fn exige_revision_para_configuracion_netshell_y_claves_wifi_en_claro() {
         for (shell, command) in [
             ("cmd", "netsh"),
@@ -4288,6 +4357,8 @@ mod tests {
                 "git -C proyecto config --local core.sshCommand 'powershell.exe'".into(),
                 "docker compose down --volumes".into(),
                 "npx paquete".into(),
+                "cmdkey /add:servidor /user:laura /pass:valor-prueba".into(),
+                "vaultcmd /deletecreds /vault:WindowsVault".into(),
             ],
             backup_retention: None,
         };
@@ -4319,6 +4390,8 @@ mod tests {
             ),
             ("git-bash", "docker compose down --volumes"),
             ("powershell", "npx paquete"),
+            ("cmd", "cmdkey /add:servidor /user:laura /pass:valor-prueba"),
+            ("powershell", "vaultcmd /deletecreds /vault:WindowsVault"),
         ] {
             let result = authorize_agent_command_with_settings(shell, command, &settings);
             assert!(
