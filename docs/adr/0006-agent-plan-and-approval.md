@@ -44,3 +44,5 @@ Actualización M3: ejecutar código en contenedores (`docker run`, `exec`, Compo
 Actualización M3: los runtimes y ejecutores alternativos `npx`, `pnpm`, `yarn`, `bun`/`bunx`, `corepack`, `deno`, `pipx` y `uvx` requieren aprobación manual por tratarse de rutas de ejecución de código o herramientas. Se aplican antes de las reglas exactas.
 
 Actualización M3: las mutaciones de credenciales de Windows con `cmdkey` y `vaultcmd` requieren aprobación manual; se mantienen disponibles consultas de listado y ayuda. Operaciones desconocidas requieren revisión.
+
+Actualización M3: clientes SSH/SCP/SFTP y PuTTY, PsExec, WinRS, `ssh-add` y cmdlets de gestión de sesiones remotas PowerShell requieren aprobación manual. Cambiar a un host remoto modifica el destino y el alcance de la acción; la aprobación ocurre antes de las reglas exactas.

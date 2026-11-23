@@ -187,6 +187,10 @@ Verificación de ejecutores: Rust 129 pasadas y 1 ignorada; UI 161/161, 79,18 % 
 
 Revisión de credenciales Windows (23-11-2026): `cmdkey` y `vaultcmd` no requerían revisión al guardar, modificar o eliminar credenciales. Ahora el filtro aprueba solo consultas de listado explícitas y ayuda; las mutaciones y operaciones no reconocidas exigen confirmación. Las pruebas también verifican que las reglas exactas no evadan la aprobación.
 
+Revisión de acceso remoto (23-11-2026): herramientas SSH/SCP/SFTP y PuTTY, PsExec, WinRS y cmdlets de sesión remota PowerShell no requerían revisión manual. Ahora el filtro identifica esos ejecutables, acciones de sesión remota y `ssh-add` antes de reglas. Las regresiones cubren variantes Windows y POSIX, nombres de cmdlet y aliases de PSSession.
+
+Verificación: Rust 130 pasadas y 1 ignorada; interfaz 161/161, 79,18 % de líneas; ocho gates de cobertura y `cargo fmt --check` pasan. `cargo llvm-cov` ejecuta las pruebas, pero Windows/MSVC no genera el informe.
+
 Verificación: Rust 130 pasadas y 1 ignorada; UI 161/161, 79,18 % de líneas; ocho gates de cobertura y `cargo fmt --check` pasan. `cargo llvm-cov` ejecuta Rust pero no genera informe en Windows/MSVC.
 
 Verificación de la regresión: Rust 129 pasadas y 1 ignorada; UI 161/161, 79,18 % de líneas; los ocho gates de cobertura y `cargo fmt --check` pasan. En Windows/MSVC `cargo llvm-cov` ejecuta las pruebas, pero no genera el informe porque no hay datos de cobertura instrumentados.

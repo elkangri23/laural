@@ -9,6 +9,8 @@
 - Regresiones de Docker/Compose: Rust 129 pasadas y 1 ignorada; UI 161/161 (79,18 % de líneas), gates de cobertura y formato correctos. Windows/MSVC no genera el informe LLVM de Rust.
 - Los ejecutores `npx`, `pnpm`, `yarn`, `bun`/`bunx`, `corepack`, `deno`, `pipx` y `uvx` ahora exigen aprobación antes de aplicar reglas o modo automático.
 - Las operaciones de cambio en `cmdkey` y `vaultcmd` exigen aprobación; los listados explícitos siguen siendo consultas de lectura.
+- Los lanzadores SSH/SCP/SFTP, PuTTY, PsExec, WinRS y la gestión de sesiones remotas PowerShell ahora requieren aprobación manual.
+- Verificación de acceso remoto: Rust 130 pasadas y 1 ignorada; UI 161/161 (79,18 % líneas), gates y formato correctos. La cobertura Rust no genera informe en Windows/MSVC.
 - Verificación de credenciales Windows: Rust 130 pasadas y 1 ignorada; UI 161/161 (79,18 % de líneas), 8 gates de cobertura y formato correctos. La cobertura LLVM Rust sigue limitada en Windows/MSVC.
 - Verificación: Rust 129 pasadas y 1 ignorada; UI 161/161 (79,18 % de líneas), 8 gates de cobertura y formato correctos. Windows/MSVC no genera el informe de cobertura Rust.
 - La suite local pasa: Rust 129/129 ejecutables y UI 161/161 (79,18 % de líneas); los ocho gates de política y el formato Rust pasan. La generación local de cobertura Rust sigue limitada por Windows/MSVC.
