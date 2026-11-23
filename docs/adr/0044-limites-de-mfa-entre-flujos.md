@@ -1,6 +1,6 @@
 # ADR-0044: Límites de intentos MFA compartidos por cuenta
 
-- Estado: aceptada; integración local implementada, despliegue VPS pendiente.
+- Estado: aceptada; CI con PostgreSQL real en verde, despliegue VPS pendiente.
 - Fecha: 2026-11-23.
 
 ## Contexto
