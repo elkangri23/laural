@@ -135,7 +135,7 @@ function isValidPassword(password: unknown): password is string {
   return typeof password === "string" && [...password].length >= 12 && [...password].length <= 128 && !/[\u0000-\u001f\u007f]/u.test(password);
 }
 
-function normalizeEmail(value: string): string | null {
+export function normalizeEmail(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const email = value.trim().toLowerCase();
   return email.length <= 320 && /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/u.test(email) ? email : null;

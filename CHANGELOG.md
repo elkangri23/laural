@@ -1,5 +1,9 @@
 # Registro de cambios
 
+## Sin publicar
+
+- Endurecidos registro, verificación y recuperación de cuenta con límites compartidos por correo normalizado entre API y formulario nativo. La base de datos conserva solo huellas HMAC; los intentos fallidos reciben `429` y `Retry-After`.
+
 ## 0.1.0-alpha.17
 
 - Publicada el 23-11-2026 como pre-release NSIS x64 con instalador y manifiesto de actualización firmados y checksum verificado. SHA-256: `B965085B9EB6F193DBFE19BF1FB847FD1D179D0FB909EB791D7D62980A3B1DF8`.

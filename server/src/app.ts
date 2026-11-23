@@ -4,7 +4,7 @@ import Fastify, { type FastifyInstance, type FastifyReply } from "fastify";
 import formbody from "@fastify/formbody";
 import { Ajv2020 } from "ajv/dist/2020.js";
 import type { PreferenceSnapshot, PreferenceStore, ReadinessCheck, Authenticate, ListAccountSessions, RevokeAccountSession, RevokeOtherSessions, RevokeSession } from "./contracts.js";
-import type { EmailAuthService } from "./email-auth.js";
+import { normalizeEmail, type EmailAuthService } from "./email-auth.js";
 import type { AccountMfaService } from "./account-mfa.js";
 import type { AccountDeletionService } from "./account-deletion.js";
 import { AccountPasskeyService, type PasskeySummary } from "./account-passkeys.js";
@@ -220,6 +220,9 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
       if (!await nativeAuth.isBrowserFlowValid(readCookie(request.headers.cookie, FLOW_COOKIE), request.body.csrf)) {
         return reply.code(400).type("text/html; charset=utf-8").send(renderAuthPage("", "La sesión de autenticación caducó. Vuelve a iniciar el proceso en Laural."));
       }
+      if (await emailLimitExceeded(rateLimit, "auth-register-email", request.body.email, 3, 900, reply)) {
+        return reply.type("text/html; charset=utf-8").send(renderAuthPage(request.body.csrf, "Demasiadas solicitudes para este correo. Espera antes de volver a intentarlo."));
+      }
       await emailAuth.register(request.body);
       return reply.type("text/html; charset=utf-8").send(renderAuthPage(request.body.csrf, "Si los datos son válidos, enviaremos un PIN de verificación al correo indicado."));
     });
@@ -230,6 +233,9 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
     }, async (request, reply) => {
       if (!await nativeAuth.isBrowserFlowValid(readCookie(request.headers.cookie, FLOW_COOKIE), request.body.csrf)) {
         return reply.code(400).type("text/html; charset=utf-8").send(renderAuthPage("", "La sesión de autenticación caducó. Vuelve a iniciar el proceso en Laural."));
+      }
+      if (await emailLimitExceeded(rateLimit, "auth-resend-email", request.body.email, 3, 900, reply)) {
+        return reply.type("text/html; charset=utf-8").send(renderAuthPage(request.body.csrf, "Demasiadas solicitudes para este correo. Espera antes de volver a intentarlo."));
       }
       await emailAuth.resendVerification(request.body.email);
       return reply.type("text/html; charset=utf-8").send(renderAuthPage(request.body.csrf, "Si la cuenta necesita verificación, enviaremos un nuevo PIN."));
@@ -242,6 +248,9 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
       if (!await nativeAuth.isBrowserFlowValid(readCookie(request.headers.cookie, FLOW_COOKIE), request.body.csrf)) {
         return reply.code(400).type("text/html; charset=utf-8").send(renderAuthPage("", "La sesión de autenticación caducó. Vuelve a iniciar el proceso en Laural."));
       }
+      if (await emailLimitExceeded(rateLimit, "auth-verify-email", request.body.email, 10, 300, reply)) {
+        return reply.type("text/html; charset=utf-8").send(renderAuthPage(request.body.csrf, "Demasiados intentos para este correo. Espera antes de volver a intentarlo."));
+      }
       await emailAuth.verify(request.body.email, request.body.pin);
       return reply.type("text/html; charset=utf-8").send(renderAuthPage(request.body.csrf, "Solicitud procesada. Si el PIN era correcto, ya puedes probar a iniciar sesión."));
     });
@@ -253,6 +262,9 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
       if (!await nativeAuth.isBrowserFlowValid(readCookie(request.headers.cookie, FLOW_COOKIE), request.body.csrf)) {
         return reply.code(400).type("text/html; charset=utf-8").send(renderAuthPage("", "La sesión de autenticación caducó. Vuelve a iniciar el proceso en Laural."));
       }
+      if (await emailLimitExceeded(rateLimit, "password-reset-request-email", request.body.email, 3, 900, reply)) {
+        return reply.type("text/html; charset=utf-8").send(renderAuthPage(request.body.csrf, "Demasiadas solicitudes para este correo. Espera antes de volver a intentarlo."));
+      }
       await emailAuth.requestPasswordReset(request.body.email);
       return reply.type("text/html; charset=utf-8").send(renderAuthPage(request.body.csrf, "Si la cuenta puede recuperarse, enviaremos un PIN al correo indicado."));
     });
@@ -263,6 +275,9 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
     }, async (request, reply) => {
       if (!await nativeAuth.isBrowserFlowValid(readCookie(request.headers.cookie, FLOW_COOKIE), request.body.csrf)) {
         return reply.code(400).type("text/html; charset=utf-8").send(renderAuthPage("", "La sesión de autenticación caducó. Vuelve a iniciar el proceso en Laural."));
+      }
+      if (await emailLimitExceeded(rateLimit, "password-reset-confirm-email", request.body.email, 10, 300, reply)) {
+        return reply.type("text/html; charset=utf-8").send(renderAuthPage(request.body.csrf, "Demasiados intentos para este correo. Espera antes de volver a intentarlo."));
       }
       const result = await emailAuth.confirmPasswordReset(request.body.email, request.body.pin, request.body.password);
       if (result === "invalid_request") return reply.code(400).type("text/html; charset=utf-8").send(renderAuthPage(request.body.csrf, "Revisa el formato de los datos e inténtalo de nuevo."));
@@ -472,7 +487,7 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
 
   if (emailAuth) {
     app.post<{ Body: RegistrationBody }>("/v1/auth/register", {
-      preHandler: limited(rateLimit, "api-register", 3, 900),
+      preHandler: [limited(rateLimit, "api-register", 3, 900), limitedEmail(rateLimit, "auth-register-email", 3, 900)],
       schema: {
         body: {
           type: "object", additionalProperties: false,
@@ -491,7 +506,7 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
     });
 
     app.post<{ Body: EmailBody }>("/v1/auth/verification/resend", {
-      preHandler: limited(rateLimit, "api-resend", 3, 900),
+      preHandler: [limited(rateLimit, "api-resend", 3, 900), limitedEmail(rateLimit, "auth-resend-email", 3, 900)],
       schema: {
         body: {
           type: "object", additionalProperties: false,
@@ -505,7 +520,7 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
     });
 
     app.post<{ Body: EmailPinBody }>("/v1/auth/verification/confirm", {
-      preHandler: limited(rateLimit, "api-verify", 10, 60),
+      preHandler: [limited(rateLimit, "api-verify", 10, 60), limitedEmail(rateLimit, "auth-verify-email", 10, 300)],
       schema: {
         body: {
           type: "object", additionalProperties: false,
@@ -523,7 +538,7 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
     });
 
     app.post<{ Body: EmailBody }>("/v1/auth/password-reset/request", {
-      preHandler: limited(rateLimit, "password-reset-request", 3, 900),
+      preHandler: [limited(rateLimit, "password-reset-request", 3, 900), limitedEmail(rateLimit, "password-reset-request-email", 3, 900)],
       schema: { body: { type: "object", additionalProperties: false, required: ["email"], properties: { email: { type: "string", minLength: 6, maxLength: 320 } } } },
     }, async (request, reply) => {
       const result = await emailAuth.requestPasswordReset(request.body.email);
@@ -532,7 +547,7 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
     });
 
     app.post<{ Body: PasswordResetBody }>("/v1/auth/password-reset/confirm", {
-      preHandler: limited(rateLimit, "password-reset-confirm", 10, 60),
+      preHandler: [limited(rateLimit, "password-reset-confirm", 10, 60), limitedEmail(rateLimit, "password-reset-confirm-email", 10, 300)],
       schema: {
         body: {
           type: "object", additionalProperties: false, required: ["email", "pin", "password"],
@@ -604,6 +619,31 @@ function limited(limiter: RequestRateLimiter, scope: string, maximum: number, wi
     reply.header("Retry-After", String(windowSeconds));
     return reply.code(429).send({ error: "rate_limited" });
   };
+}
+
+function limitedEmail(limiter: RequestRateLimiter, scope: string, maximum: number, windowSeconds: number) {
+  return async (request: import("fastify").FastifyRequest, reply: import("fastify").FastifyReply) => {
+    const emailInput = (request.body as { email?: unknown } | null)?.email;
+    if (await emailLimitExceeded(limiter, scope, emailInput, maximum, windowSeconds, reply)) {
+      return reply.send({ error: "rate_limited" });
+    }
+  };
+}
+
+async function emailLimitExceeded(
+  limiter: RequestRateLimiter,
+  scope: string,
+  emailInput: unknown,
+  maximum: number,
+  windowSeconds: number,
+  reply: FastifyReply,
+): Promise<boolean> {
+  const email = normalizeEmail(emailInput);
+  if (!email) return false;
+  const allowed = await limiter.consume(scope, email, maximum, windowSeconds);
+  if (allowed) return false;
+  reply.header("Retry-After", String(windowSeconds)).code(429);
+  return true;
 }
 
 function parseRevision(header: string | undefined): number | null {

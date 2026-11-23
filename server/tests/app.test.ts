@@ -279,6 +279,50 @@ describe("API de snapshots de preferencias", () => {
     expect(resetResponse.headers.authorization).toBeUndefined();
   });
 
+  it("comparte el límite de recuperación entre IP y normaliza el correo", async () => {
+    const hits = new Map<string, number>();
+    const consumed: Array<{ scope: string; key: string }> = [];
+    const requestRateLimiter: RequestRateLimiter = {
+      consume: async (scope, key, maximum) => {
+        consumed.push({ scope, key });
+        const hitKey = `${scope}:${key}`;
+        const count = (hits.get(hitKey) ?? 0) + 1;
+        hits.set(hitKey, count);
+        return count <= maximum;
+      },
+    };
+    const requestPasswordReset = vi.fn(async () => "accepted" as const);
+    const emailAuth = new EmailAuthService({
+      createUnverifiedAccount: async () => null,
+      createVerification: async () => null,
+      verifyEmail: async () => false,
+      createPasswordReset: async () => null,
+      checkPasswordReset: async () => false,
+      resetPassword: async () => false,
+    }, { sendVerification: async () => undefined, sendPasswordReset: async () => undefined }, "a-server-pepper-with-enough-entropy-for-this-test");
+    vi.spyOn(emailAuth, "requestPasswordReset").mockImplementation(requestPasswordReset);
+    const app = createTestApp({ requestRateLimiter, emailAuth });
+    const addresses = ["198.51.100.1", "198.51.100.2", "198.51.100.3", "198.51.100.4"];
+    const emails = ["Cuenta@Example.test", " cuenta@example.test ", "CUENTA@example.test", "cuenta@example.test"];
+
+    for (let index = 0; index < addresses.length; index += 1) {
+      const response = await app.inject({
+        method: "POST", url: "/v1/auth/password-reset/request", remoteAddress: addresses[index],
+        payload: { email: emails[index] },
+      });
+      expect(response.statusCode).toBe(index < 3 ? 202 : 429);
+      if (index === 3) expect(response.headers["retry-after"]).toBe("900");
+    }
+
+    expect(requestPasswordReset).toHaveBeenCalledTimes(3);
+    expect(consumed.filter(({ scope }) => scope === "password-reset-request-email")).toEqual([
+      { scope: "password-reset-request-email", key: "cuenta@example.test" },
+      { scope: "password-reset-request-email", key: "cuenta@example.test" },
+      { scope: "password-reset-request-email", key: "cuenta@example.test" },
+      { scope: "password-reset-request-email", key: "cuenta@example.test" },
+    ]);
+  });
+
   it("sirve página propia sin scripts y restringe el inicio a callback loopback", async () => {
     const disabled = createTestApp({ emailAuth: new EmailAuthService({
       createUnverifiedAccount: async () => null,
