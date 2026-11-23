@@ -34,3 +34,5 @@ Actualización M3: para herramientas de gestión conocidas, una opción global a
 Actualización M3: PowerShell, WSL y Git Bash ejecutan perfiles interactivos que pueden redefinir comandos, así que sus modos automático y por reglas ahora requieren confirmación manual. CMD inicia con `/d` para desactivar `AutoRun`; `doskey` requiere revisión porque crea macros de sesión.
 
 Regresión M3: una orden `doskey` que define una macro de comando debe seguir pidiendo aprobación aunque coincida exactamente con una regla permitida. La clasificación de riesgo se evalúa antes de las reglas.
+
+Actualización M3: `taskkill` y `Stop-Computer` requieren aprobación manual en modos automático y por reglas porque pueden terminar procesos o apagar el equipo. `tasklist`, `Get-Process` y `Get-Command Stop-Computer` conservan su clasificación de lectura; las reglas no reducen la revisión requerida.

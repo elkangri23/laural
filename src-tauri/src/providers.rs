@@ -1781,6 +1781,7 @@ fn command_is_high_risk(shell: &str, command: &str) -> bool {
         "format",
         "diskpart",
         "shutdown",
+        "taskkill",
         "restart-computer",
         "clear-disk",
         "bcdedit",
@@ -1902,6 +1903,7 @@ fn command_is_high_risk(shell: &str, command: &str) -> bool {
         "stop-service",
         "spsv",
         "restart-service",
+        "stop-computer",
         "resume-service",
         "suspend-service",
         "register-scheduledtask",
@@ -3576,6 +3578,27 @@ mod tests {
     }
 
     #[test]
+    fn exige_revision_para_terminar_procesos_o_apagar_el_equipo() {
+        for (shell, command) in [
+            ("cmd", "taskkill /F /IM aplicacion.exe"),
+            ("powershell", "taskkill /pid 1234 /t /f"),
+            ("git-bash", "taskkill /F /IM aplicacion.exe"),
+            ("wsl", "taskkill /F /IM aplicacion.exe"),
+            ("powershell", "Stop-Computer -Force"),
+        ] {
+            assert!(command_is_high_risk(shell, command), "{shell}: {command}");
+        }
+
+        for (shell, command) in [
+            ("cmd", "tasklist"),
+            ("powershell", "Get-Process"),
+            ("powershell", "Get-Command Stop-Computer"),
+        ] {
+            assert!(!command_is_high_risk(shell, command), "{shell}: {command}");
+        }
+    }
+
+    #[test]
     fn limita_los_falsos_positivos_y_detecta_subcomandos_peligrosos() {
         for (shell, command) in [
             ("powershell", "Write-Output Remove-Item"),
@@ -4137,6 +4160,8 @@ mod tests {
                 "declare -x PATH=/tmp".into(),
                 "enable -n printf".into(),
                 "doskey git=del *".into(),
+                "taskkill /F /IM aplicacion.exe".into(),
+                "Stop-Computer -Force".into(),
             ],
             backup_retention: None,
         };
@@ -4159,6 +4184,8 @@ mod tests {
             ("git-bash", "declare -x PATH=/tmp"),
             ("wsl", "enable -n printf"),
             ("cmd", "doskey git=del *"),
+            ("cmd", "taskkill /F /IM aplicacion.exe"),
+            ("powershell", "Stop-Computer -Force"),
         ] {
             let result = authorize_agent_command_with_settings(shell, command, &settings);
             assert!(

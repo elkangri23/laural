@@ -2,6 +2,8 @@
 
 ## Sin publicar
 
+- El agente exige aprobación antes de ejecutar `taskkill` o `Stop-Computer`, incluso si coinciden con una regla permitida; las consultas de procesos siguen disponibles sin revisión.
+- Verificación local: Rust 129 pasadas y 1 ignorada; UI 161/161 (79,18 % de líneas); 8 pruebas de política de cobertura y formato correctos. La generación de cobertura Rust continúa sin datos en Windows/MSVC.
 - El segundo factor TOTP y los códigos de recuperación comparten un límite de diez intentos por cuenta cada cinco minutos entre flujos e IP. La cuenta se obtiene del flujo ligado al primer factor y PostgreSQL conserva solo su HMAC.
 - CI `45192735950` pasó los tres jobs; el servicio ejecutó 144/144 pruebas con PostgreSQL real, incluida la regresión de límite MFA entre flujos.
 - Endurecidos registro, verificación y recuperación de cuenta con límites compartidos por correo normalizado entre API y formulario nativo. La base de datos conserva solo huellas HMAC; los intentos fallidos reciben `429` y `Retry-After`.

@@ -171,6 +171,10 @@ Verificación local de esta ampliación: build del servicio correcto; `server/np
 
 Verificación de confianza del proxy (23-11-2026): una regresión Fastify confirma que un cliente conectado directamente no puede fijar su IP con `X-Forwarded-For`, mientras que la conexión desde loopback usada por el proxy confiable sí establece la IP original. Prueba dirigida: 1/1 correcta. Esto valida el comportamiento del servidor localmente, pero no demuestra que el Caddyfile del VPS reenvíe la dirección correcta ni valida el proxy bajo carga.
 
+Revisión del agente (23-11-2026): se detectó que `taskkill` y `Stop-Computer` podían pasar la clasificación de riesgo en modo automático o por reglas. Ahora exigen aprobación manual; las consultas de procesos `tasklist` y `Get-Process` siguen siendo de solo lectura. Las regresiones comprueban ambos shells/rutas y que una regla exacta no eluda la revisión. Sigue pendiente ensayar perfiles personalizados y shell reales; esta clasificación no aísla procesos.
+
+Verificación de la regresión: Rust 129 pasadas y 1 ignorada; UI 161/161, 79,18 % de líneas; los ocho gates de cobertura y `cargo fmt --check` pasan. En Windows/MSVC `cargo llvm-cov` ejecuta las pruebas, pero no genera el informe porque no hay datos de cobertura instrumentados.
+
 Cobertura local tras esta regresión: servicio 136 pruebas ejecutables, 9 PostgreSQL omitidas, 80,23 % de líneas y 76,07 % de ramas; interfaz 161/161 y 79,18 % de líneas; 8 gates de política pasan. Rust ejecuta 128 pruebas y 1 ignorada; `cargo llvm-cov` no genera perfiles válidos en Windows/MSVC, aunque el workflow Linux mide los gates. La primera pasada de cobertura UI tuvo un timeout de 5 s mientras backend y UI competían por CPU; la repetición de UI en solitario pasó.
 
 CI `45195027612` terminó en verde en los tres jobs. La suite del servicio probó la nueva regresión con Fastify; también pasaron el gate de cobertura de escritorio y los gates Rust de líneas y ramas.
