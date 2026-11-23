@@ -3,11 +3,11 @@
 - **Estado:** flujo TOTP/códigos implementado localmente; no desplegado. La retirada administrativa de factores y el ensayo del VPS están pendientes.
 - **Propietario:** administrador del servicio
 - **Aprobación de política:** el propietario de Laural
-- **Relacionado:** [ADR-0023](../adr/0023-servicio-de-sincronizacion.md), [ADR-0027](../adr/0027-registro-y-verificacion-de-correo.md), [ADR-0028](../adr/0028-login-nativo-pkce.md), [ADR-0036](../adr/0036-gestion-de-sesiones-de-cuenta.md)
+- **Relacionado:** [ADR-0023](../adr/0023-servicio-de-sincronizacion.md), [ADR-0027](../adr/0027-registro-y-verificacion-de-correo.md), [ADR-0028](../adr/0028-login-nativo-pkce.md), [ADR-0036](../adr/0036-gestion-de-sesiones-de-cuenta.md), [ADR-0042](../adr/0042-passkeys-para-cuentas.md), [ADR-0047](../adr/0047-login-con-google-oauth.md)
 
 ## Alcance y límite actual
 
-Este procedimiento se refiere a la pérdida de TOTP/códigos y a la recuperación de acceso MFA. TOTP y códigos de recuperación están implementados localmente detrás del flag de cuenta, que permanece desactivado por defecto; passkeys todavía no están implementadas y el servicio no está desplegado. Este runbook **no autoriza** a retirar factores mediante una operación que aún no existe. La recuperación de contraseña es un flujo distinto.
+Este procedimiento se refiere a la pérdida de TOTP/códigos y a la recuperación de acceso MFA. TOTP, códigos de recuperación, passkeys passwordless y Google OIDC están implementados localmente detrás de flags; la autenticación permanece desactivada por defecto y no está desplegada. La operación administrativa para retirar factores aún no existe. Este runbook **no autoriza** a retirar factores mediante manipulación manual de la base de datos. La recuperación de contraseña es un flujo distinto.
 
 No hay endpoint público ni panel web administrativo para retirar factores. La acción, cuando esté implementada, se ejecutará desde un canal administrativo autenticado en el VPS. No se debe hacer una excepción informal a los criterios de este procedimiento.
 

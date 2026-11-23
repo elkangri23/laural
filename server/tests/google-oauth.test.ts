@@ -3,7 +3,7 @@ import type { Pool } from "pg";
 import type { OAuth2Client } from "google-auth-library";
 import { GoogleOAuthService } from "../src/google-oauth.js";
 
-function harness(emailVerified = true, nonceValid = true) {
+function harness(emailVerified = true, nonceValid = true, existingAccount?: { id: string; emailVerifiedAt: Date | null }) {
   let nonce = "";
   const client = {
     generateCodeVerifierAsync: vi.fn(async () => ({ codeVerifier: "v".repeat(43), codeChallenge: "c".repeat(43) })),
@@ -22,6 +22,7 @@ function harness(emailVerified = true, nonceValid = true) {
   const transactions = new Map<string, { cookie_digest: string; csrf_digest: string; nonce_digest: string; code_verifier: string }>();
   let stateDigest = "";
   let insertedIdentity = false;
+  let createdAccount = false;
   const clientConnection = {
     query: vi.fn(async (sql: string, params: unknown[] = []) => {
       if (sql.includes("SELECT 1 FROM native_auth_flows")) return { rows: [{ present: 1 }], rowCount: 1 };
@@ -38,8 +39,11 @@ function harness(emailVerified = true, nonceValid = true) {
         return { rows: transaction ? [transaction] : [], rowCount: transaction ? 1 : 0 };
       }
       if (sql.includes("SELECT i.account_id")) return { rows: [], rowCount: 0 };
-      if (sql.includes("SELECT id, email_verified_at FROM accounts")) return { rows: [], rowCount: 0 };
-      if (sql.includes("INSERT INTO accounts")) return { rows: [{ id: "account-created" }], rowCount: 1 };
+      if (sql.includes("SELECT id, email_verified_at FROM accounts")) return {
+        rows: existingAccount ? [{ id: existingAccount.id, email_verified_at: existingAccount.emailVerifiedAt }] : [],
+        rowCount: existingAccount ? 1 : 0,
+      };
+      if (sql.includes("INSERT INTO accounts")) { createdAccount = true; return { rows: [{ id: "account-created" }], rowCount: 1 }; }
       if (sql.includes("INSERT INTO account_identities")) { insertedIdentity = true; return { rows: [], rowCount: 1 }; }
       return { rows: [], rowCount: 0 };
     }),
@@ -52,7 +56,7 @@ function harness(emailVerified = true, nonceValid = true) {
   const service = new GoogleOAuthService(pool, {
     clientId: "client.apps.googleusercontent.com", clientSecret: "secret", redirectUri: "https://sync.example.test/auth/google/callback",
   }, client);
-  return { service, client, clientConnection, transactions, getStateDigest: () => stateDigest, identityInserted: () => insertedIdentity };
+  return { service, client, clientConnection, transactions, getStateDigest: () => stateDigest, identityInserted: () => insertedIdentity, accountCreated: () => createdAccount };
 }
 
 describe("Google OAuth", () => {
@@ -88,6 +92,24 @@ describe("Google OAuth", () => {
     const state = new URL(url).searchParams.get("state")!;
     expect(await test.service.finish(state, "google-code")).toBeNull();
     expect(test.identityInserted()).toBe(false);
+  });
+
+  it("vincula el Google verificado a una cuenta verificada existente sin duplicarla", async () => {
+    const test = harness(true, true, { id: "existing-account", emailVerifiedAt: new Date() });
+    const url = await test.service.start("a".repeat(64), "b".repeat(64));
+    const state = new URL(url).searchParams.get("state")!;
+    await expect(test.service.finish(state, "google-code")).resolves.toMatchObject({ accountId: "existing-account" });
+    expect(test.accountCreated()).toBe(false);
+    expect(test.identityInserted()).toBe(true);
+  });
+
+  it("no asocia por correo a una cuenta Laural que todavía no verificó su email", async () => {
+    const test = harness(true, true, { id: "unverified-account", emailVerifiedAt: null });
+    const url = await test.service.start("a".repeat(64), "b".repeat(64));
+    const state = new URL(url).searchParams.get("state")!;
+    expect(await test.service.finish(state, "google-code")).toBeNull();
+    expect(test.identityInserted()).toBe(false);
+    expect(test.accountCreated()).toBe(false);
   });
 
   it("no acepta state mal formado", async () => {

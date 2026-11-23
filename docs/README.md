@@ -26,6 +26,7 @@ Este índice reúne las decisiones y requisitos de la etapa inicial. El código 
 - [Modelo de amenazas](security/threat-model.md)
 - [Informe de auditoría de seguridad](security/audit-report.md)
 - [Runbooks operativos](runbooks/README.md)
+- [Runbook para habilitar Google OAuth](runbooks/google-oauth.md)
 - [Política de seguridad](../SECURITY.md)
 
 ## Guías de uso y mantenimiento
