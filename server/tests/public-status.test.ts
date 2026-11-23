@@ -5,6 +5,11 @@ import { join } from "node:path";
 import { readPublicStatus, unavailableStatus } from "../src/public-status.js";
 
 const directories: string[] = [];
+const components = [
+  { id: "api", state: "unknown", summary: "Sin confirmar." },
+  { id: "sync", state: "unknown", summary: "Sin confirmar." },
+  { id: "email", state: "unknown", summary: "Sin confirmar." },
+];
 async function statusFile(content: string): Promise<string> {
   const directory = await mkdtemp(join(tmpdir(), "laural-status-test-"));
   directories.push(directory);
@@ -23,16 +28,20 @@ describe("documento de estado público", () => {
       state: "degraded",
       summary: "Sincronización intermitente.",
       updatedAt: "2026-11-21T10:15:00Z",
+      components,
       notices: [{ kind: "incident", title: "Latencia", message: "Estamos investigando demoras.", updatedAt: "2026-11-21T10:00:00Z" }],
     };
     expect(await readPublicStatus(await statusFile(JSON.stringify(data)))).toEqual(data);
   });
 
   it("rechaza propiedades privadas o estados que no estén en el contrato", async () => {
-    const data = { state: "operational", summary: "OK", updatedAt: "2026-11-21T10:15:00Z", notices: [], accountCount: 100 };
+    const data = { state: "operational", summary: "OK", updatedAt: "2026-11-21T10:15:00Z", components, notices: [], accountCount: 100 };
     await expect(readPublicStatus(await statusFile(JSON.stringify(data)))).rejects.toThrow("invalid");
     await expect(readPublicStatus(await statusFile(JSON.stringify({ ...data, accountCount: undefined, state: "debug" })))).rejects.toThrow("invalid");
     await expect(readPublicStatus(await statusFile(JSON.stringify({ ...data, accountCount: undefined, updatedAt: "2026-99-99T99:99:99Z" })))).rejects.toThrow("invalid");
+    await expect(readPublicStatus(await statusFile(JSON.stringify({ ...data, accountCount: undefined, components: components.slice(0, 2) })))).rejects.toThrow("invalid");
+    await expect(readPublicStatus(await statusFile(JSON.stringify({ ...data, accountCount: undefined, components: [components[0], components[1], components[1]] })))).rejects.toThrow("invalid");
+    await expect(readPublicStatus(await statusFile(JSON.stringify({ ...data, accountCount: undefined, components: [{ ...components[0], detail: "private" }, ...components.slice(1)] })))).rejects.toThrow("invalid");
   });
 
   it("rechaza un archivo que no contiene JSON", async () => {
@@ -44,6 +53,7 @@ describe("documento de estado público", () => {
     const fallback = unavailableStatus();
     expect(fallback.state).toBe("unknown");
     expect(fallback.notices).toEqual([]);
+    expect(fallback.components.every((component) => component.state === "unknown")).toBe(true);
     expect(JSON.stringify(fallback)).not.toContain("Error");
   });
 });

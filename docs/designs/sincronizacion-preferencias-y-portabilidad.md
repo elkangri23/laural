@@ -1,7 +1,7 @@
 # Optional Preference Sync and Profile Portability
 
 * **Author:** Antonio Moles
-* **Status:** Approved; local encrypted export/import, snapshot API, native email/password and passkey login, manual/automatic preference sync, user-visible cloud snapshot history/restore, and the local public status page are implemented behind account feature flags. Google OAuth, privileged VPS recovery, detailed component health status, and production deployment/validation remain pending.
+* **Status:** Approved; local encrypted export/import, snapshot API, native email/password and passkey login, manual/automatic preference sync, user-visible cloud snapshot history/restore, and the local public status page with manually published per-component state are implemented behind account feature flags. Google OAuth, privileged VPS recovery, live component health checks, and production deployment/validation remain pending.
 * **Date:** 2026-11-21
 
 --------------------------------------------------------------------------------
@@ -313,7 +313,7 @@ Unless noted otherwise, paths in this table are relative to the repository root.
 | `server/migrations/010_preference_snapshot_history.sql` (implemented locally) | Preserve each accepted prior cloud preference revision by account, without automatic expiry, and cascade versions when the account is deleted. |
 | `server/src/postgres-store.ts`, `server/src/app.ts`, `server/openapi.yaml` (implemented locally) | List/delete/restore complete preference versions. Restore checks current revision and idempotency, adds a new revision and leaves history immutable. |
 | `server/src/app.ts` and `server/web/auth.css` (implemented) | Serve a same-origin browser-only sign-in/registration surface so WebAuthn uses the official HTTPS origin; current HTML is rendered by Fastify. Google OAuth remains missing. |
-| `server/web/status.html`, `server/web/status.js`, `server/web/status.css` (implemented locally) | Provide a Spanish, unauthenticated status page with overall state and notices; health by API/sync/email component is pending. |
+| `server/web/status.html`, `server/web/status.js`, `server/web/status.css` (implemented locally) | Provide a Spanish, unauthenticated status page with overall state, notices and manually published API/sync/email summaries; the page says component states are not live checks. |
 | `server/src/public-status.ts`, `server/scripts/validate-status.mjs` (implemented) | Validate a closed, bounded public status document and provide an operator-side validator without printing its contents. |
 | `server/deploy/Caddyfile` (initial implementation) and `/var/lib/laural/status/status.json` (runtime file, not committed) | Serve the page and status document directly from Caddy, outside Fastify; let the administrator publish bounded notices over SSH without relying on the API database. VPS installation and Caddy validation remain pending. |
 | `server/openapi.yaml` (implemented locally) | Specify request/response schemas, auth steps, revision headers, error categories and size limits as the API contract. Google OAuth remains pending. |

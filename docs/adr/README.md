@@ -49,6 +49,7 @@ Los ADR registran por qué se eligió una opción y qué costes trae. Un ADR ace
 | [0043](0043-avisos-de-cambios-passkey.md) | Alta/baja de passkey notificadas mediante outbox transaccional | Aceptada; integración local, entrega Resend pendiente |
 | [0044](0044-limites-de-mfa-entre-flujos.md) | Limitar desafíos MFA entre flujos con cuenta vinculada y huella HMAC | Aceptada; CI con PostgreSQL en verde, despliegue VPS pendiente |
 | [0045](0045-historial-recuperable-de-preferencias-en-nube.md) | Historial recuperable, paginado y borrable de snapshots de preferencias | Aceptada; implementación local, validación PostgreSQL/VPS pendiente |
+| [0046](0046-estado-publico-por-componente.md) | Estado público manual para API, sincronización y correo | Aceptada; página y contrato local listos, despliegue VPS pendiente |
 
 ## Crear un ADR
 

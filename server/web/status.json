@@ -2,5 +2,10 @@
   "state": "unknown",
   "summary": "El servicio de sincronización todavía no está habilitado para usuarios.",
   "updatedAt": "2026-11-21T00:00:00Z",
+  "components": [
+    { "id": "api", "state": "unknown", "summary": "Estado sin confirmar." },
+    { "id": "sync", "state": "unknown", "summary": "Estado sin confirmar." },
+    { "id": "email", "state": "unknown", "summary": "Estado sin confirmar." }
+  ],
   "notices": []
 }

@@ -4,6 +4,8 @@ const labels = {
   degraded: "Servicio parcialmente degradado",
   maintenance: "Mantenimiento en curso",
 };
+const componentLabels = { api: "API", sync: "Sincronización", email: "Correo electrónico" };
+const componentIds = ["api", "sync", "email"];
 const noticeLabels = { incident: "Incidencia", maintenance: "Mantenimiento", notice: "Aviso" };
 
 function formatDate(value) {
@@ -22,6 +24,24 @@ function renderStatus(documentData) {
   text.textContent = documentData.summary || labels[state];
   summary.replaceChildren(dot, text);
   document.getElementById("status-updated").textContent = `Última actualización: ${formatDate(documentData.updatedAt)}`;
+
+  const components = Array.isArray(documentData.components) ? documentData.components.slice(0, 3) : componentIds.map((id) => ({ id, state: "unknown", summary: "Estado sin confirmar." }));
+  const componentContainer = document.getElementById("components");
+  const componentCards = components.map((component) => {
+    const componentState = Object.hasOwn(labels, component.state) ? component.state : "unknown";
+    const card = document.createElement("article");
+    card.className = "component-card";
+    const name = document.createElement("h3");
+    name.textContent = Object.hasOwn(componentLabels, component.id) ? componentLabels[component.id] : "Servicio";
+    const state = document.createElement("span");
+    state.className = `component-state ${componentState}`;
+    state.textContent = labels[componentState];
+    const summary = document.createElement("p");
+    summary.textContent = typeof component.summary === "string" ? component.summary : "Estado sin confirmar.";
+    card.append(name, state, summary);
+    return card;
+  });
+  componentContainer.replaceChildren(...componentCards);
 
   const container = document.getElementById("notices");
   const notices = Array.isArray(documentData.notices) ? documentData.notices.slice(0, 8) : [];

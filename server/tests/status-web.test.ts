@@ -19,6 +19,11 @@ describe("página estática de estado", () => {
     expect(script).toContain("textContent");
     expect(script).not.toContain("innerHTML");
     expect(script).toContain("60_000");
+    expect(script).toContain('componentContainer.replaceChildren(...componentCards)');
+    expect(script).toContain('api: "API"');
+    expect(script).toContain('sync: "Sincronización"');
+    expect(script).toContain('email: "Correo electrónico"');
+    expect(script).toContain("component.summary");
   });
 
   it("Caddy sirve la página y el documento aparte de Fastify", async () => {

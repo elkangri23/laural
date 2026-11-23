@@ -2,15 +2,28 @@ import { open } from "node:fs/promises";
 import { Ajv2020 } from "ajv/dist/2020.js";
 
 const MAX_STATUS_BYTES = 16 * 1024;
+const componentIds = ["api", "sync", "email"] as const;
 const statusSchema = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   type: "object",
   additionalProperties: false,
-  required: ["state", "summary", "updatedAt", "notices"],
+  required: ["state", "summary", "updatedAt", "components", "notices"],
   properties: {
     state: { enum: ["unknown", "operational", "degraded", "maintenance"] },
     summary: { type: "string", minLength: 1, maxLength: 240 },
     updatedAt: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,3})?Z$", maxLength: 40 },
+    components: {
+      type: "array", minItems: 3, maxItems: 3,
+      items: {
+        type: "object", additionalProperties: false,
+        required: ["id", "state", "summary"],
+        properties: {
+          id: { enum: componentIds },
+          state: { enum: ["unknown", "operational", "degraded", "maintenance"] },
+          summary: { type: "string", minLength: 1, maxLength: 120 },
+        },
+      },
+    },
     notices: {
       type: "array", maxItems: 8,
       items: {
@@ -31,6 +44,7 @@ export type PublicStatus = {
   state: "unknown" | "operational" | "degraded" | "maintenance";
   summary: string;
   updatedAt: string;
+  components: { id: (typeof componentIds)[number]; state: "unknown" | "operational" | "degraded" | "maintenance"; summary: string }[];
   notices: { kind: "incident" | "maintenance" | "notice"; title: string; message: string; updatedAt: string }[];
 };
 
@@ -52,7 +66,11 @@ export async function readPublicStatus(path?: string): Promise<PublicStatus> {
     await handle.close();
   }
   const parsed: unknown = JSON.parse(content);
-  if (!validateStatus(parsed) || !isValidUtc(parsed.updatedAt) || parsed.notices.some((notice) => !isValidUtc(notice.updatedAt))) {
+  if (!validateStatus(parsed)
+    || new Set(parsed.components.map((component) => component.id)).size !== componentIds.length
+    || !componentIds.every((id) => parsed.components.some((component) => component.id === id))
+    || !isValidUtc(parsed.updatedAt)
+    || parsed.notices.some((notice) => !isValidUtc(notice.updatedAt))) {
     throw new Error("Status document is invalid.");
   }
   return parsed;
@@ -72,6 +90,7 @@ export function unavailableStatus(): PublicStatus {
     state: "unknown",
     summary: "No se pudo comprobar el estado actualizado del servicio.",
     updatedAt: new Date().toISOString(),
+    components: componentIds.map((id) => ({ id, state: "unknown", summary: "Estado sin confirmar." })),
     notices: [],
   };
 }
