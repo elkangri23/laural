@@ -2180,6 +2180,9 @@ fn external_tool_is_high_risk(command: &str, executable: &str) -> bool {
     if executable == "netdom" {
         return netdom_command_is_high_risk(command);
     }
+    if executable == "powercfg" {
+        return powercfg_command_is_high_risk(command);
+    }
     if executable == "manage-bde" {
         return manage_bde_command_is_high_risk(command);
     }
@@ -2480,6 +2483,29 @@ fn netdom_command_is_high_risk(command: &str) -> bool {
         None | Some("/?") | Some("-?") | Some("/help") | Some("help") => false,
         Some("query") => arguments.any(|argument| argument.starts_with("/reset")),
         Some("verify") => false,
+        _ => true,
+    }
+}
+
+fn powercfg_command_is_high_risk(command: &str) -> bool {
+    let mut arguments = command.split_whitespace();
+    arguments.next();
+    match arguments.next() {
+        None
+        | Some("/?")
+        | Some("-help")
+        | Some("/list")
+        | Some("/l")
+        | Some("/query")
+        | Some("/q")
+        | Some("/getactivescheme")
+        | Some("/aliases")
+        | Some("/getsecuritydescriptor")
+        | Some("/devicequery")
+        | Some("/requests")
+        | Some("/lastwake")
+        | Some("/waketimers")
+        | Some("/a") => false,
         _ => true,
     }
 }
@@ -4229,6 +4255,49 @@ mod tests {
     }
 
     #[test]
+    fn exige_revision_para_cambios_de_energia_y_hibernacion() {
+        for command in [
+            "powercfg /change monitor-timeout-ac 5",
+            "powercfg /setactive esquema",
+            "powercfg /setacvalueindex esquema grupo ajuste 0",
+            "powercfg /setdcvalueindex esquema grupo ajuste 0",
+            "powercfg /hibernate off",
+            "powercfg /hibernate /size 100",
+            "powercfg /duplicatescheme esquema",
+            "powercfg /delete esquema",
+            "powercfg /import esquema archivo.pow",
+            "powercfg /export archivo.pow esquema",
+            "powercfg /energy /output informe.html",
+            "powercfg /batteryreport /output bateria.html",
+            "powercfg /setsecuritydescriptor ActionSetActive descriptor",
+            "powercfg /requestsoverride process ejemplo.exe system",
+            "powercfg /opcion-desconocida",
+        ] {
+            assert!(command_is_high_risk("cmd", command), "{command}");
+        }
+
+        for command in [
+            "powercfg",
+            "powercfg /?",
+            "powercfg -help",
+            "powercfg /list",
+            "powercfg /l",
+            "powercfg /query",
+            "powercfg /q esquema grupo",
+            "powercfg /getactivescheme",
+            "powercfg /aliases",
+            "powercfg /getsecuritydescriptor esquema",
+            "powercfg /devicequery wake_armed",
+            "powercfg /requests",
+            "powercfg /lastwake",
+            "powercfg /waketimers",
+            "powercfg /a",
+        ] {
+            assert!(!command_is_high_risk("cmd", command), "{command}");
+        }
+    }
+
+    #[test]
     fn exige_revision_para_modificar_credenciales_de_windows() {
         for (command, executable) in [
             (
@@ -4632,6 +4701,7 @@ mod tests {
                 "secedit /configure /db politica.sdb".into(),
                 "netdom join equipo /domain:ejemplo".into(),
                 "netdom query /domain:ejemplo /reset".into(),
+                "powercfg /hibernate off".into(),
                 "ssh servidor hostname".into(),
                 "Enter-PSSession servidor".into(),
                 "msiexec /i paquete.msi /quiet".into(),
@@ -4685,6 +4755,7 @@ mod tests {
             ("cmd", "secedit /configure /db politica.sdb"),
             ("cmd", "netdom join equipo /domain:ejemplo"),
             ("cmd", "netdom query /domain:ejemplo /reset"),
+            ("cmd", "powercfg /hibernate off"),
             ("git-bash", "ssh servidor hostname"),
             ("powershell", "Enter-PSSession servidor"),
             ("cmd", "msiexec /i paquete.msi /quiet"),
