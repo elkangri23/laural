@@ -566,6 +566,17 @@ mod terminal_tests {
     use std::sync::mpsc;
     use std::time::{Duration, Instant};
 
+    struct TestChild(Box<dyn Child + Send + Sync>);
+
+    impl Drop for TestChild {
+        fn drop(&mut self) {
+            if !matches!(self.0.try_wait(), Ok(Some(_))) {
+                let _ = self.0.kill();
+                let _ = self.0.wait();
+            }
+        }
+    }
+
     #[test]
     fn limita_identificadores_y_entradas_de_terminal() {
         assert!(valid_terminal_id("sesion-1"));
@@ -710,6 +721,158 @@ mod terminal_tests {
         assert!(shell_ready, "CMD no mostró el prompt dentro del plazo");
         assert!(ping_started, "CMD no inició ping dentro del plazo");
         assert!(shell_returned, "Ctrl+C no devolvió el prompt CMD");
+    }
+
+    #[test]
+    #[ignore = "prueba manual de carga con 16 procesos CMD y salida PTY concurrente"]
+    fn carga_concurrente_de_salida_en_el_limite_de_terminales() {
+        let session_count = MAX_TERMINAL_SESSIONS;
+        let line_count = 1_000;
+        let started = Instant::now();
+        let (output_tx, output_rx) = mpsc::channel::<(usize, Vec<u8>)>();
+        let mut masters: Vec<Box<dyn MasterPty + Send>> = Vec::with_capacity(session_count);
+        let mut writers: Vec<Box<dyn Write + Send>> = Vec::with_capacity(session_count);
+        let mut children: Vec<TestChild> = Vec::with_capacity(session_count);
+        let mut readers = Vec::with_capacity(session_count);
+
+        for session in 0..session_count {
+            let pair = native_pty_system().openpty(PtySize::default()).unwrap();
+            let mut reader = pair.master.try_clone_reader().unwrap();
+            let child = pair
+                .slave
+                .spawn_command(shell_command("cmd").unwrap())
+                .unwrap();
+            drop(pair.slave);
+            writers.push(pair.master.take_writer().unwrap());
+
+            let output_tx = output_tx.clone();
+            readers.push(thread::spawn(move || {
+                let mut buffer = [0_u8; 8 * 1024];
+                loop {
+                    match reader.read(&mut buffer) {
+                        Ok(0) | Err(_) => break,
+                        Ok(length) => {
+                            if output_tx
+                                .send((session, buffer[..length].to_vec()))
+                                .is_err()
+                            {
+                                break;
+                            }
+                        }
+                    }
+                }
+            }));
+            masters.push(pair.master);
+            children.push(TestChild(child));
+        }
+        drop(output_tx);
+
+        let markers: Vec<_> = (0..session_count)
+            .map(|session| {
+                format!("LAURAL-LOAD-{session}-{line_count}-abcdefghijklmnopqrstuvwxyz")
+                    .into_bytes()
+            })
+            .collect();
+        let mut outputs = vec![Vec::new(); session_count];
+        let mut cursor_answered = vec![false; session_count];
+        let mut script_sent = vec![false; session_count];
+        let mut exit_sent = vec![false; session_count];
+        let mut completed = vec![false; session_count];
+        let mut total_bytes = 0;
+        while completed.iter().any(|done| !done) {
+            let (session, bytes) = output_rx
+                .recv_timeout(Duration::from_secs(30))
+                .expect("las sesiones PTY no completaron la salida dentro del plazo");
+            total_bytes += bytes.len();
+            outputs[session].extend_from_slice(&bytes);
+
+            if !cursor_answered[session]
+                && outputs[session]
+                    .windows(4)
+                    .any(|window| window == b"\x1b[6n")
+            {
+                writers[session].write_all(b"\x1b[1;1R").unwrap();
+                writers[session].flush().unwrap();
+                cursor_answered[session] = true;
+            }
+            if !script_sent[session] && outputs[session].windows(5).any(|window| window == b"133;A")
+            {
+                let script = format!(
+                    "for /L %i in (1,1,{line_count}) do @echo LAURAL-LOAD-{session}-%i-abcdefghijklmnopqrstuvwxyz"
+                );
+                writers[session].write_all(script.as_bytes()).unwrap();
+                writers[session].write_all(b"\r").unwrap();
+                writers[session].flush().unwrap();
+                script_sent[session] = true;
+            }
+            if script_sent[session]
+                && !exit_sent[session]
+                && outputs[session]
+                    .windows(markers[session].len())
+                    .any(|window| window == markers[session])
+            {
+                writers[session].write_all(b"exit 0\r").unwrap();
+                writers[session].flush().unwrap();
+                exit_sent[session] = true;
+            }
+            completed[session] = exit_sent[session];
+        }
+
+        for (session, child) in children.iter_mut().enumerate() {
+            let deadline = Instant::now() + Duration::from_secs(5);
+            let status = loop {
+                if let Some(status) = child.0.try_wait().unwrap() {
+                    break status;
+                }
+                if Instant::now() >= deadline {
+                    panic!("La sesión PTY {session} no terminó tras emitir la marca final");
+                }
+                thread::sleep(Duration::from_millis(20));
+            };
+            assert_eq!(status.exit_code(), 0, "La sesión PTY {session} falló");
+        }
+
+        drop(masters);
+        for reader in readers {
+            reader.join().unwrap();
+        }
+        for (session, bytes) in output_rx.try_iter() {
+            total_bytes += bytes.len();
+            outputs[session].extend_from_slice(&bytes);
+        }
+        for (session, output) in outputs.iter().enumerate() {
+            let line_prefix = format!("LAURAL-LOAD-{session}-").into_bytes();
+            let received_lines = output
+                .windows(line_prefix.len())
+                .filter(|window| *window == line_prefix.as_slice())
+                .count();
+            assert!(
+                received_lines >= line_count,
+                "La sesión PTY {session} recibió {received_lines} líneas identificables"
+            );
+            assert!(
+                output
+                    .windows(markers[session].len())
+                    .any(|window| window == markers[session]),
+                "La sesión PTY {session} no recibió su última línea"
+            );
+            for (other, marker) in markers.iter().enumerate() {
+                if other != session {
+                    assert!(
+                        !output.windows(marker.len()).any(|window| window == marker),
+                        "La salida de la sesión {session} se mezcló con la sesión {other}"
+                    );
+                }
+            }
+        }
+
+        let elapsed = started.elapsed();
+        println!(
+            "{session_count} sesiones CMD; {} líneas; {total_bytes} bytes en {:.2} s ({:.1} KiB/s)",
+            session_count * line_count,
+            elapsed.as_secs_f64(),
+            total_bytes as f64 / elapsed.as_secs_f64() / 1024.0
+        );
     }
 
     // WSL and Git Bash are optional installations on end-user machines and CI runners.

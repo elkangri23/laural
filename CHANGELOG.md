@@ -1,6 +1,7 @@
 # Registro de cambios
 
 ## Sin publicar
+- Añadido un ensayo manual Windows del máximo de 16 sesiones CMD/ConPTY; comprueba 1.000 líneas por sesión, salida aislada y cierre correcto. Tres ejecuciones: 43,2–51,0 KiB/s. Documentada la limitación: no mide UI/IPC ni recursos de Laural completa. Suite Rust: 131 pasadas, 2 ignoradas; `cargo llvm-cov` no generó informe en MSVC. UI 162/162 (79,37 %); servicio 180/180 con PostgreSQL 16 (90,26 % de líneas / 80,01 % de ramas).
 - Añadido un gate de tamaño al build: falla si un bundle JavaScript supera 500 KiB. El build actual valida 10 bundles; el mayor mide 336,25 KB. Tests de frontera: 2/2; UI 162/162 (79,37 % de líneas); servicio 180/180 con PostgreSQL 16 (90,26 % de líneas / 80,01 % de ramas); build y gates de cobertura correctos.
 - Revalidada la cadena de dependencias: npm escritorio/servicio sin vulnerabilidades; gate Cargo de CI pasa. Se documentan cinco avisos transitivos sin mantenimiento y la excepción Linux de GLib; no hay actualización corregida disponible.
 - Añadida al roadmap una cuarta muestra pasiva de recursos de la instalación Windows y el resultado de la revisión visual intentada. Siete muestras en 42 s: 9 procesos, 127,3–127,4 MiB de working set, 253,7–253,9 MiB de memoria privada y CPU acumulada estable; no representa carga activa. La herramienta no pudo activar la ventana, por lo que la inspección visual sigue pendiente.
