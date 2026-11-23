@@ -1,15 +1,15 @@
 {
-  "version": "0.1.0-alpha.16",
-  "notes": "Actualización de Laural para Windows x64.\n\n## Novedades de alpha.16\n- La tarjeta lateral muestra el proveedor y modelo activos.\n- Los errores de proveedores ocultan la API key si el servidor la devuelve.\n- Se actualizó `cookie` a 0.18.3 para corregir RUSTSEC-2026-0594.\n\nConsulta [el registro de cambios](https://github.com/elkangri23/laural/blob/main/CHANGELOG.md) para el detalle. Esta versión sigue siendo una pre-release.",
-  "pub_date": "2026-11-23T11:54:34.475Z",
+  "version": "0.1.0-alpha.17",
+  "notes": "Actualización de Laural para Windows x64.\n\n## Novedades de alpha.17\n- El botón «Buscar ahora» respeta la opción de instalación automática o manual.\n\nConsulta [el registro de cambios](https://github.com/elkangri23/laural/blob/main/CHANGELOG.md) para el detalle. Esta versión sigue siendo una pre-release.",
+  "pub_date": "2026-11-23T12:34:53.686Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRT2xYT2o1K3RWWTdQcG1zWEpCVU12aENMdnY5QkQwclkwNVQ2eWFkcTdsSTZLaU5mSUYzTGJqNWIvMFUrQzA1MzRVbXNTakIzS0VHaEVZa254b082MUhTcXhHV3lJcGdFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1NDM0ODcxCWZpbGU6TGF1cmFsXzAuMS4wLWFscGhhLjE2X3g2NC1zZXR1cC5leGUJdmVyc2lvbjowLjEuMC1hbHBoYS4xNgp3eTVNZ21Xb2xJTDYxU1AxUVhWR2lCWEdlblV3K3Bic0dhcDZneUJIVU5OZXNPOTU5SkJhc0FTWHBUS0syeHk4Sm1VNnJBNVhOeDhpZ0o1SjZTRGpDUT09Cg==",
-      "url": "https://api.github.com/repos/elkangri23/laural/releases/assets/782749482"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRT2xYT2o1K3RWWXdXVGo0V08rWHRYamQxYjdoVkhFOTM3MDhyVWw2cWRPUmVmZmExSnBMelc3Qjg5MUFDQ2NDYzFuZ01VOVh2U0VwbUFVdVBHc1czUXlmUkhOWDZXV3dnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1NDM3MjkwCWZpbGU6TGF1cmFsXzAuMS4wLWFscGhhLjE3X3g2NC1zZXR1cC5leGUJdmVyc2lvbjowLjEuMC1hbHBoYS4xNwpzWHVyZ0ZIUG4zV3Zvejlsbmczanc5NGJBcTJFUXlWV0gwTXMyNUsxWkw0SHJybkV0LzFEdVVpbzROUXNTRXdBTmFWTVFZL3YyWVZpR2c4TTlCSUlDUT09Cg==",
+      "url": "https://api.github.com/repos/elkangri23/laural/releases/assets/782881520"
     },
     "windows-x86_64-nsis": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRT2xYT2o1K3RWWTdQcG1zWEpCVU12aENMdnY5QkQwclkwNVQ2eWFkcTdsSTZLaU5mSUYzTGJqNWIvMFUrQzA1MzRVbXNTakIzS0VHaEVZa254b082MUhTcXhHV3lJcGdFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1NDM0ODcxCWZpbGU6TGF1cmFsXzAuMS4wLWFscGhhLjE2X3g2NC1zZXR1cC5leGUJdmVyc2lvbjowLjEuMC1hbHBoYS4xNgp3eTVNZ21Xb2xJTDYxU1AxUVhWR2lCWEdlblV3K3Bic0dhcDZneUJIVU5OZXNPOTU5SkJhc0FTWHBUS0syeHk4Sm1VNnJBNVhOeDhpZ0o1SjZTRGpDUT09Cg==",
-      "url": "https://api.github.com/repos/elkangri23/laural/releases/assets/782749482"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRT2xYT2o1K3RWWXdXVGo0V08rWHRYamQxYjdoVkhFOTM3MDhyVWw2cWRPUmVmZmExSnBMelc3Qjg5MUFDQ2NDYzFuZ01VOVh2U0VwbUFVdVBHc1czUXlmUkhOWDZXV3dnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1NDM3MjkwCWZpbGU6TGF1cmFsXzAuMS4wLWFscGhhLjE3X3g2NC1zZXR1cC5leGUJdmVyc2lvbjowLjEuMC1hbHBoYS4xNwpzWHVyZ0ZIUG4zV3Zvejlsbmczanc5NGJBcTJFUXlWV0gwTXMyNUsxWkw0SHJybkV0LzFEdVVpbzROUXNTRXdBTmFWTVFZL3YyWVZpR2c4TTlCSUlDUT09Cg==",
+      "url": "https://api.github.com/repos/elkangri23/laural/releases/assets/782881520"
     }
   }
 }
