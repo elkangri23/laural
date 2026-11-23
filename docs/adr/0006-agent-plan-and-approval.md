@@ -36,3 +36,5 @@ Actualización M3: PowerShell, WSL y Git Bash ejecutan perfiles interactivos que
 Regresión M3: una orden `doskey` que define una macro de comando debe seguir pidiendo aprobación aunque coincida exactamente con una regla permitida. La clasificación de riesgo se evalúa antes de las reglas.
 
 Actualización M3: `taskkill` y `Stop-Computer` requieren aprobación manual en modos automático y por reglas porque pueden terminar procesos o apagar el equipo. `tasklist`, `Get-Process` y `Get-Command Stop-Computer` conservan su clasificación de lectura; las reglas no reducen la revisión requerida.
+
+Actualización M3: `git config` exige aprobación manual, tanto en llamada directa como con opciones globales como `-C` antes del subcomando. Incluye consultas de solo lectura por simplicidad; la clasificación evita que reglas persistentes agreguen aliases ejecutables o sustituyan comandos como `core.sshCommand`.

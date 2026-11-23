@@ -2106,12 +2106,13 @@ fn git_command_is_high_risk(command: &str) -> bool {
                     | "rebase"
                     | "merge"
                     | "cherry-pick"
+                    | "config"
             )
         });
     }
     match subcommand {
         "clean" | "reset" | "push" | "checkout" | "switch" | "restore" | "rm" | "rebase"
-        | "merge" | "cherry-pick" => true,
+        | "merge" | "cherry-pick" | "config" => true,
         "branch" => tokens.any(|argument| matches!(argument, "-d" | "-D" | "--delete")),
         _ => false,
     }
@@ -3622,6 +3623,8 @@ mod tests {
             "git clean -fd",
             "git -C proyecto reset --hard",
             "git -c advice.detachedHead=false push",
+            "git config --global alias.audit '!cmd /c calc.exe'",
+            "git -C proyecto config --local core.sshCommand 'powershell.exe'",
         ] {
             assert!(command_is_high_risk("git-bash", command), "{command}");
         }
@@ -4162,6 +4165,8 @@ mod tests {
                 "doskey git=del *".into(),
                 "taskkill /F /IM aplicacion.exe".into(),
                 "Stop-Computer -Force".into(),
+                "git config --global alias.audit status".into(),
+                "git -C proyecto config --local core.sshCommand 'powershell.exe'".into(),
             ],
             backup_retention: None,
         };
@@ -4186,6 +4191,11 @@ mod tests {
             ("cmd", "doskey git=del *"),
             ("cmd", "taskkill /F /IM aplicacion.exe"),
             ("powershell", "Stop-Computer -Force"),
+            ("git-bash", "git config --global alias.audit status"),
+            (
+                "wsl",
+                "git -C proyecto config --local core.sshCommand 'powershell.exe'",
+            ),
         ] {
             let result = authorize_agent_command_with_settings(shell, command, &settings);
             assert!(
