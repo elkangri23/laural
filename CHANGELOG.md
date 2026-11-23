@@ -3,7 +3,7 @@
 ## Sin publicar
 
 - Añadido un runbook para configurar Google OAuth, aplicar migraciones, activar gradualmente el flag, probar registro/vinculación/MFA y revertir. Corregido el runbook de recuperación para reflejar passkeys y Google implementados localmente pero todavía desactivados; credenciales y ensayo VPS siguen pendientes.
-- Ampliadas las regresiones OAuth: vincula una identidad verificada a una cuenta existente verificada y rechaza el correo local que aún no se verificó.
+- Ampliadas las regresiones OAuth unitarias y PostgreSQL real: vincula una identidad verificada a una cuenta existente verificada y rechaza el correo local que aún no se verificó. Se amplió a 15 s el límite de la prueba integral de login que usa Argon2, tras observar un timeout ocasional con el límite general de 5 s.
 - Añadido acceso y registro opcional con Google OIDC para las cuentas de sincronización. Usa `state`, `nonce` y PKCE de un solo uso, exige correo verificado, vincula identidades por `sub`, conserva TOTP y no almacena tokens Google. La migración 011, ADR-0047, UC-28 y guías quedaron documentadas; el flag sigue apagado hasta configurar credenciales y validar el VPS.
 - Verificación local: 159/159 pruebas con PostgreSQL 16 aislado; cobertura 89,60 % líneas / 80,05 % ramas. Build del servicio correcto y `npm audit` sin vulnerabilidades. Pendientes credenciales reales de Google Cloud, ensayo end-to-end y migración/validación en VPS.
 - La página pública de estado ahora muestra API, sincronización y correo por separado, con estados allowlist publicados manualmente; indica que no son comprobaciones en vivo y conserva fallback seguro y renderizado sin HTML.

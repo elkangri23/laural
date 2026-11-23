@@ -76,12 +76,14 @@ describePostgres("integración real de PostgreSQL para rate limits", () => {
 
   it("vincula Google por sub verificado y consume cada transacción una sola vez", async () => {
     let nonce = "";
+    let googleSubject = "integration-google-sub";
+    let googleEmail = "google@example.test";
     const oauthClient = {
       generateCodeVerifierAsync: async () => ({ codeVerifier: "v".repeat(43), codeChallenge: "c".repeat(43) }),
       generateAuthUrl: (options: { nonce: string; state: string }) => { nonce = options.nonce; return `https://accounts.google.com/auth?state=${options.state}`; },
       getToken: async () => ({ tokens: { id_token: "signed-test-token" } }),
       verifyIdToken: async () => ({ getPayload: () => ({
-        sub: "integration-google-sub", email: "google@example.test", email_verified: true, nonce,
+        sub: googleSubject, email: googleEmail, email_verified: true, nonce,
       }) }),
     } as unknown as OAuth2Client;
     const google = new GoogleOAuthService(isolatedPool, {
@@ -116,6 +118,34 @@ describePostgres("integración real de PostgreSQL para rate limits", () => {
       ["integration-google-sub"],
     );
     expect(identityCount.rows[0]?.count).toBe(1);
+
+    const linkedAccount = await isolatedPool.query<{ id: string }>(
+      `INSERT INTO accounts (email, display_name, email_verified_at) VALUES ($1, $2, now()) RETURNING id`,
+      ["verified@example.test", "Cuenta verificada"],
+    );
+    googleSubject = "integration-google-link";
+    googleEmail = "verified@example.test";
+    const thirdFlow = await createFlow(3);
+    const thirdUrl = await google.start(thirdFlow.cookieDigest, thirdFlow.csrfDigest);
+    const thirdState = new URL(thirdUrl).searchParams.get("state")!;
+    const linkedLogin = await google.finish(thirdState, "authorization-code");
+    expect(linkedLogin?.accountId).toBe(linkedAccount.rows[0]?.id);
+
+    await isolatedPool.query(
+      `INSERT INTO accounts (email, display_name) VALUES ($1, $2)`,
+      ["pending@example.test", "Cuenta sin verificar"],
+    );
+    googleSubject = "integration-google-unverified";
+    googleEmail = "pending@example.test";
+    const fourthFlow = await createFlow(4);
+    const fourthUrl = await google.start(fourthFlow.cookieDigest, fourthFlow.csrfDigest);
+    const fourthState = new URL(fourthUrl).searchParams.get("state")!;
+    expect(await google.finish(fourthState, "authorization-code")).toBeNull();
+    const unverifiedIdentityCount = await isolatedPool.query(
+      `SELECT count(*)::int AS count FROM account_identities WHERE provider = 'google' AND subject = $1`,
+      ["integration-google-unverified"],
+    );
+    expect(unverifiedIdentityCount.rows[0]?.count).toBe(0);
     const temporaryCount = await isolatedPool.query("SELECT count(*)::int AS count FROM google_oauth_transactions");
     expect(temporaryCount.rows[0]?.count).toBe(0);
   });
@@ -714,7 +744,7 @@ describePostgres("integración real de PostgreSQL para rate limits", () => {
     } finally {
       await app.close();
     }
-  });
+  }, 15_000);
 
   it("activa TOTP y exige factor de un solo uso en el login nativo con PostgreSQL real", async () => {
     const accountId = randomUUID();
