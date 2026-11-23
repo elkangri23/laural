@@ -2,6 +2,7 @@
 
 ## 0.1.0-alpha.17
 
+- Publicada el 23-11-2026 como pre-release NSIS x64 con instalador y manifiesto de actualización firmados y checksum verificado. SHA-256: `B965085B9EB6F193DBFE19BF1FB847FD1D179D0FB909EB791D7D62980A3B1DF8`.
 - Corregida la búsqueda manual de actualizaciones: ahora respeta el modo guardado. En modo automático descarga e instala reiniciando Laural; en modo manual deja la descarga lista para que el usuario decida cuándo instalar.
 
 ## 0.1.0-alpha.16
