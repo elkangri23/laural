@@ -2,6 +2,7 @@
 
 ## Sin publicar
 
+- Actualizado `cookie` de 0.18.2 a 0.18.3 para corregir el aviso RUSTSEC-2026-0594 publicado el 23-11-2026; la auditoría Rust vuelve a pasar salvo los avisos de crates sin mantenimiento ya documentados.
 - Los mensajes de error de proveedores ocultan la clave API si el servidor la devuelve en la respuesta, tanto al consultar modelos como en chat, streaming y planificación.
 - La tarjeta lateral deja de mostrar «Conecta tu modelo» cuando ya hay un proveedor activo; muestra el perfil y modelo seleccionados.
 - Validación manual de FreeLLMAPI desde la app: 311 modelos listados y respuesta de chat por streaming correctos. La clave guardada no se mostró ni modificó.
