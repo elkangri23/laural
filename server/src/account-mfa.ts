@@ -318,6 +318,23 @@ export class AccountMfaService {
     return result.rowCount === 1;
   }
 
+  async pendingMfaLoginAccountId(cookieToken: string, csrfToken: string, email: string): Promise<string | null> {
+    if (!/^[A-Za-z0-9_-]{43}$/.test(cookieToken) || !/^[A-Za-z0-9_-]{43}$/.test(csrfToken)) return null;
+    const cookieDigest = createHash("sha256").update(cookieToken).digest("hex");
+    const csrfDigest = createHash("sha256").update(csrfToken).digest("hex");
+    const result = await this.pool.query<{ account_id: string }>(
+      `SELECT f.mfa_account_id AS account_id
+         FROM native_auth_flows f
+         JOIN accounts a ON a.id = f.mfa_account_id
+         JOIN account_totp_factors t ON t.account_id = a.id AND t.enabled_at IS NOT NULL
+        WHERE f.cookie_digest = $1 AND f.csrf_digest = $2 AND lower(a.email) = $3
+          AND f.mfa_account_id IS NOT NULL AND f.consumed_at IS NULL AND f.expires_at > now()
+          AND f.attempts < 5 AND a.email_verified_at IS NOT NULL AND a.deleted_at IS NULL`,
+      [cookieDigest, csrfDigest, email.trim().toLowerCase()],
+    );
+    return result.rows[0]?.account_id ?? null;
+  }
+
   async completeMfaLogin(input: { cookieDigest: string; csrfDigest: string; email: string; proof: string; codeDigest: string }): Promise<AuthorizationRedirect | null> {
     const client = await this.pool.connect();
     try {

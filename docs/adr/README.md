@@ -47,6 +47,7 @@ Los ADR registran por qué se eligió una opción y qué costes trae. Un ADR ace
 | [0041](0041-interrupcion-aislada-de-terminal-windows.md) | Señales de interrupción aisladas por sesión ConPTY | Aceptada; el prototipo seguro sigue pendiente |
 | [0042](0042-passkeys-para-cuentas.md) | Passkeys passwordless con TOTP adicional y gestión web acotada | Aceptada; primera implementación local, despliegue pendiente |
 | [0043](0043-avisos-de-cambios-passkey.md) | Alta/baja de passkey notificadas mediante outbox transaccional | Aceptada; integración local, entrega Resend pendiente |
+| [0044](0044-limites-de-mfa-entre-flujos.md) | Limitar desafíos MFA entre flujos con cuenta vinculada y huella HMAC | Aceptada; implementación local, integración PostgreSQL pendiente de CI y despliegue VPS |
 
 ## Crear un ADR
 

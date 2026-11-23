@@ -150,6 +150,63 @@ describe("límites de acceso nativo por cuenta", () => {
     expect(login).toHaveBeenCalledTimes(10);
     expect(hits.get("native-login-email:persona@example.test")).toBe(11);
   });
+
+  it("comparte el límite TOTP entre flujos y toma la cuenta de la asociación validada", async () => {
+    const hits = new Map<string, number>();
+    const requestRateLimiter: RequestRateLimiter = {
+      consume: async (scope, key, maximum) => {
+        const counterKey = `${scope}:${key}`;
+        const count = (hits.get(counterKey) ?? 0) + 1;
+        hits.set(counterKey, count);
+        return count <= maximum;
+      },
+    };
+    const csrf = "c".repeat(43);
+    const cookieToken = "t".repeat(43);
+    const completeMfa = vi.fn<NativeAuthService["completeMfa"]>(async () => null);
+    const nativeAuth = {
+      isBrowserFlowValid: vi.fn(async (_cookie: string | null, submittedCsrf: string) => submittedCsrf === csrf),
+      completeMfa,
+    } as unknown as NativeAuthService;
+    const pendingMfaLoginAccountId = vi.fn(async (_cookie: string, _csrf: string, email: string) =>
+      email.trim().toLowerCase() === "persona@example.test" ? "account-123" : null);
+    const accountMfa = { pendingMfaLoginAccountId } as unknown as AccountMfaService;
+    const emailAuth = new EmailAuthService({
+      createUnverifiedAccount: async () => null,
+      createVerification: async () => null,
+      verifyEmail: async () => false,
+      createPasswordReset: async () => null,
+      checkPasswordReset: async () => false,
+      resetPassword: async () => false,
+    }, { sendVerification: async () => undefined, sendPasswordReset: async () => undefined }, "a-server-pepper-with-enough-entropy-for-this-test");
+    const app = createTestApp({ requestRateLimiter, emailAuth, nativeAuth, accountMfa });
+    const headers = { cookie: `__Host-laural-flow=${cookieToken}` };
+
+    const invalidFlow = await app.inject({
+      method: "POST", url: "/auth/native/login/mfa", remoteAddress: "198.51.100.1", headers,
+      payload: { csrf: "x".repeat(43), email: "persona@example.test", proof: "123456" },
+    });
+    expect(invalidFlow.statusCode).toBe(400);
+    expect(pendingMfaLoginAccountId).not.toHaveBeenCalled();
+
+    const unrelatedEmail = await app.inject({
+      method: "POST", url: "/auth/native/login/mfa", remoteAddress: "198.51.100.2", headers,
+      payload: { csrf, email: "otra@example.test", proof: "123456" },
+    });
+    expect(unrelatedEmail.statusCode).toBe(400);
+    expect(hits.has("native-mfa-account:account-123")).toBe(false);
+
+    for (let index = 0; index < 11; index += 1) {
+      const response = await app.inject({
+        method: "POST", url: "/auth/native/login/mfa", remoteAddress: `198.51.100.${index + 10}`, headers,
+        payload: { csrf, email: " PERSONA@example.test ", proof: "123456" },
+      });
+      expect(response.statusCode).toBe(index < 10 ? 400 : 429);
+      if (index === 10) expect(response.headers["retry-after"]).toBe("300");
+    }
+    expect(completeMfa).toHaveBeenCalledTimes(11);
+    expect(hits.get("native-mfa-account:account-123")).toBe(11);
+  });
 });
 
 describe("rutas de passkeys", () => {

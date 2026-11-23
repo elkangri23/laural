@@ -26,6 +26,23 @@ function testPool(respond: (sql: string, values?: unknown[]) => { rows: unknown[
 }
 
 describe("servicio MFA de cuenta", () => {
+  it("resuelve la cuenta MFA solo desde un flujo activo ligado a la identidad almacenada", async () => {
+    const test = testPool((sql) => sql.includes("FROM native_auth_flows")
+      ? { rows: [{ account_id: accountId }] }
+      : { rows: [] });
+    const service = new AccountMfaService(test.pool, encryptionKey, recoveryPepper);
+    await expect(service.pendingMfaLoginAccountId(token, "c".repeat(43), " USER@EXAMPLE.TEST ")).resolves.toBe(accountId);
+    expect(test.statements[0]?.sql).toContain("f.mfa_account_id IS NOT NULL");
+    expect(test.statements[0]?.sql).toContain("f.attempts < 5");
+    expect(test.statements[0]?.sql).toContain("t.enabled_at IS NOT NULL");
+    expect(test.statements[0]?.values?.[0]).not.toBe(token);
+    expect(test.statements[0]?.values?.[1]).not.toBe("c".repeat(43));
+    expect(test.statements[0]?.values?.[2]).toBe("user@example.test");
+
+    await expect(service.pendingMfaLoginAccountId("bad", "c".repeat(43), "user@example.test")).resolves.toBeNull();
+    expect(test.statements).toHaveLength(1);
+  });
+
   it("valida secretos de configuración y rechaza una sesión que no es reciente", async () => {
     expect(() => new AccountMfaService({} as Pool, Buffer.alloc(31), recoveryPepper)).toThrow("32 bytes");
     expect(() => new AccountMfaService({} as Pool, encryptionKey, "short")).toThrow("32 bytes");

@@ -204,11 +204,17 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
       preHandler: limited(rateLimit, "native-mfa-login", 10, 60),
       schema: { body: nativeMfaLoginSchema },
     }, async (request, reply) => {
-      if (!await nativeAuth.isBrowserFlowValid(readCookie(request.headers.cookie, FLOW_COOKIE), request.body.csrf)) {
+      const cookieToken = readCookie(request.headers.cookie, FLOW_COOKIE);
+      if (!await nativeAuth.isBrowserFlowValid(cookieToken, request.body.csrf)) {
         return reply.code(400).type("text/html; charset=utf-8").send(renderAuthPage("", "La sesión de autenticación caducó. Vuelve a iniciar el proceso en Laural."));
       }
+      const accountId = await accountMfa?.pendingMfaLoginAccountId(cookieToken ?? "", request.body.csrf, request.body.email);
+      if (accountId && !await rateLimit.consume("native-mfa-account", accountId, 10, 300)) {
+        return reply.header("Retry-After", "300").code(429).type("text/html; charset=utf-8")
+          .send(renderMfaPage(request.body.csrf, request.body.email, "Demasiados intentos para esta cuenta. Espera cinco minutos antes de volver a intentarlo."));
+      }
       const result = await nativeAuth.completeMfa({
-        cookieToken: readCookie(request.headers.cookie, FLOW_COOKIE) ?? "",
+        cookieToken: cookieToken ?? "",
         csrfToken: request.body.csrf,
         email: request.body.email,
         proof: request.body.proof,

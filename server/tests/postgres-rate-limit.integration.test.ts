@@ -679,12 +679,15 @@ describePostgres("integración real de PostgreSQL para rate limits", () => {
       nativeAuth: new NativeAuthService(new PostgresNativeAuthStore(isolatedPool), mfa),
     });
 
-    async function newFlow() {
+    async function newFlow(remoteAddress?: string) {
       const verifier = randomBytes(32).toString("base64url");
       const challenge = createHash("sha256").update(verifier).digest("base64url");
       const state = randomBytes(32).toString("base64url");
       const redirectUri = "http://127.0.0.1:49152/callback";
-      const response = await app.inject({ method: "GET", url: `/auth/native?${new URLSearchParams({ redirect_uri: redirectUri, state, code_challenge: challenge, code_challenge_method: "S256" })}` });
+      const response = await app.inject({
+        method: "GET", url: `/auth/native?${new URLSearchParams({ redirect_uri: redirectUri, state, code_challenge: challenge, code_challenge_method: "S256" })}`,
+        ...(remoteAddress ? { remoteAddress } : {}),
+      });
       return {
         verifier,
         state,
@@ -694,19 +697,21 @@ describePostgres("integración real de PostgreSQL para rate limits", () => {
       };
     }
 
-    async function passwordLogin() {
-      const flow = await newFlow();
+    async function passwordLogin(remoteAddress?: string) {
+      const flow = await newFlow(remoteAddress);
       const response = await app.inject({
         method: "POST", url: "/auth/native/login",
+        ...(remoteAddress ? { remoteAddress } : {}),
         headers: { cookie: flow.cookie, "content-type": "application/x-www-form-urlencoded" },
         payload: new URLSearchParams({ csrf: flow.csrf, email, password: "clave MFA integración segura 2026" }).toString(),
       });
       return { flow, response };
     }
 
-    async function completeMfa(flow: Awaited<ReturnType<typeof newFlow>>, proof: string) {
+    async function completeMfa(flow: Awaited<ReturnType<typeof newFlow>>, proof: string, remoteAddress?: string) {
       return app.inject({
         method: "POST", url: "/auth/native/login/mfa",
+        ...(remoteAddress ? { remoteAddress } : {}),
         headers: { cookie: flow.cookie, "content-type": "application/x-www-form-urlencoded" },
         payload: new URLSearchParams({ csrf: flow.csrf, email, proof }).toString(),
       });
@@ -745,6 +750,30 @@ describePostgres("integración real de PostgreSQL para rate limits", () => {
       const backupReplayFlow = await passwordLogin();
       expect((await completeMfa(backupReplayFlow.flow, recoveryCodes[0]!)).statusCode).toBe(400);
       expect((await mfa.status(accountId)).recoveryCodesRemaining).toBe(9);
+
+      await isolatedPool.query(
+        "UPDATE request_rate_limits SET window_started_at = now() - interval '10 minutes' WHERE scope = $1",
+        ["native-login-email"],
+      );
+      for (let attempt = 0; attempt < 7; attempt += 1) {
+        const remoteAddress = `198.51.100.${attempt + 30}`;
+        const pending = await passwordLogin(remoteAddress);
+        expect(pending.response.statusCode).toBe(200);
+        const response = await completeMfa(pending.flow, "000000", remoteAddress);
+        expect(response.statusCode).toBe(attempt < 6 ? 400 : 429);
+        if (attempt === 6) expect(response.headers["retry-after"]).toBe("300");
+      }
+      const mfaLimitDigest = createHmac("sha256", "integracion-rate-limit-pepper-32-bytes-minimo")
+        .update("native-mfa-account")
+        .update("\0")
+        .update(accountId)
+        .digest("hex");
+      const storedMfaLimit = await isolatedPool.query<{ key_digest: string; request_count: number }>(
+        "SELECT key_digest, request_count FROM request_rate_limits WHERE scope = $1",
+        ["native-mfa-account"],
+      );
+      expect(storedMfaLimit.rows).toEqual([{ key_digest: mfaLimitDigest, request_count: 11 }]);
+      expect(JSON.stringify(storedMfaLimit.rows)).not.toContain(accountId);
 
       const pendingCodes = await app.inject({ method: "POST", url: "/v1/auth/mfa/recovery-codes/rotate", headers: { authorization: `Bearer ${sessionToken}` } });
       expect(pendingCodes.statusCode).toBe(200);
