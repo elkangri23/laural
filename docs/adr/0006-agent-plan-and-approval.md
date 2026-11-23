@@ -46,3 +46,5 @@ Actualización M3: los runtimes y ejecutores alternativos `npx`, `pnpm`, `yarn`,
 Actualización M3: las mutaciones de credenciales de Windows con `cmdkey` y `vaultcmd` requieren aprobación manual; se mantienen disponibles consultas de listado y ayuda. Operaciones desconocidas requieren revisión.
 
 Actualización M3: clientes SSH/SCP/SFTP y PuTTY, PsExec, WinRS, `ssh-add` y cmdlets de gestión de sesiones remotas PowerShell requieren aprobación manual. Cambiar a un host remoto modifica el destino y el alcance de la acción; la aprobación ocurre antes de las reglas exactas.
+
+Actualización M3: `msiexec`, `wmic`, `bitsadmin` y `certutil` se tratan como lanzadores de sistema de alto impacto y requieren aprobación antes de reglas o ejecución automática.

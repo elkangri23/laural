@@ -189,6 +189,10 @@ Revisión de credenciales Windows (23-11-2026): `cmdkey` y `vaultcmd` no requer�
 
 Revisión de acceso remoto (23-11-2026): herramientas SSH/SCP/SFTP y PuTTY, PsExec, WinRS y cmdlets de sesión remota PowerShell no requerían revisión manual. Ahora el filtro identifica esos ejecutables, acciones de sesión remota y `ssh-add` antes de reglas. Las regresiones cubren variantes Windows y POSIX, nombres de cmdlet y aliases de PSSession.
 
+Revisión de utilidades Windows (23-11-2026): `msiexec`, `wmic`, `bitsadmin` y `certutil` podían instalar, ejecutar procesos o gestionar transferencias/certificados sin revisión manual. Se añaden a la lista conservadora de lanzadores, con regresiones y una comprobación de precedencia sobre reglas.
+
+Verificación: Rust 130 pasadas y 1 ignorada; interfaz 161/161, 79,18 % de líneas; ocho gates de cobertura y `cargo fmt --check` pasan. `cargo llvm-cov` ejecuta las pruebas, pero MSVC no genera datos para el informe.
+
 Verificación: Rust 130 pasadas y 1 ignorada; interfaz 161/161, 79,18 % de líneas; ocho gates de cobertura y `cargo fmt --check` pasan. `cargo llvm-cov` ejecuta las pruebas, pero Windows/MSVC no genera el informe.
 
 Verificación: Rust 130 pasadas y 1 ignorada; UI 161/161, 79,18 % de líneas; ocho gates de cobertura y `cargo fmt --check` pasan. `cargo llvm-cov` ejecuta Rust pero no genera informe en Windows/MSVC.

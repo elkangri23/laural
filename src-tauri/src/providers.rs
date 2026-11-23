@@ -1937,6 +1937,7 @@ fn command_is_high_risk(shell: &str, command: &str) -> bool {
     ];
     let script_launchers = [
         "bash",
+        "bitsadmin",
         "bun",
         "bunx",
         "busybox",
@@ -1944,10 +1945,12 @@ fn command_is_high_risk(shell: &str, command: &str) -> bool {
         "command",
         "corepack",
         "cscript",
+        "certutil",
         "deno",
         "env",
         "exec",
         "mshta",
+        "msiexec",
         "node",
         "nohup",
         "npx",
@@ -1976,6 +1979,7 @@ fn command_is_high_risk(shell: &str, command: &str) -> bool {
         "uvx",
         "winrs",
         "wscript",
+        "wmic",
         "wsl",
         "yarn",
         "xargs",
@@ -3840,6 +3844,10 @@ mod tests {
             ("powershell", "csn -Session $sesion"),
             ("powershell", "dsn -Session $sesion"),
             ("powershell", "rsn -Session $sesion"),
+            ("cmd", "msiexec /i paquete.msi /quiet"),
+            ("powershell", "wmic process call create notepad.exe"),
+            ("cmd", "bitsadmin /create tarea"),
+            ("git-bash", "certutil -decode entrada.b64 salida.exe"),
             ("wsl", "find . -type f -delete"),
             ("git-bash", "find . -exec rm -rf {} +"),
             ("wsl", "find -delete"),
@@ -4399,6 +4407,7 @@ mod tests {
                 "vaultcmd /deletecreds /vault:WindowsVault".into(),
                 "ssh servidor hostname".into(),
                 "Enter-PSSession servidor".into(),
+                "msiexec /i paquete.msi /quiet".into(),
             ],
             backup_retention: None,
         };
@@ -4434,6 +4443,7 @@ mod tests {
             ("powershell", "vaultcmd /deletecreds /vault:WindowsVault"),
             ("git-bash", "ssh servidor hostname"),
             ("powershell", "Enter-PSSession servidor"),
+            ("cmd", "msiexec /i paquete.msi /quiet"),
         ] {
             let result = authorize_agent_command_with_settings(shell, command, &settings);
             assert!(
