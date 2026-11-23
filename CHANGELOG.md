@@ -2,6 +2,7 @@
 
 ## Sin publicar
 
+- La regresión del transporte PTY cubre el máximo exacto de 32 KiB y el rechazo del byte adicional.
 - El decodificador PTY acepta solo Base64 estándar con relleno canónico; rechaza espacios, caracteres ajenos al alfabeto y relleno omitido antes de decodificar.
 - El formato de evento PTY Base64 ahora usa un fixture compartido por Rust y TypeScript, con una prueba en cada runtime para evitar divergencias del contrato.
 - Las terminales inactivas detienen el parpadeo del cursor; solo la visible y activa mantiene la animación, que se reactiva al volver a ella.

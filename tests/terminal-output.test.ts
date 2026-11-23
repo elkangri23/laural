@@ -132,6 +132,11 @@ test("decodifica los bytes del PTY en Base64 y rechaza datos malformados", () =>
   expect(decodeTerminalOutput("A".repeat(44_000))).toBeNull();
 });
 
+test("acepta la salida máxima del PTY y rechaza un byte adicional", () => {
+  expect(decodeTerminalOutput(btoa("x".repeat(32 * 1024)))).toHaveLength(32 * 1024);
+  expect(decodeTerminalOutput(btoa("x".repeat(32 * 1024 + 1)))).toBeNull();
+});
+
 test("decodifica el mismo evento PTY que genera Rust según el fixture compartido", () => {
   const bytes = decodeTerminalOutput(fixture.dataBase64);
 
