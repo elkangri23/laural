@@ -36,10 +36,8 @@ jobs:
           releaseBody: |
             Actualización de Laural para Windows x64.
 
-            ## Novedades de alpha.16
-            - La tarjeta lateral muestra el proveedor y modelo activos.
-            - Los errores de proveedores ocultan la API key si el servidor la devuelve.
-            - Se actualizó `cookie` a 0.18.3 para corregir RUSTSEC-2026-0594.
+            ## Novedades de alpha.17
+            - El botón «Buscar ahora» respeta la opción de instalación automática o manual.
 
             Consulta [el registro de cambios](https://github.com/elkangri23/laural/blob/main/CHANGELOG.md) para el detalle. Esta versión sigue siendo una pre-release.
           prerelease: true

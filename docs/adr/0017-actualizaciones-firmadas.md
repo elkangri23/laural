@@ -13,6 +13,8 @@ Usar el plugin oficial `tauri-plugin-updater` de Tauri 2. La app consulta un man
 
 La primera ejecución solicita preferencia: avisar y esperar confirmación, o descargar e instalar automáticamente. La opción manual es la predeterminada si se cierra el diálogo. La app consulta al abrir y cada seis horas. La instalación Windows reinicia Laural. La versión se muestra en **Configuración → Actualizaciones**.
 
+La acción **Buscar ahora** aplica la misma preferencia guardada: el modo automático instala después de descargar; el modo manual deja el paquete preparado y espera la acción **Instalar y reiniciar**.
+
 ## Consecuencias
 
 - Las actualizaciones se descargan solo desde URLs HTTPS y la firma criptográfica del paquete se valida antes de instalar.

@@ -93,6 +93,24 @@ test("el modo automático descarga e instala al detectar una versión nueva", as
   expect(mocks.install).toHaveBeenCalledWith({ restartAfterInstall: true });
 });
 
+test("Buscar ahora respeta el modo automático configurado", async () => {
+  const update = { version: "0.1.0-alpha.16", download: mocks.download, install: mocks.install, close: mocks.close };
+  localStorage.setItem("laural.update-mode.v1", "automatic");
+  mocks.check.mockResolvedValueOnce(null).mockResolvedValueOnce(update);
+  root = createRoot(host);
+  await act(async () => {
+    root!.render(<UpdateManager settingsOpen onSettingsOpen={vi.fn()} onSettingsClose={vi.fn()} />);
+    await Promise.resolve();
+  });
+
+  await act(async () => [...host.querySelectorAll("button")].find((button) => button.textContent === "Buscar ahora")!.click());
+
+  expect(mocks.check).toHaveBeenCalledTimes(2);
+  expect(mocks.download).toHaveBeenCalledTimes(1);
+  expect(mocks.install).toHaveBeenCalledWith({ restartAfterInstall: true });
+  expect(host.textContent).not.toContain("está lista para instalar");
+});
+
 test("formatea el avance sin superar el cien por cien", () => {
   expect(formatDownloadProgress(512, 2048)).toBe("25%");
   expect(formatDownloadProgress(4096, 2048)).toBe("100%");

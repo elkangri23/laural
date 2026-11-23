@@ -147,7 +147,7 @@ export function UpdateManager({ settingsOpen, onSettingsOpen, onSettingsClose }:
         <p className="update-message" role="status">{message || "Las actualizaciones se consultan cada seis horas."}</p>
         {progress && status === "downloading" && <progress className="update-progress" aria-label={`Progreso de descarga: ${progress}`} value={progressValue ?? undefined} max="100" />}
         <div className="update-actions">
-          <button className="secondary-button" onClick={() => void checkForUpdates(false)} disabled={status === "checking" || status === "downloading" || status === "installing"}>Buscar ahora</button>
+          <button className="secondary-button" onClick={() => void checkForUpdates(mode === "automatic")} disabled={status === "checking" || status === "downloading" || status === "installing"}>Buscar ahora</button>
           {status === "available" && <button className="primary-button" onClick={() => { const update = updateRef.current; if (update) void downloadUpdate(update, false).catch(() => { setStatus("error"); setMessage("No se pudo descargar la actualización."); }); }}>Descargar {availableVersion}</button>}
           {status === "ready" && <button className="primary-button" onClick={() => { const update = updateRef.current; if (update) void installAvailable(update).catch(() => { setStatus("error"); setMessage("No se pudo iniciar el instalador."); }); }}>Instalar y reiniciar</button>}
         </div>
