@@ -2,6 +2,7 @@
 
 ## Sin publicar
 
+- El agente requiere aprobación para operaciones de `pnputil` que instalan o eliminan controladores, cambian el estado de dispositivos o escriben exportaciones; las enumeraciones sin salida a archivo y la ayuda siguen siendo de lectura.
 - El agente ahora exige revisión para comandos `netsh` interactivos o que modifiquen red/firewall, y para exportaciones que revelen claves Wi-Fi en texto claro; conserva ayuda y consultas de solo lectura.
 - El filtro del agente ahora requiere revisión para crear, modificar, renombrar o eliminar grupos/cuentas locales y para crear, retirar, reanudar o suspender servicios; las consultas `Get-*` siguen siendo de lectura.
 - El agente ahora exige revisión para cmdlets PowerShell que crean, limitan, borran o escriben en registros clásicos de eventos; las consultas de eventos siguen siendo de lectura.

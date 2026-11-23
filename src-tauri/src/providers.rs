@@ -2112,6 +2112,9 @@ fn external_tool_is_high_risk(command: &str, executable: &str) -> bool {
     if executable == "netsh" {
         return netsh_command_is_high_risk(command);
     }
+    if executable == "pnputil" {
+        return pnputil_command_is_high_risk(command);
+    }
     let mut arguments = command.split_whitespace();
     arguments.next();
     let Some(subcommand) = arguments.next() else {
@@ -2264,6 +2267,24 @@ fn external_tool_is_high_risk(command: &str, executable: &str) -> bool {
         "brew" => matches!(subcommand, "install" | "uninstall" | "upgrade"),
         _ => false,
     }
+}
+
+fn pnputil_command_is_high_risk(command: &str) -> bool {
+    let arguments = command
+        .split_whitespace()
+        .skip(1)
+        .map(|argument| argument.trim_matches('"').to_ascii_lowercase())
+        .collect::<Vec<_>>();
+    let Some(operation) = arguments.first() else {
+        return false;
+    };
+    if matches!(operation.as_str(), "/?" | "/h" | "/help") {
+        return false;
+    }
+    if operation.starts_with("/enum-") {
+        return arguments.iter().any(|argument| argument == "/output-file");
+    }
+    true
 }
 
 fn netsh_command_is_high_risk(command: &str) -> bool {
@@ -3713,6 +3734,33 @@ mod tests {
             ("cmd", "netsh advfirewall dump"),
         ] {
             assert!(!command_is_high_risk(shell, command), "{shell}: {command}");
+        }
+    }
+
+    #[test]
+    fn exige_revision_para_cambios_de_controladores_y_dispositivos() {
+        for command in [
+            "pnputil /add-driver C:\\drivers\\device.inf /install",
+            "pnputil /delete-driver oem42.inf /uninstall",
+            "pnputil /disable-device USB\\VID_1234",
+            "pnputil /enable-device USB\\VID_1234",
+            "pnputil /restart-device USB\\VID_1234",
+            "pnputil /remove-device USB\\VID_1234",
+            "pnputil /scan-devices",
+            "pnputil /export-driver * C:\\backup",
+            "pnputil /enum-devices /output-file C:\\devices.xml",
+            "pnputil /unknown-operation",
+        ] {
+            assert!(external_tool_is_high_risk(command, "pnputil"), "{command}");
+        }
+
+        for command in [
+            "pnputil /?",
+            "pnputil /enum-drivers",
+            "pnputil /enum-devices /connected",
+            "pnputil /enum-classes",
+        ] {
+            assert!(!external_tool_is_high_risk(command, "pnputil"), "{command}");
         }
     }
 
