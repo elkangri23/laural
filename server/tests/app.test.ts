@@ -10,6 +10,7 @@ import type { AccountDeletionService } from "../src/account-deletion.js";
 import type { AccountPasskeyService } from "../src/account-passkeys.js";
 import type { RequestRateLimiter } from "../src/request-rate-limit.js";
 import type { GoogleOAuthService } from "../src/google-oauth.js";
+import type { AccountRecoveryService } from "../src/account-recovery.js";
 
 const snapshot: PreferenceSnapshot = {
   schemaVersion: 1,
@@ -66,7 +67,7 @@ class MemoryStore implements PreferenceStore {
 }
 
 const instances: Array<ReturnType<typeof createApp>> = [];
-function createTestApp(options: { store?: PreferenceStore; checkReadiness?: () => Promise<void>; emailAuth?: EmailAuthService; nativeAuth?: NativeAuthService; accountRecoveryEnabled?: boolean; accountMfa?: AccountMfaService; accountDeletion?: AccountDeletionService; accountPasskeys?: AccountPasskeyService; googleOAuth?: GoogleOAuthService; requestRateLimiter?: RequestRateLimiter; revokeSession?: (accountId: string, authorization: string | undefined) => Promise<boolean>; listAccountSessions?: (accountId: string, authorization: string | undefined) => Promise<{ id: string; createdAt: string; expiresAt: string; current: boolean }[]>; revokeAccountSession?: (accountId: string, authorization: string | undefined, sessionId: string) => Promise<boolean>; revokeOtherSessions?: (accountId: string, authorization: string | undefined) => Promise<number> } = {}): ReturnType<typeof createApp> {
+function createTestApp(options: { store?: PreferenceStore; checkReadiness?: () => Promise<void>; emailAuth?: EmailAuthService; nativeAuth?: NativeAuthService; accountRecoveryEnabled?: boolean; accountRecovery?: AccountRecoveryService; accountMfa?: AccountMfaService; accountDeletion?: AccountDeletionService; accountPasskeys?: AccountPasskeyService; googleOAuth?: GoogleOAuthService; requestRateLimiter?: RequestRateLimiter; revokeSession?: (accountId: string, authorization: string | undefined) => Promise<boolean>; listAccountSessions?: (accountId: string, authorization: string | undefined) => Promise<{ id: string; createdAt: string; expiresAt: string; current: boolean }[]>; revokeAccountSession?: (accountId: string, authorization: string | undefined, sessionId: string) => Promise<boolean>; revokeOtherSessions?: (accountId: string, authorization: string | undefined) => Promise<number> } = {}): ReturnType<typeof createApp> {
   const store = options.store ?? new MemoryStore();
   const requestRateLimiter = options.requestRateLimiter ?? new TestRateLimiter();
   const app = createApp({
@@ -88,6 +89,7 @@ function createTestApp(options: { store?: PreferenceStore; checkReadiness?: () =
     ...(options.accountPasskeys ? { accountPasskeys: options.accountPasskeys } : {}),
     ...(options.googleOAuth ? { googleOAuth: options.googleOAuth } : {}),
     ...(options.accountRecoveryEnabled ? { accountRecoveryEnabled: true } : {}),
+    ...(options.accountRecovery ? { accountRecovery: options.accountRecovery } : {}),
   });
   instances.push(app);
   return app;
@@ -106,6 +108,32 @@ class TestRateLimiter implements RequestRateLimiter {
 
 afterEach(async () => {
   await Promise.all(instances.splice(0).map((app) => app.close()));
+});
+
+describe("alta del factor tras recuperación", () => {
+  it("limita el flujo al enrolamiento y exige CSRF antes de confirmar", async () => {
+    const accountRecovery = {
+      startEnrollment: vi.fn(async () => ({ cookieToken: "c".repeat(43), csrfToken: "s".repeat(43), secret: "A".repeat(32), provisioningUri: "otpauth://totp/Laural:test?secret=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" })),
+      confirmEnrollment: vi.fn(async () => ["AAAA-BBBB-CCCC-DDDD"]),
+    } as unknown as AccountRecoveryService;
+    const app = createTestApp({ accountRecovery });
+    const page = await app.inject({ method: "GET", url: "/auth/recovery" });
+    expect(page.statusCode).toBe(200);
+    expect(page.body).toContain("sustituir factores anteriores");
+    expect(page.headers["content-security-policy"]).toContain("default-src 'none'");
+    const start = await app.inject({ method: "POST", url: "/auth/recovery/start", payload: { ticket: "t".repeat(43) } });
+    expect(start.statusCode).toBe(200);
+    expect(start.headers["set-cookie"]).toContain("HttpOnly; Secure; SameSite=Strict");
+    expect(accountRecovery.startEnrollment).toHaveBeenCalledWith("t".repeat(43));
+    const cookie = `__Host-laural-recovery-flow=${"c".repeat(43)}`;
+    const denied = await app.inject({ method: "POST", url: "/auth/recovery/confirm", headers: { cookie }, payload: { csrf: "s".repeat(43), code: "123456" } });
+    expect(denied.statusCode).toBe(403);
+    expect(accountRecovery.confirmEnrollment).not.toHaveBeenCalled();
+    const confirmed = await app.inject({ method: "POST", url: "/auth/recovery/confirm", headers: { cookie, "x-csrf-token": "s".repeat(43) }, payload: { csrf: "s".repeat(43), code: "123456" } });
+    expect(confirmed.statusCode).toBe(200);
+    expect(confirmed.json()).toEqual({ recoveryCodes: ["AAAA-BBBB-CCCC-DDDD"] });
+    expect(confirmed.headers["set-cookie"]).toContain("Max-Age=0");
+  });
 });
 
 describe("rutas MFA de cuenta", () => {

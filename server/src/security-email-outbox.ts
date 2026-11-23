@@ -5,7 +5,7 @@ const MAX_BATCH_SIZE = 50;
 const CLAIM_TIMEOUT = "5 minutes";
 const MAX_RETRY_DELAY_SECONDS = 6 * 60 * 60;
 
-export type SecurityEmailEvent = "totp_enabled" | "recovery_codes_rotated" | "totp_disabled" | "passkey_added" | "passkey_removed";
+export type SecurityEmailEvent = "totp_enabled" | "recovery_codes_rotated" | "totp_disabled" | "passkey_added" | "passkey_removed" | "account_recovered";
 
 export interface SecurityEmailSender {
   sendSecurityNotice(input: { email: string; eventType: SecurityEmailEvent; notificationId: string }): Promise<void>;

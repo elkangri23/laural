@@ -1,15 +1,16 @@
 import pg from "pg";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { readConfig } from "./config.js";
+import { readConfig, readEmailAuthConfig } from "./config.js";
 import { isOperator, listPendingRecoveryCases, recordRecoveryDecision, type RecoveryDecision, type RecoveryEvidence } from "./account-recovery-admin.js";
 
-type AdminPool = Pick<pg.Pool, "query" | "end">;
+type AdminPool = Pick<pg.Pool, "query" | "connect" | "end">;
 type CliDependencies = {
   args: string[];
   platform: NodeJS.Platform;
   uid: number | undefined;
   sudoUser: string | undefined;
+  recoveryPepper?: string;
   createPool?: () => AdminPool;
   stdout?: (message: string) => void;
   stderr?: (message: string) => void;
@@ -63,13 +64,21 @@ async function decideCase(
     return 2;
   }
   try {
-    const updated = await withDatabase(input, (pool) => recordRecoveryDecision(pool, { caseId, decision, evidence, operator }));
+    if (decision === "approved" && (!input.recoveryPepper || Buffer.byteLength(input.recoveryPepper, "utf8") < 32)) {
+      error("No se puede aprobar sin AUTH_RECOVERY_PEPPER configurado para proteger el enlace.");
+      return 1;
+    }
+    const updated = await withDatabase(input, (pool) => recordRecoveryDecision(pool, {
+      caseId, decision, evidence, operator, recoveryPepper: input.recoveryPepper ?? "",
+    }));
     if (!updated) {
       error("Caso inexistente, no verificado, ya revisado o datos de decisión no válidos.");
       return 1;
     }
     out(`Decisión ${decision === "approved" ? "aprobada" : "denegada"} registrada para ${caseId}.`);
-    out("Esta herramienta no retira factores, no crea sesiones ni cambia la cuenta.");
+    out(decision === "approved"
+      ? "Se ha emitido un enlace de un solo uso. Los factores solo cambiarán cuando se confirme el TOTP nuevo; no se crea ninguna sesión."
+      : "La denegación no modifica factores, sesiones ni preferencias.");
     return 0;
   } catch {
     error("No se pudo registrar la decisión. No se han aplicado cambios a la cuenta.");
@@ -93,7 +102,9 @@ function safeTerminalText(value: string): string {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+  const emailAuthConfig = readEmailAuthConfig(process.env);
   process.exitCode = await runAdminRecoveryCli({
     args: process.argv.slice(2), platform: process.platform, uid: process.getuid?.(), sudoUser: process.env.SUDO_USER,
+    ...(emailAuthConfig ? { recoveryPepper: emailAuthConfig.recoveryPepper } : {}),
   });
 }

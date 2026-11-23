@@ -1,9 +1,12 @@
 # Registro de cambios
 
 ## Sin publicar
+- Añadido el reenrolamiento TOTP tras aprobación administrativa: enlace temporal de un uso, ticket cifrado en outbox, CSRF y cookie segura. Solo al confirmar el TOTP nuevo sustituye factores, elimina passkeys anteriores, revoca sesiones/códigos pendientes y encola aviso. No crea sesión y entrega códigos nuevos una sola vez. Migración 014, ADR-0050, UC-21, roadmap, backlog y runbook actualizados.
+- Verificación actual: servicio 177/177 pruebas con PostgreSQL 16; cobertura 90,17 % de líneas y 80 % de ramas; build de servicio correcto.
+- La CLI administrativa ahora informa que una aprobación emite un enlace temporal y que los factores solo cambian tras confirmar el TOTP nuevo.
 
-- Añadida una CLI Linux para revisar solicitudes de recuperación desde el VPS: lista casos con buzón verificado y registra una decisión de un solo uso junto a la categoría de evidencia, operador de `sudo` y fecha. No borra factores ni concede acceso; la sustitución restringida de factores continúa pendiente. ADR-0049 y runbook actualizados.
-- Verificación actual: interfaz 162/162 (79,37 % de líneas); servicio 173/173 con PostgreSQL 16 (89,88 % de líneas, 80,21 % de ramas); build de ambos proyectos correcto. La suite de servicio pasó al ejecutarse sola tras un timeout por carga en una ejecución paralela.
+- La CLI Linux de revisión registra decisiones con evidencia independiente y emite un enlace cifrado de un solo uso para el reenrolamiento descrito en ADR-0050; no elimina factores ni concede acceso por sí misma.
+- La cifra de cobertura vigente está en la primera entrada de esta sección; los resultados posteriores son históricos.
 - Añadida la solicitud web de revisión por pérdida de factores, desactivada por defecto. El PIN de correo solo verifica el buzón; tras confirmarlo, una outbox envía al administrador el identificador del caso. El PIN no inicia sesión, cambia la contraseña ni altera TOTP/passkeys. ADR-0048, UC-29, runbook, roadmap y backlog actualizados.
 - Verificación del servicio: 166/166 pruebas con PostgreSQL 16 aislado, 89,72 % de líneas, 79,82 % de ramas; build correcto. La herramienta administrativa para decidir y retirar factores, y el ensayo VPS, siguen pendientes.
 - Añadido un runbook para configurar Google OAuth, aplicar migraciones, activar gradualmente el flag, probar registro/vinculación/MFA y revertir. Corregido el runbook de recuperación para reflejar passkeys y Google implementados localmente pero todavía desactivados; credenciales y ensayo VPS siguen pendientes.

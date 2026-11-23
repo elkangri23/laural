@@ -164,12 +164,28 @@ export class PostgresNativeAuthStore implements NativeAuthStore {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
+      const account = await client.query<{ id: string; mfa_enabled: boolean }>(
+        `SELECT a.id, EXISTS (
+                  SELECT 1 FROM account_totp_factors t WHERE t.account_id = a.id AND t.enabled_at IS NOT NULL
+                ) AS mfa_enabled
+           FROM accounts a
+          WHERE a.id = $1 AND a.email_verified_at IS NOT NULL AND a.deleted_at IS NULL
+          FOR UPDATE OF a`,
+        [input.accountId],
+      );
+      const accountRow = account.rows[0];
+      if (!accountRow) {
+        await client.query("ROLLBACK");
+        return null;
+      }
       const flowResult = await client.query<{
+        id: string;
         redirect_uri: string;
         state: string;
         code_challenge: string;
+        mfa_account_id: string | null;
       }>(
-        `SELECT redirect_uri, state, code_challenge FROM native_auth_flows
+        `SELECT id, redirect_uri, state, code_challenge, mfa_account_id FROM native_auth_flows
           WHERE id = $1 AND cookie_digest = $2 AND csrf_digest = $3
             AND consumed_at IS NULL AND expires_at > now() AND attempts < 5
           FOR UPDATE`,
@@ -180,15 +196,11 @@ export class PostgresNativeAuthStore implements NativeAuthStore {
         await client.query("ROLLBACK");
         return null;
       }
-      const account = await client.query(
-        `SELECT id FROM accounts
-          WHERE id = $1 AND email_verified_at IS NOT NULL AND deleted_at IS NULL
-          FOR UPDATE`,
-        [input.accountId],
-      );
-      if (account.rows.length === 0) {
-        await client.query("ROLLBACK");
-        return null;
+      if (accountRow.mfa_enabled) {
+        if (flow.mfa_account_id !== input.accountId) {
+          await client.query("ROLLBACK");
+          return null;
+        }
       }
       await client.query(
         `INSERT INTO native_authorization_codes

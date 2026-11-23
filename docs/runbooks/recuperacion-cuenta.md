@@ -1,15 +1,15 @@
 # Runbook: recuperación de cuenta y factores
 
-- **Estado:** solicitud y decisión administrativa local implementadas; la retirada/sustitución de factores y el ensayo del VPS siguen pendientes.
+- **Estado:** solicitud, revisión local y reenrolamiento restringido implementados; ensayo de Resend y VPS pendiente.
 - **Propietario:** administrador del servicio
 - **Aprobación de política:** el propietario de Laural
-- **Relacionado:** [ADR-0023](../adr/0023-servicio-de-sincronizacion.md), [ADR-0027](../adr/0027-registro-y-verificacion-de-correo.md), [ADR-0028](../adr/0028-login-nativo-pkce.md), [ADR-0036](../adr/0036-gestion-de-sesiones-de-cuenta.md), [ADR-0042](../adr/0042-passkeys-para-cuentas.md), [ADR-0047](../adr/0047-login-con-google-oauth.md), [ADR-0048](../adr/0048-solicitud-segura-de-recuperacion.md), [ADR-0049](../adr/0049-revision-administrativa-local-de-recuperaciones.md)
+- **Relacionado:** [ADR-0023](../adr/0023-servicio-de-sincronizacion.md), [ADR-0027](../adr/0027-registro-y-verificacion-de-correo.md), [ADR-0028](../adr/0028-login-nativo-pkce.md), [ADR-0036](../adr/0036-gestion-de-sesiones-de-cuenta.md), [ADR-0042](../adr/0042-passkeys-para-cuentas.md), [ADR-0047](../adr/0047-login-con-google-oauth.md), [ADR-0048](../adr/0048-solicitud-segura-de-recuperacion.md), [ADR-0049](../adr/0049-revision-administrativa-local-de-recuperaciones.md), [ADR-0050](../adr/0050-reenrolamiento-seguro-tras-recuperacion.md)
 
 ## Alcance y límite actual
 
-Este procedimiento se refiere a la pérdida de TOTP/códigos y a la recuperación de acceso MFA. TOTP, códigos de recuperación, passkeys passwordless y Google OIDC están implementados localmente detrás de flags; la autenticación permanece desactivada por defecto y no está desplegada. La operación administrativa para retirar factores aún no existe. Este runbook **no autoriza** a retirar factores mediante manipulación manual de la base de datos. La recuperación de contraseña es un flujo distinto.
+Este procedimiento se refiere a la pérdida de TOTP/códigos y a la recuperación de acceso MFA. TOTP, códigos de recuperación, passkeys passwordless, Google OIDC y el flujo de recuperación están implementados localmente detrás de flags; la autenticación permanece desactivada por defecto y no está desplegada. El administrador no modifica factores directamente en PostgreSQL. La recuperación de contraseña es un flujo distinto.
 
-No hay endpoint público ni panel web administrativo para revisar casos o retirar factores. La CLI local lista los casos y registra la decisión con `sudo`; todavía no ejecuta la retirada/sustitución de factores. No se debe hacer una excepción informal a los criterios de este procedimiento.
+No hay endpoint público ni panel web administrativo para revisar casos o retirar factores. La CLI local lista casos y registra la decisión con `sudo`; la aprobación envía un ticket temporal que solo permite iniciar el enrolamiento de un TOTP nuevo.
 
 ## Rutas permitidas
 
@@ -28,12 +28,14 @@ Un PIN válido sin TOTP/código válido **no** completa el login, no crea una se
 3. El administrador localiza el caso con `sudo npm run admin:recovery -- list`. La salida contiene identificador, correo y fechas; no contiene el PIN. La herramienta solo funciona en Linux bajo `sudo` y no abre una ruta de red.
 4. El administrador evalúa al menos una prueba de titularidad **preexistente**, obtenida antes de la pérdida y contrastable por una fuente independiente del buzón y de la cuenta Laural. Entre las pruebas que pueden cumplir el criterio están una identidad Google ya vinculada, otro factor MFA aún inscrito o un dispositivo de confianza que conserve una sesión autenticada. La prueba debe corresponder a la cuenta y no depender exclusivamente de información proporcionada dentro del mismo correo o de la cuenta posiblemente comprometida. No copies ni guardes el material probatorio en el servicio.
 5. Registra la decisión y solo la categoría de evidencia. Para aprobar, repite el UUID en confirmación: `sudo npm run admin:recovery -- decide <id-caso> approved <google_identity|existing_mfa|trusted_session|other_independent> <id-caso>`. Para denegar por evidencia insuficiente: `sudo npm run admin:recovery -- decide <id-caso> denied insufficient <id-caso>`. La evaluación y la decisión son criterio del administrador; el PIN, la urgencia o el conocimiento de datos sincronizados no sustituyen la prueba independiente.
-6. La herramienta registra decisión, categoría, usuario que ejecutó `sudo` y fecha; no altera cuenta, factores, contraseña ni sesiones. La decisión aprobada **no recupera el acceso**: hasta implementar y ensayar el alta restringida de un factor nuevo, no se manipulan filas directamente ni se promete recuperación.
-7. Si no existe una prueba independiente suficiente, el administrador **deniega** la solicitud. No se reduce la cuenta a autenticación solo por correo y no se crea un bypass alternativo.
+6. Al aprobar, la CLI registra la decisión y encola un enlace de un solo uso válido 30 minutos. El enlace se envía al correo verificado y no crea una sesión. La persona lo abre, registra un TOTP y confirma un código válido dentro de 15 minutos y cinco intentos. Si el correo falla, el trabajador reintenta hasta ocho veces; si el enlace vence o se consume sin completar el alta, el usuario debe iniciar una solicitud nueva y el administrador revisarla de nuevo.
+7. Solo tras verificar el TOTP nuevo, la transacción sustituye el TOTP y los códigos anteriores, elimina las passkeys previas, revoca las sesiones activas, invalida códigos/flujos de login pendientes y registra el caso como completado. Se encolan los códigos nuevos para mostrarlos una sola vez y un aviso de seguridad al correo. No se crea una sesión ni se exponen preferencias.
+8. La persona guarda los códigos nuevos e inicia sesión desde la aplicación con su contraseña y el TOTP recién inscrito. La administración no recibe ni conserva el secreto TOTP ni los códigos.
+9. Si no existe una prueba independiente suficiente, el administrador **deniega** la solicitud. No se reduce la cuenta a autenticación solo por correo y no se crea un bypass alternativo.
 
 ## Registro y privacidad
 
-Conservar únicamente: ID de caso, cuenta interna, categoría de prueba (no su contenido), administrador que decidió, decisión, motivo categorizado, factores retirados, fecha/hora y confirmación de revocación de sesiones/aviso. No incluir contraseñas, PIN, códigos, secretos MFA, contenido de documentos ni copias de evidencias en logs o tickets. Restringir el acceso y definir un plazo de retención antes de habilitar la operación.
+Conservar únicamente: ID de caso, cuenta interna, categoría de prueba (no su contenido), administrador que decidió, decisión, fecha/hora y estado de finalización. No incluir contraseñas, PIN, ticket, códigos, secretos MFA, contenido de documentos ni copias de evidencias en logs o tickets. El ticket solo se guarda cifrado hasta entrega/consumo/caducidad; el digest permanece hasta la retención del caso. Los registros terminales del outbox se purgan tras 30 días y los casos cerrados tras 90 días.
 
 La app no sincroniza factores MFA ni códigos de recuperación. El operador del VPS puede leer los snapshots permitidos; este procedimiento no cambia esa limitación ni crea copias externas de datos.
 
@@ -42,16 +44,18 @@ La app no sincroniza factores MFA ni códigos de recuperación. El operador del 
 - [ ] La persona confirmó el buzón mediante un PIN vigente y no reutilizado.
 - [ ] Hay código de recuperación válido, o el administrador verificó prueba preexistente por fuente independiente.
 - [ ] Se registró decisión y categoría, sin guardar el material probatorio.
-- [ ] El factor nuevo quedó enrolado antes de conceder la sesión recuperada.
+- [ ] Se confirmó el TOTP nuevo y se mostraron los códigos de recuperación una sola vez.
 - [ ] Las demás sesiones quedaron revocadas.
+- [ ] Se invalidaron los códigos de login pendientes y se completó el caso.
+- [ ] La persona inició un login normal con contraseña y el nuevo TOTP; no recibió una sesión por el enlace de recuperación.
 - [ ] Se envió aviso de seguridad sin incluir secretos.
 - [ ] El caso no dejó credenciales, códigos ni evidencias en logs/tickets.
 
 ## No operar hasta completar
 
 - Mantener la autenticación y `ACCOUNT_RECOVERY_ENABLED` desactivados hasta validar el despliegue, Resend, TOTP/códigos y sus límites.
-- La CLI de revisión está implementada localmente y registra la decisión sin cambiar la cuenta. Falta diseñar, implementar y ensayar el flujo restringido que permita sustituir factores, revocar sesiones y obligar a registrar uno nuevo antes de recuperar acceso; nunca exponerlo como API administrativa pública.
+- El flujo está implementado localmente, pero antes de habilitarlo: configurar `ACCOUNT_RECOVERY_BASE_URL=https://<dominio>/auth/recovery`, validar HTTPS/cabeceras/cookies/CSP tras Caddy, migrar el schema, probar envío y reintentos de Resend y realizar el ciclo completo con una cuenta de ensayo. No exponer controles administrativos como API pública.
 - Verificar que el PIN solo prueba el buzón, y que no crea sesión ni omite MFA.
-- Ensayar PIN vencido/reusado, código incorrecto/reusado, abuso de solicitudes, rechazo por prueba insuficiente, revocación de sesiones, notificación y fallo parcial.
+- Ensayar PIN y ticket vencidos/reusados, TOTP incorrecto/reusado, máximo de intentos, abuso de solicitudes, rechazo por evidencia insuficiente, reintentos/outbox de Resend, revocación de sesiones, invalidación de códigos pendientes y aviso de seguridad.
 - Probar la restauración del servicio en el VPS y completar su runbook operativo antes de habilitar cuentas externas.
-- Para passkeys, definir y ensayar el flujo de recuperación correspondiente antes de habilitarlas.
+- El flujo de recuperación invalida passkeys anteriores después de confirmar el TOTP nuevo; ensayar este resultado antes de habilitar passkeys.

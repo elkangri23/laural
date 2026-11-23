@@ -1,4 +1,6 @@
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { Pool } from "pg";
+import { encryptRecoveryTicket } from "./recovery-ticket-crypto.js";
 
 export type RecoveryEvidence = "google_identity" | "existing_mfa" | "trusted_session" | "other_independent" | "insufficient";
 export type RecoveryDecision = "approved" | "denied";
@@ -20,20 +22,41 @@ export async function listPendingRecoveryCases(pool: Pick<Pool, "query">): Promi
 }
 
 export async function recordRecoveryDecision(
-  pool: Pick<Pool, "query">,
-  input: { caseId: string; decision: RecoveryDecision; evidence: RecoveryEvidence; operator: string },
+  pool: Pick<Pool, "connect">,
+  input: { caseId: string; decision: RecoveryDecision; evidence: RecoveryEvidence; operator: string; recoveryPepper: string },
 ): Promise<boolean> {
   if (!isUuid(input.caseId) || !isDecision(input.decision) || !isEvidence(input.evidence) || !isOperator(input.operator)) return false;
   if (input.decision === "approved" && !INDEPENDENT_EVIDENCE.has(input.evidence)) return false;
-  const result = await pool.query(
-    `UPDATE account_recovery_cases
-        SET review_decision = $2, evidence_category = $3, reviewed_by = $4, reviewed_at = now()
-      WHERE id = $1 AND mailbox_verified_at IS NOT NULL AND consumed_at IS NOT NULL
-        AND review_decision IS NULL
-        AND EXISTS (SELECT 1 FROM accounts a WHERE a.id = account_recovery_cases.account_id AND a.deleted_at IS NULL)`,
-    [input.caseId, input.decision, input.evidence, input.operator],
-  );
-  return result.rowCount === 1;
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await client.query(
+      `UPDATE account_recovery_cases
+          SET review_decision = $2, evidence_category = $3, reviewed_by = $4, reviewed_at = now()
+        WHERE id = $1 AND mailbox_verified_at IS NOT NULL AND consumed_at IS NOT NULL
+          AND review_decision IS NULL
+          AND EXISTS (SELECT 1 FROM accounts a WHERE a.id = account_recovery_cases.account_id AND a.deleted_at IS NULL)`,
+      [input.caseId, input.decision, input.evidence, input.operator],
+    );
+    if (result.rowCount !== 1) { await client.query("ROLLBACK"); return false; }
+    if (input.decision === "approved") {
+      const grantId = randomUUID();
+      const ticket = randomBytes(32).toString("base64url");
+      const tokenDigest = createHash("sha256").update(ticket).digest("hex");
+      const envelope = encryptRecoveryTicket(ticket, input.recoveryPepper, grantId);
+      await client.query(
+        `INSERT INTO account_recovery_grants (id, case_id, token_digest, expires_at)
+         VALUES ($1, $2, $3, now() + interval '30 minutes')`, [grantId, input.caseId, tokenDigest],
+      );
+      await client.query(
+        "INSERT INTO account_recovery_grant_outbox (grant_id, encrypted_ticket) VALUES ($1, $2::jsonb)",
+        [grantId, JSON.stringify(envelope)],
+      );
+    }
+    await client.query("COMMIT");
+    return true;
+  } catch (error) { await client.query("ROLLBACK"); throw error; }
+  finally { client.release(); }
 }
 
 export function isOperator(value: unknown): value is string {

@@ -16,6 +16,8 @@ import { ResendMailer } from "./resend-mailer.js";
 import { deliverSecurityEmailBatch } from "./security-email-outbox.js";
 import { GoogleOAuthService } from "./google-oauth.js";
 import { deliverAccountRecoveryNoticeBatch } from "./account-recovery-outbox.js";
+import { AccountRecoveryService } from "./account-recovery.js";
+import { deliverAccountRecoveryGrantBatch } from "./account-recovery-grant-outbox.js";
 
 const config = readConfig(process.env);
 const emailAuthConfig = readEmailAuthConfig(process.env);
@@ -24,7 +26,9 @@ const googleOAuthConfig = readGoogleOAuthConfig(process.env, emailAuthConfig !==
 const pool = new pg.Pool({ connectionString: config.databaseUrl, max: 10, idleTimeoutMillis: 30_000 });
 const preferenceStore = new PostgresPreferenceStore(pool);
 const resendMailer = emailAuthConfig
-  ? new ResendMailer({ apiKey: emailAuthConfig.resendApiKey, from: emailAuthConfig.resendFrom, ...(emailAuthConfig.recoveryAdminEmail ? { recoveryAdminEmail: emailAuthConfig.recoveryAdminEmail } : {}) })
+  ? new ResendMailer({ apiKey: emailAuthConfig.resendApiKey, from: emailAuthConfig.resendFrom,
+    ...(emailAuthConfig.recoveryAdminEmail ? { recoveryAdminEmail: emailAuthConfig.recoveryAdminEmail } : {}),
+    ...(emailAuthConfig.recoveryBaseUrl ? { recoveryBaseUrl: emailAuthConfig.recoveryBaseUrl } : {}) })
   : undefined;
 const emailAuth = emailAuthConfig && resendMailer
   ? new EmailAuthService(
@@ -41,6 +45,9 @@ const nativeAuth = emailAuthConfig && accountMfa
   : undefined;
 const accountPasskeys = passkeyConfig ? new AccountPasskeyService(pool, passkeyConfig) : undefined;
 const googleOAuth = googleOAuthConfig ? new GoogleOAuthService(pool, googleOAuthConfig) : undefined;
+const accountRecovery = emailAuthConfig?.recoveryAdminEmail && emailAuthConfig.recoveryBaseUrl
+  ? new AccountRecoveryService(pool, emailAuthConfig.totpEncryptionKey, emailAuthConfig.recoveryPepper)
+  : undefined;
 const app = createApp({
   store: preferenceStore,
   authenticate: createSessionAuthenticator(pool),
@@ -56,6 +63,7 @@ const app = createApp({
   ...(accountPasskeys ? { accountPasskeys } : {}),
   ...(googleOAuth ? { googleOAuth } : {}),
   accountRecoveryEnabled: Boolean(emailAuthConfig?.recoveryAdminEmail),
+  ...(accountRecovery ? { accountRecovery } : {}),
   accountDeletion: new AccountDeletionService(pool),
 });
 
@@ -105,6 +113,22 @@ void runRecoveryNoticeDelivery();
 const recoveryNoticeTimer = setInterval(() => { void runRecoveryNoticeDelivery(); }, 15_000);
 recoveryNoticeTimer.unref();
 
+let deliveringRecoveryGrants = false;
+async function runRecoveryGrantDelivery(): Promise<void> {
+  if (!resendMailer || !emailAuthConfig?.recoveryAdminEmail || !emailAuthConfig.recoveryBaseUrl || deliveringRecoveryGrants) return;
+  deliveringRecoveryGrants = true;
+  try {
+    const result = await deliverAccountRecoveryGrantBatch(pool, resendMailer, emailAuthConfig.recoveryPepper);
+    if (result.deferred > 0) console.error("Uno o varios enlaces de recuperación quedaron pendientes de reintento.");
+  } catch {
+    console.error("Falló el procesamiento de enlaces de recuperación.");
+  } finally { deliveringRecoveryGrants = false; }
+}
+
+void runRecoveryGrantDelivery();
+const recoveryGrantTimer = setInterval(() => { void runRecoveryGrantDelivery(); }, 15_000);
+recoveryGrantTimer.unref();
+
 let closing = false;
 async function shutdown(): Promise<void> {
   if (closing) return;
@@ -112,6 +136,7 @@ async function shutdown(): Promise<void> {
   clearInterval(retentionTimer);
   clearInterval(securityEmailTimer);
   clearInterval(recoveryNoticeTimer);
+  clearInterval(recoveryGrantTimer);
   await app.close();
   await pool.end();
 }

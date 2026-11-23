@@ -52,7 +52,8 @@ Los ADR registran por qué se eligió una opción y qué costes trae. Un ADR ace
 | [0046](0046-estado-publico-por-componente.md) | Estado público manual para API, sincronización y correo | Aceptada; página y contrato local listos, despliegue VPS pendiente |
 | [0047](0047-login-con-google-oauth.md) | Login Google OIDC con state, nonce, PKCE y MFA preservado | Aceptada; integración local detrás de flag, credenciales y despliegue pendientes |
 | [0048](0048-solicitud-segura-de-recuperacion.md) | Verificación de buzón y aviso administrativo sin bypass de MFA | Aceptada; intake local detrás de flag, operación administrativa/VPS pendientes |
-| [0049](0049-revision-administrativa-local-de-recuperaciones.md) | Decisiones de recuperación registradas mediante CLI local con sudo | Aceptada; CLI y auditoría implementadas, sustitución de factores pendiente |
+| [0049](0049-revision-administrativa-local-de-recuperaciones.md) | Decisiones de recuperación registradas mediante CLI local con sudo | Aceptada; CLI y emisión segura para reenrolamiento implementadas, ensayo VPS pendiente |
+| [0050](0050-reenrolamiento-seguro-tras-recuperacion.md) | Enlace de un uso para enrolar un TOTP nuevo antes de retirar factores y sesiones | Aceptada; implementación local, despliegue/ensayo VPS pendiente |
 
 ## Crear un ADR
 

@@ -4,8 +4,11 @@ import { runAdminRecoveryCli } from "../src/admin-account-recovery.js";
 const base = { platform: "linux" as NodeJS.Platform, uid: 0, sudoUser: "laura.admin" };
 
 function database(rows: unknown[] = [], rowCount: number | null = 0) {
+  const query = vi.fn(async () => ({ rows, rowCount }));
+  const client = { query, release: vi.fn() };
   return {
-    query: vi.fn(async () => ({ rows, rowCount })),
+    query,
+    connect: vi.fn(async () => client),
     end: vi.fn(async () => undefined),
   };
 }
@@ -65,11 +68,12 @@ describe("CLI local de revisión administrativa", () => {
     const stdout: string[] = [];
     const result = await runAdminRecoveryCli({
       ...base, args: ["decide", caseId, "approved", "google_identity", caseId],
+      recoveryPepper: "a-recovery-pepper-with-at-least-32-bytes",
       createPool: () => pool as never, stdout: (text) => stdout.push(text),
     });
     expect(result).toBe(0);
-    expect(pool.query.mock.calls[0]?.[0]).toContain("review_decision = $2");
-    expect(stdout.join("\n")).toContain("no retira factores");
+    expect(pool.connect).toHaveBeenCalledOnce();
+    expect(stdout.join("\n")).toContain("enlace de un solo uso");
     expect(pool.end).toHaveBeenCalledOnce();
 
     const stderr: string[] = [];

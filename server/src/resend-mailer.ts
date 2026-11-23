@@ -1,7 +1,7 @@
 import type { VerificationMailer } from "./email-auth.js";
 import type { SecurityEmailEvent, SecurityEmailSender } from "./security-email-outbox.js";
 
-export type ResendConfig = { apiKey: string; from: string; recoveryAdminEmail?: string };
+export type ResendConfig = { apiKey: string; from: string; recoveryAdminEmail?: string; recoveryBaseUrl?: string };
 
 export class ResendMailer implements VerificationMailer, SecurityEmailSender {
   constructor(private readonly config: ResendConfig) {}
@@ -85,6 +85,26 @@ export class ResendMailer implements VerificationMailer, SecurityEmailSender {
     if (!response.ok) throw new Error("No se pudo entregar el aviso de recuperación al administrador.");
   }
 
+  async sendAccountRecoveryGrant(input: { email: string; ticket: string; grantId: string }): Promise<void> {
+    if (!this.config.recoveryBaseUrl) throw new Error("No hay URL de recuperación configurada.");
+    const link = new URL(this.config.recoveryBaseUrl);
+    link.hash = new URLSearchParams({ ticket: input.ticket }).toString();
+    const safeLink = escapeHtml(link.href);
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${this.config.apiKey}`, "Content-Type": "application/json", "Idempotency-Key": `account-recovery-grant/${input.grantId}` },
+      body: JSON.stringify({
+        from: this.config.from,
+        to: [input.email],
+        subject: "Laural: enlace temporal para volver a configurar tu segundo factor",
+        text: `El administrador ha aprobado tu solicitud tras su revisión. Abre este enlace antes de 30 minutos para registrar un TOTP nuevo: ${link.href}\n\nEl enlace solo permite configurar el factor; no inicia sesión ni accede a tus preferencias. Al confirmar el nuevo TOTP se retirarán los factores anteriores y se revocarán las sesiones. Después inicia sesión en Laural con tu contraseña y el nuevo código. Si no solicitaste esta recuperación, contacta inmediatamente con el administrador.`,
+        html: `<p>El administrador ha aprobado tu solicitud tras su revisión.</p><p><a href="${safeLink}">Configurar un nuevo segundo factor</a>. El enlace caduca en 30 minutos y solo permite registrar un TOTP.</p><p>Al confirmar el nuevo TOTP se retirarán los factores anteriores y se revocarán las sesiones. Después inicia sesión en Laural con tu contraseña y el nuevo código.</p><p>Si no solicitaste esta recuperación, contacta inmediatamente con el administrador.</p>`,
+      }), signal: AbortSignal.timeout(10_000), redirect: "error",
+    });
+    await response.body?.cancel();
+    if (!response.ok) throw new Error("No se pudo entregar el enlace de recuperación.");
+  }
+
   async sendSecurityNotice(input: { email: string; eventType: SecurityEmailEvent; notificationId: string }): Promise<void> {
     const message = securityNoticeMessage(input.eventType);
     const response = await fetch("https://api.resend.com/emails", {
@@ -121,6 +141,8 @@ function securityNoticeMessage(eventType: SecurityEmailEvent): { subject: string
       return { subject: "Se añadió una passkey a tu cuenta de Laural", body: "Se añadió una passkey para iniciar sesión en tu cuenta de Laural." };
     case "passkey_removed":
       return { subject: "Se eliminó una passkey de tu cuenta de Laural", body: "Se eliminó una passkey de tu cuenta de Laural." };
+    case "account_recovered":
+      return { subject: "Se restablecieron los factores de tu cuenta de Laural", body: "Se sustituyeron los factores de seguridad de tu cuenta tras una recuperación aprobada por el administrador. Se revocaron las sesiones existentes. Si no lo solicitaste, contacta al administrador." };
   }
 }
 

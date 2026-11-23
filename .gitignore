@@ -32,3 +32,4 @@ src-tauri/target
 /coverage/
 /server/coverage/
 /server/web/passkeys-client.js
+/server/web/recovery-client.js

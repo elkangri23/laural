@@ -12,6 +12,7 @@ export type EmailAuthConfig = {
   recoveryPepper: string;
   totpEncryptionKey: Buffer;
   recoveryAdminEmail?: string;
+  recoveryBaseUrl?: string;
 };
 
 export type PasskeyConfig = {
@@ -76,6 +77,7 @@ export function readEmailAuthConfig(environment: NodeJS.ProcessEnv): EmailAuthCo
   const recoveryPepper = environment.AUTH_RECOVERY_PEPPER?.trim();
   const totpEncryptionKeyText = environment.TOTP_ENCRYPTION_KEY?.trim();
   const recoveryAdminEmail = environment.ACCOUNT_RECOVERY_ADMIN_EMAIL?.trim().toLowerCase();
+  const recoveryBaseUrlText = environment.ACCOUNT_RECOVERY_BASE_URL?.trim();
   const totpEncryptionKey = totpEncryptionKeyText ? Buffer.from(totpEncryptionKeyText, "base64url") : Buffer.alloc(0);
   if (!resendApiKey || resendApiKey.length > 256) throw new Error("RESEND_API_KEY no es válido.");
   if (!resendFrom || resendFrom.length > 254 || /[\r\n]/.test(resendFrom)) throw new Error("RESEND_FROM no es válido.");
@@ -88,8 +90,22 @@ export function readEmailAuthConfig(environment: NodeJS.ProcessEnv): EmailAuthCo
   if (recoveryEnabled && (!recoveryAdminEmail || recoveryAdminEmail.length > 320 || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/u.test(recoveryAdminEmail))) {
     throw new Error("ACCOUNT_RECOVERY_ENABLED requiere un ACCOUNT_RECOVERY_ADMIN_EMAIL válido.");
   }
+  let recoveryBaseUrl: string | undefined;
+  if (recoveryEnabled) {
+    try {
+      const url = new URL(recoveryBaseUrlText ?? "");
+      if (url.protocol !== "https:" || url.pathname !== "/auth/recovery" || url.username || url.password || url.search || url.hash || url.href !== recoveryBaseUrlText) throw new Error();
+      recoveryBaseUrl = url.href;
+    } catch {
+      throw new Error("ACCOUNT_RECOVERY_ENABLED requiere ACCOUNT_RECOVERY_BASE_URL HTTPS exacta terminada en /auth/recovery.");
+    }
+  }
 
-  return { resendApiKey, resendFrom, pinPepper, recoveryPepper, totpEncryptionKey, ...(recoveryEnabled && recoveryAdminEmail ? { recoveryAdminEmail } : {}) };
+  return {
+    resendApiKey, resendFrom, pinPepper, recoveryPepper, totpEncryptionKey,
+    ...(recoveryEnabled && recoveryAdminEmail ? { recoveryAdminEmail } : {}),
+    ...(recoveryBaseUrl ? { recoveryBaseUrl } : {}),
+  };
 }
 
 export function readPasskeyConfig(environment: NodeJS.ProcessEnv, emailAuthEnabled: boolean): PasskeyConfig | null {

@@ -1,6 +1,6 @@
 # Casos de uso: portabilidad y sincronización
 
-- **Estado:** UC-17/18 están implementados localmente; login Tauri, Google OIDC/PKCE detrás de flag, revocación de sesiones y cliente manual/automático también. Pendientes pruebas reales de reconexión, credenciales Google y validación VPS; historial cloud paginado/restaurable/borrable implementado localmente. TOTP, challenge, códigos y cola transaccional de avisos están integrados localmente; UC-21 conserva pendiente la recuperación administrativa tras perder todos los factores. UC-22 tiene sitio/contrato local estático, pero no comprobaciones de salud por componente ni operación VPS. UC-25 implementa restablecimiento de contraseña con PIN, aún sin despliegue VPS/Resend.
+- **Estado:** UC-17/18 están implementados localmente; login Tauri, Google OIDC/PKCE detrás de flag, revocación de sesiones y cliente manual/automático también. Pendientes pruebas reales de reconexión, credenciales Google y validación VPS; historial cloud paginado/restaurable/borrable implementado localmente. TOTP, challenge, códigos y cola transaccional de avisos están integrados localmente; UC-21 implementa recuperación administrativa local tras perder todos los factores; queda ensayo en VPS/Resend. UC-22 tiene sitio/contrato local estático, pero no comprobaciones de salud por componente ni operación VPS. UC-25 implementa restablecimiento de contraseña con PIN, aún sin despliegue VPS/Resend.
 - **Especificación:** [plan de sincronización](../plans/sincronizacion-preferencias.md).
 - **Diseño técnico:** [diseño formal](../designs/sincronizacion-preferencias-y-portabilidad.md).
 
@@ -48,9 +48,9 @@
 
 **Actor:** titular de cuenta y administrador del servicio.
 
-**Flujo:** al activar MFA, Laural ofrece códigos de recuperación de un solo uso. Si se pierden los factores, el titular usa una recuperación disponible o solicita revisión administrativa. El PIN de correo de seis dígitos, un solo uso y cinco minutos demuestra control del buzón; no autentica ni elimina MFA.
+**Flujo:** al activar MFA, Laural ofrece códigos de recuperación de un solo uso. Si se pierden todos los factores, el titular verifica el buzón con PIN de seis dígitos válido cinco minutos y solicita revisión. El administrador evalúa evidencia preexistente independiente; solo si aprueba, se envía un enlace de un solo uso por 30 minutos para registrar un TOTP nuevo. El titular confirma el TOTP y después vuelve a iniciar sesión con su contraseña y el factor nuevo.
 
-**Aceptación:** el administrador requiere el PIN y una prueba independiente preexistente: código de recuperación válido, otro factor inscrito, identidad Google vinculada o dispositivo que mantenga sesión autenticada. Si no queda ninguna, se deniega la retirada y se indica crear una cuenta nueva. Al aprobar se revocan sesiones, se retiran solo los factores perdidos, se avisa al correo registrado y se guarda la categoría de evidencia/decisión, nunca su contenido. El PIN solo jamás inicia sesión ni retira MFA.
+**Aceptación:** el PIN solo verifica el buzón y nunca inicia sesión ni retira MFA. La aprobación requiere prueba independiente preexistente y no cambia la cuenta por sí misma. El TOTP nuevo debe confirmarse antes de sustituir factores; entonces se eliminan passkeys y códigos previos, se revocan sesiones y logins pendientes, se encola aviso de seguridad y se muestran códigos nuevos una sola vez. El enlace no crea sesión ni concede acceso a preferencias. Sin prueba suficiente se deniega la solicitud.
 
 ## UC-22 — Consultar estado público
 

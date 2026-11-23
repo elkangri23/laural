@@ -14,6 +14,10 @@ const RETENTION_POLICIES = [
   "DELETE FROM preference_idempotency WHERE created_at < now() - interval '30 days'",
   "DELETE FROM account_security_email_outbox WHERE created_at < now() - interval '30 days' AND (delivered_at IS NOT NULL OR abandoned_at IS NOT NULL)",
   "DELETE FROM account_recovery_notice_outbox WHERE created_at < now() - interval '30 days' AND (delivered_at IS NOT NULL OR abandoned_at IS NOT NULL)",
+  "UPDATE account_recovery_grant_outbox SET abandoned_at = now(), claimed_at = NULL, encrypted_ticket = NULL WHERE delivered_at IS NULL AND abandoned_at IS NULL AND grant_id IN (SELECT id FROM account_recovery_grants WHERE expires_at <= now())",
+  "DELETE FROM account_recovery_grant_outbox WHERE created_at < now() - interval '30 days' AND (delivered_at IS NOT NULL OR abandoned_at IS NOT NULL)",
+  "DELETE FROM account_recovery_enrollments WHERE (consumed_at IS NOT NULL AND created_at < now() - interval '30 days') OR expires_at < now() - interval '15 minutes'",
+  "DELETE FROM account_recovery_grants WHERE expires_at < now() - interval '90 days' OR consumed_at IS NOT NULL AND created_at < now() - interval '90 days'",
   "DELETE FROM account_recovery_cases WHERE (consumed_at IS NOT NULL AND created_at < now() - interval '90 days') OR (consumed_at IS NULL AND expires_at < now() - interval '15 minutes')",
 ] as const;
 

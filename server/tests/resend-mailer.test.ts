@@ -113,6 +113,21 @@ describe("envío transaccional mediante Resend", () => {
     expect(payload.text).not.toContain("PIN");
   });
 
+  it("envía el ticket de reenrolamiento en fragmento y con expiración explícita", async () => {
+    const fetch = vi.fn(async () => new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetch);
+    const mailer = new ResendMailer({ apiKey: "server-only-key", from: "auth@example.test", recoveryBaseUrl: "https://sync.example.test/auth/recovery" });
+    const ticket = "t".repeat(43);
+    await mailer.sendAccountRecoveryGrant({ email: "user@example.test", ticket, grantId: "grant-id" });
+    const [, options] = fetch.mock.calls[0] as unknown as [string, RequestInit];
+    expect(new Headers(options.headers).get("idempotency-key")).toBe("account-recovery-grant/grant-id");
+    const payload = JSON.parse(String(options.body)) as { text: string; html: string };
+    expect(payload.text).toContain(`https://sync.example.test/auth/recovery#ticket=${ticket}`);
+    expect(payload.text).toContain("30 minutos");
+    expect(payload.text).toContain("no inicia sesión");
+    expect(payload.html).toContain("#ticket=");
+  });
+
   it("rechaza el aviso administrativo si no hay destinatario configurado", async () => {
     const mailer = new ResendMailer({ apiKey: "server-only-key", from: "auth@example.test" });
     await expect(mailer.sendAccountRecoveryNotice({ caseId: "case-id", accountEmail: "user@example.test", notificationId: "notice-id" }))

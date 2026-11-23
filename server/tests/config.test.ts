@@ -73,8 +73,9 @@ describe("configuración del servicio", () => {
       AUTH_PIN_PEPPER: "x".repeat(32), AUTH_RECOVERY_PEPPER: "y".repeat(32), TOTP_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString("base64url"),
     };
     expect(() => readEmailAuthConfig({ ...base, ACCOUNT_RECOVERY_ENABLED: "true" } as NodeJS.ProcessEnv)).toThrow("ACCOUNT_RECOVERY_ADMIN_EMAIL");
-    expect(readEmailAuthConfig({ ...base, ACCOUNT_RECOVERY_ENABLED: "true", ACCOUNT_RECOVERY_ADMIN_EMAIL: "admin@example.test" } as NodeJS.ProcessEnv))
-      .toMatchObject({ recoveryAdminEmail: "admin@example.test" });
+    expect(readEmailAuthConfig({ ...base, ACCOUNT_RECOVERY_ENABLED: "true", ACCOUNT_RECOVERY_ADMIN_EMAIL: "admin@example.test", ACCOUNT_RECOVERY_BASE_URL: "https://sync.example.test/auth/recovery" } as NodeJS.ProcessEnv))
+      .toMatchObject({ recoveryAdminEmail: "admin@example.test", recoveryBaseUrl: "https://sync.example.test/auth/recovery" });
     expect(() => readEmailAuthConfig({ ...base, ACCOUNT_RECOVERY_ENABLED: "true", ACCOUNT_RECOVERY_ADMIN_EMAIL: "not-an-email" } as NodeJS.ProcessEnv)).toThrow();
+    expect(() => readEmailAuthConfig({ ...base, ACCOUNT_RECOVERY_ENABLED: "true", ACCOUNT_RECOVERY_ADMIN_EMAIL: "admin@example.test", ACCOUNT_RECOVERY_BASE_URL: "http://sync.example.test/auth/recovery" } as NodeJS.ProcessEnv)).toThrow("HTTPS exacta");
   });
 });

@@ -11,6 +11,7 @@ import { AccountPasskeyService, type PasskeySummary } from "./account-passkeys.j
 import { NativeAuthService, sha256, validateNativeFlowParameters, type LoginResult } from "./native-auth.js";
 import type { RequestRateLimiter } from "./request-rate-limit.js";
 import type { GoogleOAuthService } from "./google-oauth.js";
+import type { AccountRecoveryService } from "./account-recovery.js";
 import snapshotSchema from "../../shared/preference-snapshot-v1.schema.json" with { type: "json" };
 
 const BODY_LIMIT = 256 * 1024;
@@ -32,6 +33,7 @@ export type AppDependencies = {
   accountPasskeys?: AccountPasskeyService;
   googleOAuth?: GoogleOAuthService;
   accountRecoveryEnabled?: boolean;
+  accountRecovery?: AccountRecoveryService;
   requestRateLimiter: RequestRateLimiter;
 };
 
@@ -56,6 +58,7 @@ type PasskeyVerifyRegistrationBody = { csrf: string; response: unknown };
 const FLOW_COOKIE = "__Host-laural-flow";
 const PASSKEY_SESSION_COOKIE = "__Host-laural-passkey-session";
 const PASSKEY_CSRF_COOKIE = "__Host-laural-passkey-csrf";
+const RECOVERY_COOKIE = "__Host-laural-recovery-flow";
 
 export function createApp(dependencies: AppDependencies): FastifyInstance {
   const app = Fastify({ logger: false, bodyLimit: BODY_LIMIT, trustProxy: ["127.0.0.1", "::1"] });
@@ -87,6 +90,7 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
   const accountPasskeys = dependencies.accountPasskeys;
   const googleOAuth = dependencies.googleOAuth;
   const accountRecoveryEnabled = dependencies.accountRecoveryEnabled === true;
+  const accountRecovery = dependencies.accountRecovery;
 
   app.get("/v1/auth/passkeys/status", { preHandler: limited(rateLimit, "passkey-status", 30, 60) }, async (request, reply) => {
     if (!await dependencies.authenticate(request.headers.authorization)) return reply.code(401).send({ error: "unauthorized" });
@@ -396,6 +400,40 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
       const grant = await nativeAuth.exchange(request.body.code, request.body.codeVerifier);
       if (!grant) return reply.code(400).send({ error: "invalid_or_expired_code" });
       return reply.send({ sessionToken: grant.token, expiresAt: grant.expiresAt });
+    });
+  }
+
+  if (accountRecovery) {
+    app.get("/auth/recovery", async (_request, reply) => {
+      return reply.type("text/html; charset=utf-8").send(renderAccountRecoveryPage());
+    });
+    app.get("/auth/recovery.js", async (_request, reply) => {
+      const script = await readFile(new URL("../web/recovery-client.js", import.meta.url), "utf8");
+      return reply.type("text/javascript; charset=utf-8").send(script);
+    });
+    app.post<{ Body: { ticket: string } }>("/auth/recovery/start", {
+      bodyLimit: 1024,
+      preHandler: limited(rateLimit, "account-recovery-enrollment-start", 5, 300),
+      schema: { body: { type: "object", additionalProperties: false, required: ["ticket"], properties: { ticket: { type: "string", pattern: "^[A-Za-z0-9_-]{43}$" } } } },
+    }, async (request, reply) => {
+      const enrollment = await accountRecovery.startEnrollment(request.body.ticket);
+      if (!enrollment) return reply.code(400).send({ error: "invalid_or_expired_link" });
+      reply.header("Set-Cookie", recoveryCookie(enrollment.cookieToken));
+      return reply.send({ csrf: enrollment.csrfToken, secret: enrollment.secret, provisioningUri: enrollment.provisioningUri });
+    });
+    app.post<{ Body: { csrf: string; code: string } }>("/auth/recovery/confirm", {
+      bodyLimit: 1024,
+      preHandler: limited(rateLimit, "account-recovery-enrollment-confirm", 10, 300),
+      schema: { body: { type: "object", additionalProperties: false, required: ["csrf", "code"], properties: {
+        csrf: { type: "string", pattern: "^[A-Za-z0-9_-]{43}$" }, code: { type: "string", pattern: "^[0-9]{6}$" },
+      } } },
+    }, async (request, reply) => {
+      const csrfHeader = request.headers["x-csrf-token"];
+      if (typeof csrfHeader !== "string" || csrfHeader !== request.body.csrf) return reply.code(403).send({ error: "invalid_csrf" });
+      const codes = await accountRecovery.confirmEnrollment(readCookie(request.headers.cookie, RECOVERY_COOKIE) ?? "", request.body.csrf, request.body.code);
+      if (!codes) return reply.code(400).send({ error: "invalid_or_expired_code" });
+      reply.header("Set-Cookie", expiredRecoveryCookie());
+      return reply.send({ recoveryCodes: codes });
     });
   }
 
@@ -899,6 +937,15 @@ function renderMfaPage(csrfToken: string, email: string, notice = ""): string {
 </main><footer>Laural · Acceso seguro desde navegador externo</footer></div></body></html>`;
 }
 
+function renderAccountRecoveryPage(): string {
+  return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Recuperación segura · Laural</title><link rel="stylesheet" href="/auth.css"></head><body><div class="shell"><header class="brand"><div class="mark" aria-hidden="true">L</div><div><div class="brand-name">Laural</div><div class="brand-caption">Recuperación segura de cuenta</div></div></header><main>
+<h1>Configura un nuevo segundo factor</h1><p class="intro">Este enlace temporal solo permite registrar una aplicación autenticadora. No inicia sesión ni da acceso a tus preferencias.</p>
+<section data-recovery-enrollment hidden><p>Añade esta clave a tu aplicación autenticadora:</p><p><code data-recovery-secret></code></p><p><a data-recovery-uri>Abrir en una aplicación compatible</a></p><form data-recovery-form><label>Código de seis dígitos<input data-recovery-code inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" required maxlength="6"></label><button type="submit">Confirmar y sustituir factores anteriores</button></form></section>
+<p class="notice" role="status" aria-live="polite" data-recovery-notice>Validando el enlace temporal…</p><section data-recovery-codes hidden><h2>Guarda tus códigos nuevos</h2><p>Solo se muestran ahora. Guárdalos en un lugar seguro. No se ha iniciado sesión; cierra esta página y vuelve a entrar desde Laural con tu contraseña y el nuevo TOTP.</p><ul data-recovery-code-list></ul></section>
+<p class="privacy">Al confirmar el nuevo código se retirarán TOTP, passkeys y códigos anteriores, y se revocarán las sesiones activas.</p></main><footer>Laural · Recuperación revisada por el administrador</footer><script type="module" src="/auth/recovery.js"></script></div></body></html>`;
+}
+
 function redirectNativeLogin(reply: FastifyReply, result: Extract<LoginResult, { kind: "authorized" }>): FastifyReply {
   reply.header("Set-Cookie", expiredFlowCookie());
   return reply.code(303).header("Location", nativeLoginUrl(result)).send();
@@ -949,6 +996,14 @@ function flowCookie(token: string): string {
 
 function expiredFlowCookie(): string {
   return `${FLOW_COOKIE}=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Strict`;
+}
+
+function recoveryCookie(token: string): string {
+  return `${RECOVERY_COOKIE}=${token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=900`;
+}
+
+function expiredRecoveryCookie(): string {
+  return `${RECOVERY_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0`;
 }
 
 function isSemanticallyValid(snapshot: PreferenceSnapshot): boolean {

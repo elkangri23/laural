@@ -18,7 +18,9 @@ import { PostgresRequestRateLimiter } from "../src/request-rate-limit.js";
 import { cleanupExpiredRecords } from "../src/retention.js";
 import { deliverSecurityEmailBatch } from "../src/security-email-outbox.js";
 import { deliverAccountRecoveryNoticeBatch } from "../src/account-recovery-outbox.js";
-import { totpCode } from "../src/totp.js";
+import { deliverAccountRecoveryGrantBatch } from "../src/account-recovery-grant-outbox.js";
+import { AccountRecoveryService } from "../src/account-recovery.js";
+import { encryptTotpSecret, createTotpSecret, totpCode } from "../src/totp.js";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const describePostgres = databaseUrl ? describe : describe.skip;
@@ -118,13 +120,75 @@ describePostgres("integración real de PostgreSQL para rate limits", () => {
     expect(pendingCases.some(({ id }) => id === caseId)).toBe(true);
     expect(isOperator("laura.admin")).toBe(true);
     expect(isOperator("admin\u001b[31m")).toBe(false);
-    expect(await recordRecoveryDecision(isolatedPool, { caseId, decision: "approved", evidence: "insufficient", operator: "laura" })).toBe(false);
-    expect(await recordRecoveryDecision(isolatedPool, { caseId, decision: "approved", evidence: "other_independent", operator: "laura.admin" })).toBe(true);
+    const pepper = "account-recovery-integration-pepper-at-least-32-bytes";
+    expect(await recordRecoveryDecision(isolatedPool, { caseId, decision: "approved", evidence: "insufficient", operator: "laura", recoveryPepper: pepper })).toBe(false);
+    expect(await recordRecoveryDecision(isolatedPool, { caseId, decision: "approved", evidence: "other_independent", operator: "laura.admin", recoveryPepper: pepper })).toBe(true);
     expect(await recordRecoveryDecision(isolatedPool, { caseId, decision: "denied", evidence: "insufficient", operator: "laura.admin" })).toBe(false);
     expect(await isolatedPool.query("SELECT review_decision FROM account_recovery_cases WHERE id = $1", [caseId]).then(({ rows }) => rows[0])).toMatchObject({ review_decision: "approved" });
     expect((await listPendingRecoveryCases(isolatedPool)).some(({ id }) => id === caseId)).toBe(false);
     expect((await isolatedPool.query("SELECT id FROM account_sessions WHERE account_id = $1", [accountId])).rowCount).toBe(0);
     expect((await isolatedPool.query("SELECT account_id FROM account_totp_factors WHERE account_id = $1", [accountId])).rowCount).toBe(0);
+
+    const key = Buffer.alloc(32, 23);
+    const oldSecret = encryptTotpSecret(createTotpSecret(), key, accountId);
+    await isolatedPool.query("INSERT INTO account_totp_factors (account_id, encrypted_secret, enabled_at) VALUES ($1, $2::jsonb, now())", [accountId, JSON.stringify(oldSecret)]);
+    await isolatedPool.query("INSERT INTO account_recovery_codes (account_id, verifier_digest) VALUES ($1, repeat('b', 64))", [accountId]);
+    await isolatedPool.query("INSERT INTO account_passkeys (account_id, credential_id, public_key, display_name, device_type) VALUES ($1, $2, $3, 'Equipo anterior', 'singleDevice')", [accountId, `cred-${accountId}`, Buffer.from([1, 2, 3])]);
+    await isolatedPool.query("INSERT INTO account_sessions (account_id, token_hash, expires_at) VALUES ($1, repeat('c', 64), now() + interval '1 day')", [accountId]);
+    const authFlowId = randomUUID();
+    await isolatedPool.query("INSERT INTO native_auth_flows (id, cookie_digest, csrf_digest, redirect_uri, state, code_challenge, expires_at) VALUES ($1, repeat('d', 64), repeat('e', 64), 'laural://callback', repeat('s', 43), repeat('h', 43), now() + interval '5 minutes')", [authFlowId]);
+    await isolatedPool.query("INSERT INTO native_authorization_codes (code_digest, flow_id, account_id, code_challenge, expires_at) VALUES (repeat('f', 64), $1, $2, repeat('h', 43), now() + interval '2 minutes')", [authFlowId, accountId]);
+    expect(await new PostgresNativeAuthStore(isolatedPool).completeLogin({
+      flowId: authFlowId, cookieDigest: "d".repeat(64), csrfDigest: "e".repeat(64), accountId, codeDigest: "a".repeat(64),
+    })).toBeNull();
+    let recoveryTicket = "";
+    const grantSender = { sendAccountRecoveryGrant: vi.fn(async (input: { ticket: string }) => { recoveryTicket = input.ticket; }) };
+    expect(await deliverAccountRecoveryGrantBatch(isolatedPool, grantSender, pepper)).toEqual({ delivered: 1, deferred: 0 });
+    expect(recoveryTicket).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect((await isolatedPool.query("SELECT encrypted_ticket FROM account_recovery_grant_outbox WHERE grant_id = (SELECT id FROM account_recovery_grants WHERE case_id = $1)", [caseId])).rows[0]).toEqual({ encrypted_ticket: null });
+    const recovery = new AccountRecoveryService(isolatedPool, key, pepper);
+    expect(await recovery.startEnrollment("bad-ticket")).toBeNull();
+    const enrollment = await recovery.startEnrollment(recoveryTicket);
+    expect(enrollment?.provisioningUri).toContain("otpauth://totp/");
+    expect(await recovery.startEnrollment(recoveryTicket)).toBeNull();
+    await isolatedPool.query("UPDATE account_recovery_grants SET expires_at = now() - interval '1 second' WHERE case_id = $1", [caseId]);
+    const code = totpCode(enrollment!.secret, Math.floor(Date.now() / 30_000));
+    expect(await recovery.confirmEnrollment(enrollment!.cookieToken, enrollment!.csrfToken, code === "000000" ? "000001" : "000000")).toBeNull();
+    const newRecoveryCodes = await recovery.confirmEnrollment(enrollment!.cookieToken, enrollment!.csrfToken, code);
+    expect(newRecoveryCodes).toHaveLength(10);
+    expect(await recovery.confirmEnrollment(enrollment!.cookieToken, enrollment!.csrfToken, code)).toBeNull();
+    const resultingState = await Promise.all([
+      isolatedPool.query("SELECT account_id FROM account_totp_factors WHERE account_id = $1 AND enabled_at IS NOT NULL", [accountId]),
+      isolatedPool.query("SELECT verifier_digest FROM account_recovery_codes WHERE account_id = $1 AND is_active AND consumed_at IS NULL", [accountId]),
+      isolatedPool.query("SELECT id FROM account_passkeys WHERE account_id = $1", [accountId]),
+      isolatedPool.query("SELECT revoked_at FROM account_sessions WHERE account_id = $1", [accountId]),
+      isolatedPool.query("SELECT consumed_at FROM native_authorization_codes WHERE flow_id = $1", [authFlowId]),
+      isolatedPool.query("SELECT recovery_completed_at FROM account_recovery_cases WHERE id = $1", [caseId]),
+      isolatedPool.query("SELECT event_type FROM account_security_email_outbox WHERE account_id = $1", [accountId]),
+    ]);
+    expect(resultingState[0].rowCount).toBe(1);
+    expect(resultingState[1].rowCount).toBe(10);
+    expect(resultingState[2].rowCount).toBe(0);
+    expect(resultingState[3].rows[0]?.revoked_at).toBeInstanceOf(Date);
+    expect(resultingState[4].rows[0]?.consumed_at).toBeInstanceOf(Date);
+    expect(resultingState[5].rows[0]?.recovery_completed_at).toBeInstanceOf(Date);
+    expect(resultingState[6].rows.some(({ event_type }) => event_type === "account_recovered")).toBe(true);
+    await isolatedPool.query("DELETE FROM account_security_email_outbox WHERE account_id = $1", [accountId]);
+
+    const retryCase = randomUUID();
+    await isolatedPool.query(
+      `INSERT INTO account_recovery_cases (id, account_id, verifier_digest, expires_at, consumed_at, mailbox_verified_at)
+       VALUES ($1, $2, repeat('7', 64), now() - interval '1 minute', now(), now())`, [retryCase, accountId],
+    );
+    expect(await recordRecoveryDecision(isolatedPool, {
+      caseId: retryCase, decision: "approved", evidence: "other_independent", operator: "laura.admin", recoveryPepper: pepper,
+    })).toBe(true);
+    const failedDelivery = { sendAccountRecoveryGrant: vi.fn(async () => { throw new Error("Resend transient failure"); }) };
+    expect(await deliverAccountRecoveryGrantBatch(isolatedPool, failedDelivery, pepper)).toEqual({ delivered: 0, deferred: 1 });
+    expect((await isolatedPool.query("SELECT encrypted_ticket FROM account_recovery_grant_outbox WHERE grant_id = (SELECT id FROM account_recovery_grants WHERE case_id = $1)", [retryCase])).rows[0]?.encrypted_ticket).not.toBeNull();
+    await isolatedPool.query("UPDATE account_recovery_grant_outbox SET next_attempt_at = now() WHERE grant_id = (SELECT id FROM account_recovery_grants WHERE case_id = $1)", [retryCase]);
+    const retryDelivery = { sendAccountRecoveryGrant: vi.fn(async () => undefined) };
+    expect(await deliverAccountRecoveryGrantBatch(isolatedPool, retryDelivery, pepper)).toEqual({ delivered: 1, deferred: 0 });
   });
 
   it("vincula Google por sub verificado y consume cada transacción una sola vez", async () => {
@@ -432,10 +496,26 @@ describePostgres("integración real de PostgreSQL para rate limits", () => {
               ($1, $2, 'recovery_codes_rotated', 0, now() - interval '31 days', NULL, NULL)`,
       [accountId, `${accountId}@example.test`],
     );
+    const expiredGrant = randomUUID();
+    const expiredEnrollment = randomUUID();
+    await isolatedPool.query(
+      "INSERT INTO account_recovery_grants (id, case_id, token_digest, expires_at) VALUES ($1, $2, repeat('8', 64), now() - interval '20 minutes')",
+      [expiredGrant, freshRecovery],
+    );
+    await isolatedPool.query(
+      "INSERT INTO account_recovery_grant_outbox (grant_id, encrypted_ticket) VALUES ($1, '{\"version\":1,\"nonce\":\"x\",\"tag\":\"y\",\"ciphertext\":\"z\"}'::jsonb)",
+      [expiredGrant],
+    );
+    await isolatedPool.query(
+      `INSERT INTO account_recovery_enrollments
+         (id, grant_id, account_id, cookie_digest, csrf_digest, encrypted_secret, expires_at)
+       VALUES ($1, $2, $3, repeat('9', 64), repeat('a', 64), '{}'::jsonb, now() - interval '20 minutes')`,
+      [expiredEnrollment, expiredGrant, accountId],
+    );
 
     await cleanupExpiredRecords(isolatedPool);
 
-    const [emailCodes, authFlows, authCodes, sessions, idempotency, securityEmails, recoveryCases] = await Promise.all([
+    const [emailCodes, authFlows, authCodes, sessions, idempotency, securityEmails, recoveryCases, grantOutbox, enrollments] = await Promise.all([
       isolatedPool.query("SELECT id FROM email_verification_codes WHERE account_id = $1", [accountId]),
       isolatedPool.query("SELECT id FROM native_auth_flows WHERE id = ANY($1::uuid[])", [[expiredFlow, activeFlow]]),
       isolatedPool.query("SELECT id FROM native_authorization_codes WHERE account_id = $1", [accountId]),
@@ -446,6 +526,8 @@ describePostgres("integración real de PostgreSQL para rate limits", () => {
         [accountId],
       ),
       isolatedPool.query<{ id: string }>("SELECT id FROM account_recovery_cases WHERE account_id = $1 ORDER BY id", [accountId]),
+      isolatedPool.query<{ encrypted_ticket: unknown; abandoned_at: Date | null }>("SELECT o.encrypted_ticket, o.abandoned_at FROM account_recovery_grant_outbox o WHERE o.grant_id = $1", [expiredGrant]),
+      isolatedPool.query("SELECT id FROM account_recovery_enrollments WHERE id = $1", [expiredEnrollment]),
     ]);
     expect(emailCodes.rows).toHaveLength(1);
     expect(authFlows.rows.map(({ id }) => id)).toEqual([activeFlow]);
@@ -455,6 +537,8 @@ describePostgres("integración real de PostgreSQL para rate limits", () => {
     expect(securityEmails.rows).toHaveLength(2);
     expect(securityEmails.rows.filter(({ delivered_at, abandoned_at }) => delivered_at || abandoned_at)).toHaveLength(1);
     expect(recoveryCases.rows.map(({ id }) => id)).toEqual([freshRecovery]);
+    expect(grantOutbox.rows[0]).toMatchObject({ encrypted_ticket: null, abandoned_at: expect.any(Date) });
+    expect(enrollments.rowCount).toBe(0);
   });
 
   it("sirve snapshots reales de PostgreSQL con aislamiento, revisión e idempotencia", async () => {
