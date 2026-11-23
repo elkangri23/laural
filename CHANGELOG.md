@@ -1,6 +1,6 @@
 # Registro de cambios
 
-## Sin publicar
+## 0.1.0-alpha.15
 
 - El agente requiere aprobación para eliminar o modificar copias sombra y respaldos con `vssadmin`, `wbadmin` y `diskshadow`; conserva las consultas de listado/estado y ayuda.
 - El agente requiere aprobación para operaciones de `pnputil` que instalan o eliminan controladores, cambian el estado de dispositivos o escriben exportaciones; las enumeraciones sin salida a archivo y la ayuda siguen siendo de lectura.

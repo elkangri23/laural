@@ -28,8 +28,8 @@ Laural es una implementación independiente con marca e interfaz propias. No inc
 
 La compilación x64 actual se encuentra en [Releases](https://github.com/elkangri23/laural/releases) cuando haya una versión publicada. En el checkout del desarrollador, los paquetes producidos por Tauri están en `src-tauri/target/release/bundle/`:
 
-- `nsis/Laural_0.1.0_x64-setup.exe`
-- `msi/Laural_0.1.0_x64_en-US.msi`
+- `nsis/Laural_0.1.0-alpha.15_x64-setup.exe`
+- `msi/Laural_0.1.0-alpha.15_x64_es-ES.msi`
 
 Los instaladores requieren validación manual en una instalación limpia. Desde alpha.14, los paquetes NSIS incorporan actualizaciones firmadas; las versiones anteriores requieren instalar alpha.14 manualmente. No se consideran una versión estable.
 

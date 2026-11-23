@@ -71,7 +71,8 @@ Estado al 23 de noviembre de 2026. «Implementado» describe código presente; �
 - Firma del updater configurada con clave privada como secreto de GitHub Actions y clave pública fijada en la app; firma Authenticode sigue fuera del alcance.
 - Validar instalación limpia, actualización y desinstalación.
 - Publicación de alpha.14 validada en GitHub: instalador NSIS x64, firma `.sig` y `latest.json` firmados publicados; el manifiesto fue sincronizado a `main`.
-- Validar en Windows la actualización real de alpha.14 a la siguiente versión, instalación limpia, reinicio y desinstalación.
+- Alpha.15 preparada con las mejoras acumuladas de agente, terminal, chat, cobertura y rendimiento; se publicará como pre-release NSIS x64 mediante el workflow firmado al crear el tag `v0.1.0-alpha.15`.
+- Validar en Windows la actualización real de alpha.14 a alpha.15, instalación limpia, reinicio y desinstalación.
 - Resolver incidencias críticas de validación manual antes de declarar estable.
 
 ## Auditoría de seguridad (primera revisión completada; validación manual pendiente)
