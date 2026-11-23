@@ -1815,6 +1815,18 @@ fn command_is_high_risk(shell: &str, command: &str) -> bool {
         "sv",
         "set",
         "set-itemproperty",
+        "sp",
+        "clear-itemproperty",
+        "clp",
+        "copy-itemproperty",
+        "cpp",
+        "new-itemproperty",
+        "remove-itemproperty",
+        "rp",
+        "move-itemproperty",
+        "mp",
+        "rename-itemproperty",
+        "rnp",
         "set-content",
         "sc",
         "add-content",
@@ -3591,6 +3603,36 @@ mod tests {
             "Get-Service",
             "Get-ScheduledTask",
             "Get-NetFirewallRule",
+        ] {
+            assert!(!command_is_high_risk("powershell", command), "{command}");
+        }
+    }
+
+    #[test]
+    fn exige_revision_para_mutaciones_de_propiedades_de_elementos_powershell() {
+        for command in [
+            "New-ItemProperty HKLM:\\Software\\Laural -Name prueba -Value 1",
+            "Clear-ItemProperty HKLM:\\Software\\Laural -Name prueba",
+            "Copy-ItemProperty HKCU:\\Software\\Laural -Name prueba -Destination HKCU:\\Software\\Copia",
+            "Move-ItemProperty HKCU:\\Software\\Laural -Name prueba -Destination HKCU:\\Software\\Copia",
+            "Rename-ItemProperty HKCU:\\Software\\Laural -Name prueba -NewName anterior",
+            "Remove-ItemProperty HKLM:\\Software\\Laural -Name prueba",
+            "Set-ItemProperty HKLM:\\Software\\Laural -Name prueba -Value 1",
+            "clp HKLM:\\Software\\Laural -Name prueba",
+            "cpp HKCU:\\Software\\Laural -Name prueba -Destination HKCU:\\Software\\Copia",
+            "mp HKCU:\\Software\\Laural -Name prueba -Destination HKCU:\\Software\\Copia",
+            "rnp HKCU:\\Software\\Laural -Name prueba -NewName anterior",
+            "rp HKLM:\\Software\\Laural -Name prueba",
+            "sp HKLM:\\Software\\Laural -Name prueba -Value 1",
+        ] {
+            assert!(command_is_high_risk("powershell", command), "{command}");
+        }
+
+        for command in [
+            "Get-ItemProperty HKLM:\\Software\\Laural",
+            "Get-ItemPropertyValue HKLM:\\Software\\Laural -Name prueba",
+            "gp HKLM:\\Software\\Laural",
+            "gpv HKLM:\\Software\\Laural -Name prueba",
         ] {
             assert!(!command_is_high_risk("powershell", command), "{command}");
         }

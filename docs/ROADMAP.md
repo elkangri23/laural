@@ -44,6 +44,7 @@ Estado al 23 de noviembre de 2026. «Implementado» describe código presente; �
 
 ## M3 — Agente (parcial)
 
+- El filtro ahora exige revisión para `New/Clear/Copy/Move/Rename/Remove/Set-ItemProperty` y aliases mutadores (`clp`, `cpp`, `mp`, `rnp`, `rp`, `sp`). Las consultas `Get-ItemProperty`, `Get-ItemPropertyValue`, `gp` y `gpv` conservan su clasificación de lectura. Regresión local: Rust 118 pruebas pasadas y 1 ignorada; la cobertura Rust de este cambio se medirá en CI Linux.
 - Planes y estados por acción; modos de autorización configurables. El validador de rutas ahora se comparte entre la vista previa del plan y las operaciones de archivo; los nombres reservados de Windows y la carpeta interna se rechazan antes de presentar el plan.
 - Cancelación de generación, interrupción de comando activo y corte del ciclo automático implementados; probar cancelación y resultado en cada shell.
 - Ampliada la revisión obligatoria para alias de alto riesgo conocidos de PowerShell, lanzadores de scripts y ejecutables con rutas explícitas; se añade una advertencia visible en Configuración. En PowerShell, WSL y Git Bash los modos automático y por reglas requieren confirmación debido a sus perfiles interactivos; CMD inicia con AutoRun desactivado y `doskey` requiere revisión.
