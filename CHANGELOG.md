@@ -3,9 +3,9 @@
 ## Sin publicar
 
 - La página pública de estado ahora muestra API, sincronización y correo por separado, con estados allowlist publicados manualmente; indica que no son comprobaciones en vivo y conserva fallback seguro y renderizado sin HTML.
-- Verificación: build y validador del documento correctos; servidor 140 pasadas, 9 omitidas sin PostgreSQL de pruebas y 80,97 % de líneas; `public-status.ts` con 100 % de líneas. Pendiente validación visual y despliegue en VPS.
+- Verificación: build y validador del documento correctos; servidor 149/149 con PostgreSQL 16 aislado, 90,13 % de líneas; `public-status.ts` con 100 % de líneas. Pendiente validación visual y despliegue en VPS.
 - Añadido historial cloud de preferencias: consulta paginada, borrado por versión y restauración como revisión nueva con concurrencia e idempotencia. Se conserva la revisión reemplazada y la app crea una copia `.laural` antes de aplicar la restauración; las API keys siguen excluidas. Migración 010, ADR-0045 y documentación actualizados.
-- Verificación: servidor 140 pruebas pasadas, 9 omitidas por no disponer de `TEST_DATABASE_URL`, 80,91 % de líneas globales; interfaz 162/162, 79,39 % de líneas; Rust 131 pasadas, 1 ignorada y `cargo check` correcto. `cargo llvm-cov` ejecuta los tests, pero MSVC no genera datos de cobertura.
+- Verificación: servidor 149/149 pruebas con PostgreSQL 16 aislado, 90,13 % de líneas y 81,08 % de ramas. Interfaz 162/162 y 79,39 %; Rust 131 pasadas, 1 ignorada y `cargo check` correcto. `cargo llvm-cov` ejecuta los tests, pero MSVC no genera datos de cobertura.
 - Los cambios de preferencias de Microsoft Defender mediante `Add-MpPreference`, `Set-MpPreference` o `Remove-MpPreference` ahora requieren aprobación; las consultas `Get-MpPreference` siguen siendo de lectura.
 - Verificación: Rust 131 pasadas y 1 ignorada; UI 161/161 (79,18 % de líneas), ocho gates y formato correctos. LLVM ejecuta Rust, pero MSVC no genera el informe local.
 - El agente exige aprobación manual para `runas`, `gsudo`, `doas`, `su` y `pkexec`, que pueden cambiar de usuario o ejecutar procesos con privilegios elevados; las reglas permitidas no eluden esta revisión.
