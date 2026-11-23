@@ -1864,16 +1864,39 @@ fn command_is_high_risk(shell: &str, command: &str) -> bool {
     let powershell_system_changes = [
         "set-executionpolicy",
         "new-localuser",
+        "nlu",
         "set-localuser",
+        "slu",
+        "rename-localuser",
         "remove-localuser",
+        "rlu",
         "enable-localuser",
+        "elu",
         "disable-localuser",
+        "dlu",
+        "new-localgroup",
+        "nlg",
+        "set-localgroup",
+        "slg",
+        "rename-localgroup",
+        "rnlg",
+        "remove-localgroup",
+        "rlg",
         "add-localgroupmember",
+        "algm",
         "remove-localgroupmember",
+        "rlgm",
+        "rnlu",
+        "new-service",
+        "remove-service",
         "set-service",
         "start-service",
+        "sasv",
         "stop-service",
+        "spsv",
         "restart-service",
+        "resume-service",
+        "suspend-service",
         "register-scheduledtask",
         "unregister-scheduledtask",
         "set-scheduledtask",
@@ -3659,6 +3682,50 @@ mod tests {
             "Get-EventLog -LogName Security -Newest 5",
             "Get-EventLog -List",
             "Get-WinEvent -LogName Security -MaxEvents 5",
+        ] {
+            assert!(!command_is_high_risk("powershell", command), "{command}");
+        }
+    }
+
+    #[test]
+    fn exige_revision_para_mutaciones_de_cuentas_y_servicios_powershell() {
+        for command in [
+            "New-LocalGroup -Name Laural",
+            "Set-LocalGroup -Name Laural -Description interna",
+            "Rename-LocalGroup -Name Laural -NewName LauralAdmin",
+            "Remove-LocalGroup -Name Laural",
+            "Rename-LocalUser -Name usuario -NewName usuario2",
+            "New-Service -Name Laural -BinaryPathName C:\\Laural.exe",
+            "Remove-Service -Name Laural",
+            "Resume-Service -Name Laural",
+            "Suspend-Service -Name Laural",
+            "nlg -Name Laural",
+            "slg -Name Laural -Description interna",
+            "rnlg -Name Laural -NewName LauralAdmin",
+            "rlg -Name Laural",
+            "rnlu -Name usuario -NewName usuario2",
+            "nlu -Name usuario",
+            "slu -Name usuario -Description interna",
+            "rlu -Name usuario",
+            "elu -Name usuario",
+            "dlu -Name usuario",
+            "algm -Group Administrators -Member usuario",
+            "rlgm -Group Administrators -Member usuario",
+            "sasv Laural",
+            "spsv Laural",
+        ] {
+            assert!(command_is_high_risk("powershell", command), "{command}");
+        }
+
+        for command in [
+            "Get-LocalGroup",
+            "Get-LocalGroupMember Administrators",
+            "Get-LocalUser",
+            "Get-Service Laural",
+            "glg",
+            "glgm Administrators",
+            "glu",
+            "gsv Laural",
         ] {
             assert!(!command_is_high_risk("powershell", command), "{command}");
         }

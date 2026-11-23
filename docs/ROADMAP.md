@@ -44,6 +44,7 @@ Estado al 23 de noviembre de 2026. «Implementado» describe código presente; �
 
 ## M3 — Agente (parcial)
 
+- El filtro exige revisión para crear, editar, renombrar o eliminar grupos/cuentas locales (incluidos aliases) y crear, retirar, reanudar o suspender servicios PowerShell; las consultas `Get-*` conservan su clasificación de lectura. Regresión local: Rust 120 pasadas y 1 ignorada. Cobertura Rust de este cambio pendiente de CI.
 - El filtro exige revisión para `Clear/Limit/New/Remove/Write-EventLog`, además de `wevtutil` en shells compatibles. `Get-EventLog` y `Get-WinEvent` mantienen clasificación de lectura. Regresión local: Rust 119 pasadas y 1 ignorada; CI en verde: cobertura de líneas 65,51 % global y 69,25 % en `providers.rs`; gate de ramas en Ubuntu también aprobado.
 - El filtro ahora exige revisión para `New/Clear/Copy/Move/Rename/Remove/Set-ItemProperty` y aliases mutadores (`clp`, `cpp`, `mp`, `rnp`, `rp`, `sp`). Las consultas `Get-ItemProperty`, `Get-ItemPropertyValue`, `gp` y `gpv` conservan su clasificación de lectura. Regresión local: Rust 118 pruebas pasadas y 1 ignorada; CI en verde, cobertura de líneas Rust 65,41 % global y 69,06 % en `providers.rs`; el gate de ramas se valida en Ubuntu.
 - Planes y estados por acción; modos de autorización configurables. El validador de rutas ahora se comparte entre la vista previa del plan y las operaciones de archivo; los nombres reservados de Windows y la carpeta interna se rechazan antes de presentar el plan.
