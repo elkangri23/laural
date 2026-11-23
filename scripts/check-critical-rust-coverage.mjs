@@ -15,7 +15,7 @@ export const CRITICAL_RUST_BRANCH_FILES = [
   "configuration_transfer.rs",
   "git_panel.rs",
 ];
-export const CRITICAL_RUST_LINE_FILES = [...CRITICAL_RUST_BRANCH_FILES, "terminal_output.rs"];
+export const CRITICAL_RUST_LINE_FILES = [...CRITICAL_RUST_BRANCH_FILES, "terminal_output.rs", "terminal_flow.rs"];
 
 const FILES_BY_METRIC = {
   lines: CRITICAL_RUST_LINE_FILES,

@@ -27,7 +27,7 @@ test("acepta cada módulo crítico en el umbral", () => {
   assert.deepEqual(checkCriticalCoverage(report), []);
 });
 
-test("exige el nuevo módulo PTY en el informe de líneas", () => {
+test("exige los módulos de transporte y control de flujo PTY en el informe de líneas", () => {
   const report = reportWithCoverage({
     "agent_files.rs": 91.55,
     "configuration_transfer.rs": 94.1,
@@ -36,6 +36,7 @@ test("exige el nuevo módulo PTY en el informe de líneas", () => {
 
   assert.deepEqual(checkCriticalCoverage(report), [
     "terminal_output.rs: se esperaba un archivo en el informe y se encontraron 0",
+    "terminal_flow.rs: se esperaba un archivo en el informe y se encontraron 0",
   ]);
 });
 
@@ -48,6 +49,7 @@ test("falla si falta un módulo crítico", () => {
   assert.deepEqual(checkCriticalCoverage(report), [
     "git_panel.rs: se esperaba un archivo en el informe y se encontraron 0",
     "terminal_output.rs: se esperaba un archivo en el informe y se encontraron 0",
+    "terminal_flow.rs: se esperaba un archivo en el informe y se encontraron 0",
   ]);
 });
 
@@ -61,6 +63,7 @@ test("falla si la cobertura queda por debajo del mínimo", () => {
   assert.deepEqual(checkCriticalCoverage(report), [
     "configuration_transfer.rs: 84.99 % es inferior al mínimo de 85 % de líneas",
     "terminal_output.rs: se esperaba un archivo en el informe y se encontraron 0",
+    "terminal_flow.rs: se esperaba un archivo en el informe y se encontraron 0",
   ]);
 });
 
@@ -80,6 +83,7 @@ test("falla con porcentajes inválidos o archivos ambiguos", () => {
     "configuration_transfer.rs: el informe no contiene una cobertura de líneas válida",
     "git_panel.rs: el informe no contiene una cobertura de líneas válida",
     "terminal_output.rs: se esperaba un archivo en el informe y se encontraron 0",
+    "terminal_flow.rs: se esperaba un archivo en el informe y se encontraron 0",
   ]);
 });
 

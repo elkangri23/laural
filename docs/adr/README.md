@@ -54,6 +54,7 @@ Los ADR registran por qué se eligió una opción y qué costes trae. Un ADR ace
 | [0048](0048-solicitud-segura-de-recuperacion.md) | Verificación de buzón y aviso administrativo sin bypass de MFA | Aceptada; intake local detrás de flag, operación administrativa/VPS pendientes |
 | [0049](0049-revision-administrativa-local-de-recuperaciones.md) | Decisiones de recuperación registradas mediante CLI local con sudo | Aceptada; CLI y emisión segura para reenrolamiento implementadas, ensayo VPS pendiente |
 | [0050](0050-reenrolamiento-seguro-tras-recuperacion.md) | Enlace de un uso para enrolar un TOTP nuevo antes de retirar factores y sesiones | Aceptada; implementación local, despliegue/ensayo VPS pendiente |
+| [0051](0051-control-de-flujo-de-salida-pty.md) | Ventana de créditos por terminal confirmada tras el parser de xterm | Aceptada; implementada localmente |
 
 ## Crear un ADR
 

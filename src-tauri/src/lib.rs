@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     io::{Read, Write},
     path::{Path, PathBuf},
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, mpsc},
     thread,
 };
 
@@ -18,8 +18,10 @@ mod git_panel;
 pub mod preferences;
 mod providers;
 mod sync;
+mod terminal_flow;
 mod terminal_output;
 
+use terminal_flow::TerminalOutputFlow;
 use terminal_output::TerminalOutput;
 
 struct TerminalIo {
@@ -31,6 +33,7 @@ struct TerminalSession {
     io: Arc<Mutex<TerminalIo>>,
     child: Box<dyn Child + Send + Sync>,
     shell: String,
+    output_flow: Arc<TerminalOutputFlow>,
 }
 
 #[derive(Default)]
@@ -66,6 +69,7 @@ fn validate_terminal_input(data: &str) -> Result<(), String> {
 
 impl Drop for TerminalSession {
     fn drop(&mut self) {
+        self.output_flow.close();
         if !matches!(self.child.try_wait(), Ok(Some(_))) && self.child.kill().is_ok() {
             let _ = self.child.wait();
         }
@@ -235,11 +239,18 @@ fn create_terminal(
         })),
         child,
         shell: shell.clone(),
+        output_flow: Arc::new(TerminalOutputFlow::default()),
     };
     let reader_id = terminal_id.clone();
+    let session_id = terminal_id.clone();
+    let output_flow = Arc::clone(&session.output_flow);
+    let (start_reader, wait_for_registration) = mpsc::channel();
     thread::Builder::new()
         .name(format!("laural-pty-{terminal_id}"))
         .spawn(move || {
+            if wait_for_registration.recv().is_err() {
+                return;
+            }
             let output_event = format!("terminal-output-{reader_id}");
             let exit_event = format!("terminal-exit-{reader_id}");
             let mut buffer = [0_u8; 32 * 1024];
@@ -247,10 +258,14 @@ fn create_terminal(
                 match reader.read(&mut buffer) {
                     Ok(0) | Err(_) => break,
                     Ok(length) => {
+                        if !output_flow.reserve(length) {
+                            break;
+                        }
                         if app
                             .emit(&output_event, TerminalOutput::from_bytes(&buffer[..length]))
                             .is_err()
                         {
+                            let _ = output_flow.acknowledge(length);
                             break;
                         }
                     }
@@ -261,7 +276,34 @@ fn create_terminal(
         .map_err(|error| format!("No se pudo iniciar la lectura de la terminal: {error}"))?;
 
     state.sessions.insert(terminal_id, session);
+    if start_reader.send(()).is_err() {
+        if let Some(session) = state.sessions.remove(&session_id) {
+            drop(session);
+        }
+        return Err("No se pudo iniciar la lectura de la terminal.".into());
+    }
     Ok(())
+}
+
+#[tauri::command]
+fn ack_terminal_output(
+    state: State<'_, PtyStore>,
+    terminal_id: String,
+    bytes: usize,
+) -> Result<(), String> {
+    let flow = state
+        .state
+        .lock()
+        .map_err(|_| "No se pudo acceder al registro de terminales.".to_string())?
+        .sessions
+        .get(&terminal_id)
+        .map(|session| Arc::clone(&session.output_flow))
+        .ok_or_else(|| "La terminal ya no está disponible.".to_string())?;
+    if flow.acknowledge(bytes) {
+        Ok(())
+    } else {
+        Err("La confirmación de salida no es válida.".to_string())
+    }
 }
 
 #[tauri::command]
@@ -503,6 +545,7 @@ pub fn run() {
             write_terminal,
             resize_terminal,
             close_terminal,
+            ack_terminal_output,
             activity_log::get_agent_activity,
             activity_log::clear_agent_activity,
             run_agent_command,
@@ -607,6 +650,7 @@ mod terminal_tests {
                 io: Arc::clone(&io),
                 child,
                 shell: "cmd".into(),
+                output_flow: Arc::new(TerminalOutputFlow::default()),
             },
         );
         let (done, result) = mpsc::channel();

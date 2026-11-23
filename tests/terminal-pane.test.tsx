@@ -50,6 +50,7 @@ beforeEach(() => {
   onData.mockReturnValue({ dispose() {} });
   registerOscHandler.mockReturnValue({ dispose() {} });
   invoke.mockResolvedValue(undefined);
+  write.mockImplementation((_data, callback) => callback?.());
 });
 async function unmount() {
   await act(async () => root?.unmount());
@@ -140,6 +141,21 @@ test("una ráfaga de eventos PTY reduce escrituras xterm y decodificaciones de c
   expect(write.mock.calls.reduce((total, [bytes]) => total + (bytes as Uint8Array).length, 0))
     .toBe(64 * 32 * 1024);
   expect(output.mock.calls.every(([, text]) => text.length === 24_000)).toBe(true);
+  expect(invoke.mock.calls.filter(([name]) => name === "ack_terminal_output")).toHaveLength(8);
+  expect(invoke.mock.calls.filter(([name]) => name === "ack_terminal_output")
+    .reduce((total, [, args]) => total + (args as { bytes: number }).bytes, 0)).toBe(2 * 1024 * 1024);
+});
+
+test("confirma los bytes solo cuando xterm termina de procesar el lote", async () => {
+  let processed!: () => void;
+  write.mockImplementationOnce((_data, callback) => { processed = callback!; });
+  await act(async () => root!.render(pane()));
+  handlers.get("terminal-output-uno")!(outputEvent([65, 66, 67]));
+  await act(async () => new Promise((resolve) => window.setTimeout(resolve, 20)));
+
+  expect(invoke).not.toHaveBeenCalledWith("ack_terminal_output", expect.anything());
+  processed();
+  expect(invoke).toHaveBeenCalledWith("ack_terminal_output", { terminalId: "uno", bytes: 3 });
 });
 
 test("limita el historial en memoria del terminal a 2.500 líneas", async () => {

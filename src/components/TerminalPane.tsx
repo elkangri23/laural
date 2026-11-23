@@ -53,7 +53,9 @@ function TerminalPane({ terminalId, shell, cwd, visible, active, copyRequest, cl
     const decoder = new TextDecoder();
     const textBatcher = createTerminalTextBatcher((text) => onTextOutput(terminalId, text));
     const outputBatcher = createTerminalOutputBatcher((bytes) => {
-      terminal.write(bytes);
+      terminal.write(bytes, () => {
+        void invoke("ack_terminal_output", { terminalId, bytes: bytes.byteLength }).catch(() => undefined);
+      });
       textBatcher.push(decoder.decode(bytes, { stream: true }));
       textBatcher.flush();
     });
