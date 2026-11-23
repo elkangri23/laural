@@ -10,11 +10,17 @@ const COVERAGE_THRESHOLDS = {
   branches: { label: "ramas", minimum: MINIMUM_BRANCH_COVERAGE },
 };
 
-export const CRITICAL_RUST_FILES = [
+export const CRITICAL_RUST_BRANCH_FILES = [
   "agent_files.rs",
   "configuration_transfer.rs",
   "git_panel.rs",
 ];
+export const CRITICAL_RUST_LINE_FILES = [...CRITICAL_RUST_BRANCH_FILES, "terminal_output.rs"];
+
+const FILES_BY_METRIC = {
+  lines: CRITICAL_RUST_LINE_FILES,
+  branches: CRITICAL_RUST_BRANCH_FILES,
+};
 
 export function checkCriticalCoverage(report, metric = "lines") {
   const threshold = COVERAGE_THRESHOLDS[metric];
@@ -25,7 +31,7 @@ export function checkCriticalCoverage(report, metric = "lines") {
   const files = report?.data?.flatMap((unit) => unit.files ?? []) ?? [];
   const failures = [];
 
-  for (const name of CRITICAL_RUST_FILES) {
+  for (const name of FILES_BY_METRIC[metric]) {
     const matches = files.filter((file) => file.filename?.replaceAll("\\", "/").endsWith(`/${name}`));
     if (matches.length !== 1) {
       failures.push(`${name}: se esperaba un archivo en el informe y se encontraron ${matches.length}`);
@@ -62,7 +68,7 @@ async function main() {
     throw new Error(failures.join("\n"));
   }
 
-  console.log(`Cobertura de ${threshold.label} ≥ ${threshold.minimum} % en: ${CRITICAL_RUST_FILES.join(", ")}`);
+  console.log(`Cobertura de ${threshold.label} ≥ ${threshold.minimum} % en: ${FILES_BY_METRIC[metric].join(", ")}`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  CRITICAL_RUST_FILES,
+  CRITICAL_RUST_BRANCH_FILES,
+  CRITICAL_RUST_LINE_FILES,
   MINIMUM_BRANCH_COVERAGE,
   MINIMUM_LINE_COVERAGE,
   checkCriticalCoverage,
@@ -21,9 +22,21 @@ function reportWithCoverage(coverageByName, metric = "lines") {
 }
 
 test("acepta cada módulo crítico en el umbral", () => {
-  const report = reportWithCoverage(Object.fromEntries(CRITICAL_RUST_FILES.map((name) => [name, MINIMUM_LINE_COVERAGE])));
+  const report = reportWithCoverage(Object.fromEntries(CRITICAL_RUST_LINE_FILES.map((name) => [name, MINIMUM_LINE_COVERAGE])));
 
   assert.deepEqual(checkCriticalCoverage(report), []);
+});
+
+test("exige el nuevo módulo PTY en el informe de líneas", () => {
+  const report = reportWithCoverage({
+    "agent_files.rs": 91.55,
+    "configuration_transfer.rs": 94.1,
+    "git_panel.rs": 87.94,
+  });
+
+  assert.deepEqual(checkCriticalCoverage(report), [
+    "terminal_output.rs: se esperaba un archivo en el informe y se encontraron 0",
+  ]);
 });
 
 test("falla si falta un módulo crítico", () => {
@@ -34,6 +47,7 @@ test("falla si falta un módulo crítico", () => {
 
   assert.deepEqual(checkCriticalCoverage(report), [
     "git_panel.rs: se esperaba un archivo en el informe y se encontraron 0",
+    "terminal_output.rs: se esperaba un archivo en el informe y se encontraron 0",
   ]);
 });
 
@@ -46,6 +60,7 @@ test("falla si la cobertura queda por debajo del mínimo", () => {
 
   assert.deepEqual(checkCriticalCoverage(report), [
     "configuration_transfer.rs: 84.99 % es inferior al mínimo de 85 % de líneas",
+    "terminal_output.rs: se esperaba un archivo en el informe y se encontraron 0",
   ]);
 });
 
@@ -64,12 +79,13 @@ test("falla con porcentajes inválidos o archivos ambiguos", () => {
     "agent_files.rs: se esperaba un archivo en el informe y se encontraron 2",
     "configuration_transfer.rs: el informe no contiene una cobertura de líneas válida",
     "git_panel.rs: el informe no contiene una cobertura de líneas válida",
+    "terminal_output.rs: se esperaba un archivo en el informe y se encontraron 0",
   ]);
 });
 
 test("acepta cada módulo crítico en el umbral de ramas", () => {
   const report = reportWithCoverage(
-    Object.fromEntries(CRITICAL_RUST_FILES.map((name) => [name, MINIMUM_BRANCH_COVERAGE])),
+    Object.fromEntries(CRITICAL_RUST_BRANCH_FILES.map((name) => [name, MINIMUM_BRANCH_COVERAGE])),
     "branches",
   );
 
