@@ -375,3 +375,29 @@ test("aplica la configuración cloud mediante Rust y comunica la copia local", a
   expect(onImported).toHaveBeenCalledWith(imported);
   expect(host.textContent).toContain(imported.backupPath);
 });
+
+test("consulta, restaura como nueva revisión y elimina versiones cloud", async () => {
+  const snapshot = { schemaVersion: 1, preferences, activeProviderId: null, providers: [] };
+  const imported = { preferences, activeProvider: null, providers: [], backupPath: "C:/Laural/backup.laural", backupEncrypted: false, backupContainsApiKeys: false };
+  vi.stubGlobal("confirm", vi.fn(() => true));
+  mocks.invoke.mockImplementation(async (command: string) => {
+    if (command === "account_session_status") return true;
+    if (command === "read_remote_preference_history") return { entries: [{ revision: 4, createdAt: "2026-11-22T12:00:00.000Z" }], nextBefore: null };
+    if (command === "read_remote_preferences") return { snapshot, revision: 7 };
+    if (command === "restore_remote_preference_history") return { snapshot, revision: 8 };
+    if (command === "apply_remote_preference_snapshot") return imported;
+    return undefined;
+  });
+  await act(async () => root.render(renderAccountSettings()));
+  const history = host.querySelector<HTMLElement>("[aria-labelledby='preference-history-title']");
+  await act(async () => history?.querySelector<HTMLButtonElement>("button")?.click());
+  expect(host.textContent).toContain("Versión 4");
+  await act(async () => [...(history?.querySelectorAll<HTMLButtonElement>("button") ?? [])].find((button) => button.textContent === "Restaurar")?.click());
+  expect(mocks.invoke).toHaveBeenCalledWith("restore_remote_preference_history", { revision: 4, currentRevision: 7 });
+  expect(mocks.invoke).toHaveBeenCalledWith("apply_remote_preference_snapshot", expect.objectContaining({ snapshot, revision: 8 }));
+  expect(host.textContent).toContain("Versión 4 restaurada como revisión 8");
+
+  await act(async () => [...(history?.querySelectorAll<HTMLButtonElement>("button") ?? [])].find((button) => button.textContent === "Eliminar")?.click());
+  expect(mocks.invoke).toHaveBeenCalledWith("delete_remote_preference_history", { revision: 4 });
+  expect([...(history?.querySelectorAll("strong") ?? [])].map((item) => item.textContent)).not.toContain("Versión 4");
+});

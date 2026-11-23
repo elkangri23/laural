@@ -20,9 +20,28 @@ const snapshot: PreferenceSnapshot = {
 class MemoryStore implements PreferenceStore {
   private records = new Map<string, StoredSnapshot>();
   private keys = new Map<string, { snapshot: PreferenceSnapshot; revision: number; digest: string }>();
+  private history = new Map<string, Array<{ revision: number; createdAt: string; snapshot: PreferenceSnapshot }>>();
 
   async get(accountId: string): Promise<StoredSnapshot> {
     return structuredClone(this.records.get(accountId) ?? { snapshot: null, revision: 0 });
+  }
+
+  async listHistory(accountId: string, beforeRevision: number | undefined, limit: number) {
+    return (this.history.get(accountId) ?? []).filter((entry) => beforeRevision === undefined || entry.revision < beforeRevision)
+      .sort((left, right) => right.revision - left.revision).slice(0, limit)
+      .map(({ revision, createdAt }) => ({ revision, createdAt }));
+  }
+
+  async getHistory(accountId: string, revision: number) {
+    const entry = this.history.get(accountId)?.find((item) => item.revision === revision);
+    return entry ? structuredClone(entry) : null;
+  }
+
+  async deleteHistory(accountId: string, revision: number) {
+    const entries = this.history.get(accountId) ?? [];
+    const remaining = entries.filter((entry) => entry.revision !== revision);
+    this.history.set(accountId, remaining);
+    return remaining.length !== entries.length;
   }
 
   async put(accountId: string, expectedRevision: number, key: string, value: PreferenceSnapshot): Promise<WriteSnapshotResult> {
@@ -33,6 +52,11 @@ class MemoryStore implements PreferenceStore {
       : { kind: "idempotency_key_reused" };
     const current = await this.get(accountId);
     if (current.revision !== expectedRevision) return { kind: "conflict", revision: current.revision };
+    if (current.snapshot) {
+      const entries = this.history.get(accountId) ?? [];
+      entries.push({ revision: current.revision, createdAt: new Date(0).toISOString(), snapshot: current.snapshot });
+      this.history.set(accountId, entries);
+    }
     const result = { snapshot: structuredClone(value), revision: current.revision + 1 };
     this.records.set(accountId, result);
     this.keys.set(`${accountId}:${key}`, { ...result, digest });
@@ -700,6 +724,48 @@ describe("API de snapshots de preferencias", () => {
     expect(otherAccount.json()).toEqual({ snapshot: null, revision: 0 });
   });
 
+  it("lista, restaura y elimina versiones de forma aislada y con concurrencia", async () => {
+    const app = createTestApp();
+    const auth = { authorization: "Bearer account-a" };
+    const save = async (revision: number, themeId: string, key: string) => app.inject({
+      method: "PUT", url: "/v1/preferences/current",
+      headers: { ...auth, "if-match": `"${revision}"`, "idempotency-key": key },
+      payload: { ...snapshot, preferences: { ...snapshot.preferences, themeId } },
+    });
+    await save(0, "laurel", "history-save-key-001");
+    await save(1, "ocean", "history-save-key-002");
+
+    const listed = await app.inject({ method: "GET", url: "/v1/preferences/history", headers: auth });
+    expect(listed.statusCode).toBe(200);
+    expect(listed.json().entries).toEqual([{ revision: 1, createdAt: new Date(0).toISOString() }]);
+    expect((await app.inject({ method: "GET", url: "/v1/preferences/history" })).statusCode).toBe(401);
+    expect((await app.inject({ method: "GET", url: "/v1/preferences/history?limit=51", headers: auth })).statusCode).toBe(400);
+
+    const restoreHeaders = { ...auth, "if-match": '"2"', "idempotency-key": "history-restore-key-001" };
+    const restored = await app.inject({ method: "POST", url: "/v1/preferences/history/1/restore", headers: restoreHeaders });
+    expect(restored.statusCode).toBe(200);
+    expect(restored.json()).toMatchObject({ revision: 3, snapshot: { preferences: { themeId: "laurel" } } });
+    expect((await app.inject({ method: "POST", url: "/v1/preferences/history/1/restore", headers: { ...restoreHeaders, "if-match": '"1"' } })).json().revision).toBe(3);
+    expect((await app.inject({ method: "POST", url: "/v1/preferences/history/1/restore", headers: { ...auth, "if-match": '"1"', "idempotency-key": "history-restore-key-002" } })).statusCode).toBe(412);
+
+    expect((await app.inject({ method: "GET", url: "/v1/preferences/history", headers: { authorization: "Bearer account-b" } })).json().entries).toEqual([]);
+    expect((await app.inject({ method: "DELETE", url: "/v1/preferences/history/1", headers: { authorization: "Bearer account-b" } })).statusCode).toBe(404);
+    expect((await app.inject({ method: "DELETE", url: "/v1/preferences/history/1", headers: auth })).statusCode).toBe(204);
+    expect((await app.inject({ method: "DELETE", url: "/v1/preferences/history/1", headers: auth })).statusCode).toBe(404);
+  });
+
+  it("valida paginación, revisión e idempotencia del historial antes de operar", async () => {
+    const app = createTestApp();
+    const auth = { authorization: "Bearer account-a" };
+    expect((await app.inject({ method: "GET", url: "/v1/preferences/history?before=0", headers: auth })).statusCode).toBe(400);
+    expect((await app.inject({ method: "GET", url: "/v1/preferences/history?limit=0", headers: auth })).statusCode).toBe(400);
+    expect((await app.inject({ method: "DELETE", url: "/v1/preferences/history/0", headers: auth })).statusCode).toBe(400);
+    expect((await app.inject({ method: "POST", url: "/v1/preferences/history/0/restore", headers: auth })).statusCode).toBe(400);
+    expect((await app.inject({ method: "POST", url: "/v1/preferences/history/1/restore", headers: auth })).statusCode).toBe(428);
+    expect((await app.inject({ method: "POST", url: "/v1/preferences/history/1/restore", headers: { ...auth, "if-match": '"0"', "idempotency-key": "short" } })).statusCode).toBe(400);
+    expect((await app.inject({ method: "POST", url: "/v1/preferences/history/1/restore", headers: { ...auth, "if-match": '"0"', "idempotency-key": "history-restore-missing" } })).statusCode).toBe(404);
+  });
+
   it("rechaza claves y campos que no forman parte del snapshot", async () => {
     const app = createTestApp();
     const response = await app.inject({
@@ -780,6 +846,9 @@ describe("API de snapshots de preferencias", () => {
 
     const brokenStore: PreferenceStore = {
       get: async () => { throw new Error("internal detail"); },
+      listHistory: async () => [],
+      getHistory: async () => null,
+      deleteHistory: async () => false,
       put: async () => { throw new Error("internal detail"); },
     };
     const broken = createTestApp({ store: brokenStore });

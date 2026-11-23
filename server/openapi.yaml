@@ -644,6 +644,84 @@ paths:
         '413': { description: Payload superior a 256 KiB }
         '428': { description: Falta If-Match }
         '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/preferences/history:
+    get:
+      summary: Lista versiones anteriores de preferencias
+      description: Devuelve solo metadatos; las versiones no caducan y pertenecen a la cuenta autenticada.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: before
+          schema: { type: integer, minimum: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 50, default: 25 }
+      responses:
+        '200':
+          description: Página de versiones en orden descendente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  entries:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        revision: { type: integer, minimum: 1 }
+                        createdAt: { type: string, format: date-time }
+                      required: [revision, createdAt]
+                      additionalProperties: false
+                  nextBefore: { oneOf: [{ type: integer, minimum: 1 }, { type: 'null' }] }
+                required: [entries, nextBefore]
+                additionalProperties: false
+        '401': { description: Sesión inválida, revocada o expirada }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/preferences/history/{revision}:
+    delete:
+      summary: Elimina una versión histórica de la cuenta
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: revision
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        '204': { description: Versión eliminada }
+        '401': { description: Sesión inválida, revocada o expirada }
+        '404': { description: Versión inexistente en esta cuenta }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/preferences/history/{revision}/restore:
+    post:
+      summary: Restaura una versión como nueva revisión actual
+      description: No modifica la versión histórica. Exige revisión actual e idempotencia; la versión actual pasa al historial.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: revision
+          required: true
+          schema: { type: integer, minimum: 1 }
+        - in: header
+          name: If-Match
+          required: true
+          schema: { type: string, pattern: '^"(0|[1-9][0-9]*)"$' }
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: { type: string, minLength: 16, maxLength: 128, pattern: '^[A-Za-z0-9_-]+$' }
+      responses:
+        '200': { description: Snapshot restaurado como una nueva revisión actual }
+        '400': { description: Revisión o clave idempotente inválida }
+        '401': { description: Sesión inválida, revocada o expirada }
+        '404': { description: Versión inexistente en esta cuenta }
+        '409': { description: Clave idempotente reutilizada con otro contenido }
+        '412': { description: Revisión actual obsoleta }
+        '428': { description: Falta If-Match }
+        '429': { $ref: '#/components/responses/RateLimited' }
 components:
   responses:
     RateLimited:

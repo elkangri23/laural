@@ -12,6 +12,7 @@ type Snapshot = {
   providers: { id: string; kind: string; name: string; model: string; customEndpoint?: string }[];
 };
 type Remote = { snapshot: Snapshot | null; revision: number };
+type HistoryPage = { entries: { revision: number; createdAt: string }[]; nextBefore: number | null };
 type AccountSession = { id: string; createdAt: string; expiresAt: string; current: boolean };
 type AccountMfaStatus = { totpEnabled: boolean; recoveryCodesRemaining: number; enrollmentPending: boolean };
 type TotpEnrollment = { secret: string; provisioningUri: string };
@@ -25,6 +26,7 @@ export function AccountSettings({ onClose, preferences, onImported, onSyncSettle
   const [message, setMessage] = useState("Comprobando la sesión local…");
   const [remote, setRemote] = useState<Remote | null>(null);
   const [hasConflict, setHasConflict] = useState(false);
+  const [history, setHistory] = useState<HistoryPage | null>(null);
   const [riskChecked, setRiskChecked] = useState(false);
   const [riskAcknowledged, setRiskAcknowledged] = useState(syncRiskAcknowledged);
   const [sessions, setSessions] = useState<AccountSession[]>([]);
@@ -429,6 +431,69 @@ export function AccountSettings({ onClose, preferences, onImported, onSyncSettle
     }
   }
 
+  async function loadHistory(before?: number) {
+    if (!riskAcknowledged) return;
+    setBusy(true);
+    try {
+      const page = await invoke<HistoryPage>("read_remote_preference_history", { beforeRevision: before ?? null });
+      setHistory((previous) => before && previous
+        ? { entries: [...previous.entries, ...page.entries], nextBefore: page.nextBefore }
+        : page);
+    } catch (error) {
+      setMessage(typeof error === "string" ? error : "No se pudo consultar el historial de la nube.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function restoreHistoryVersion(version: { revision: number; createdAt: string }) {
+    if (!riskAcknowledged || !window.confirm(`Se restaurará la versión ${version.revision} como una nueva configuración en la nube y en este equipo. Antes se guardará una copia local. ¿Continuar?`)) return;
+    setBusy(true);
+    setMessage("Restaurando la versión y preparando una copia local…");
+    let cloudRestored = false;
+    try {
+      const current = await invoke<Remote>("read_remote_preferences");
+      if (!current.snapshot) throw new Error("La nube no contiene una configuración actual.");
+      const restored = await invoke<Remote>("restore_remote_preference_history", {
+        revision: version.revision,
+        currentRevision: current.revision,
+      });
+      cloudRestored = true;
+      if (!restored.snapshot) throw new Error("La versión restaurada está vacía.");
+      const applied = await invoke<ImportResult>("apply_remote_preference_snapshot", {
+        snapshot: restored.snapshot,
+        revision: restored.revision,
+        currentPreferences: snapshotPreferences(),
+      });
+      onImported(applied);
+      onSyncSettled();
+      setRemote(restored);
+      setHasConflict(false);
+      setMessage(`Versión ${version.revision} restaurada como revisión ${restored.revision}. Copia local: ${applied.backupPath}`);
+    } catch (error) {
+      const detail = typeof error === "string" ? error : error instanceof Error ? error.message : "No se pudo aplicar la configuración local.";
+      setMessage(cloudRestored
+        ? `La nube ya restauró la versión, pero este equipo no pudo aplicarla. Vuelve a sincronizar para reintentar. ${detail}`
+        : detail);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteHistoryVersion(version: { revision: number; createdAt: string }) {
+    if (!window.confirm(`¿Eliminar de la nube la versión ${version.revision}? Esta acción no se puede deshacer.`)) return;
+    setBusy(true);
+    try {
+      await invoke("delete_remote_preference_history", { revision: version.revision });
+      setHistory((current) => current ? { ...current, entries: current.entries.filter((entry) => entry.revision !== version.revision) } : current);
+      setMessage(`Versión ${version.revision} eliminada del historial de la nube.`);
+    } catch (error) {
+      setMessage(typeof error === "string" ? error : "No se pudo eliminar la versión.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return <SettingsDialog onClose={onClose}>
     <section className="account-settings" aria-labelledby="account-settings-title">
       <p className="eyebrow">CUENTA</p>
@@ -459,6 +524,22 @@ export function AccountSettings({ onClose, preferences, onImported, onSyncSettle
             </>}
           </div>
           <button className="secondary-button" onClick={() => void removeLocalSession()} disabled={busy}>Quitar cuenta de este equipo</button>
+          <section className="account-sessions" aria-labelledby="preference-history-title">
+            <div className="account-sessions-heading">
+              <h4 id="preference-history-title">Historial de preferencias en la nube</h4>
+              <button className="secondary-button" onClick={() => void loadHistory()} disabled={busy || !riskAcknowledged}>Actualizar</button>
+            </div>
+            <p className="dialog-copy">Las versiones se conservan hasta que las elimines o borres la cuenta. Las claves API no forman parte de este historial.</p>
+            {history?.entries.length === 0 && <p className="dialog-copy">No hay versiones anteriores guardadas.</p>}
+            {history && history.entries.length > 0 && <ul className="account-session-list">
+              {history.entries.map((version) => <li key={version.revision}>
+                <div><strong>Versión {version.revision}</strong><span>{new Date(version.createdAt).toLocaleString()}</span></div>
+                <button className="secondary-button" onClick={() => void restoreHistoryVersion(version)} disabled={busy}>Restaurar</button>
+                <button className="secondary-button" onClick={() => void deleteHistoryVersion(version)} disabled={busy}>Eliminar</button>
+              </li>)}
+            </ul>}
+            {history?.nextBefore !== null && history?.nextBefore !== undefined && <button className="secondary-button" onClick={() => void loadHistory(history.nextBefore ?? undefined)} disabled={busy}>Ver versiones anteriores</button>}
+          </section>
           <div className="account-sessions" aria-labelledby="account-sessions-title">
             <div className="account-sessions-heading">
               <h4 id="account-sessions-title">Sesiones activas</h4>

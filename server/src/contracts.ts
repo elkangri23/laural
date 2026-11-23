@@ -6,6 +6,12 @@ export type StoredSnapshot = {
   revision: number;
 };
 
+export type PreferenceHistoryEntry = {
+  revision: number;
+  createdAt: string;
+  snapshot?: PreferenceSnapshot;
+};
+
 export type WriteSnapshotResult =
   | { kind: "saved" | "replayed"; snapshot: PreferenceSnapshot; revision: number }
   | { kind: "unauthorized" }
@@ -14,6 +20,9 @@ export type WriteSnapshotResult =
 
 export interface PreferenceStore {
   get(accountId: string): Promise<StoredSnapshot>;
+  listHistory(accountId: string, beforeRevision: number | undefined, limit: number): Promise<PreferenceHistoryEntry[]>;
+  getHistory(accountId: string, revision: number): Promise<PreferenceHistoryEntry | null>;
+  deleteHistory(accountId: string, revision: number): Promise<boolean>;
   put(
     accountId: string,
     expectedRevision: number,

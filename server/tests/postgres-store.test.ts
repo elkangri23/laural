@@ -36,11 +36,33 @@ describe("almacén PostgreSQL de preferencias", () => {
     await expect(store.get("account-id")).resolves.toEqual({ snapshot, revision: 7 });
   });
 
+  it("pagina, obtiene y elimina únicamente el historial de la cuenta", async () => {
+    const createdAt = new Date("2026-11-22T12:00:00.000Z");
+    const { pool, queries } = createPool((sql) => {
+      if (sql.includes("DELETE FROM preference_snapshot_history")) return { rows: [], rowCount: 1 };
+      if (sql.includes("SELECT h.snapshot")) return { rows: [{ snapshot, revision: "4", created_at: createdAt }] };
+      return { rows: [{ revision: "4", created_at: createdAt }] };
+    });
+    const store = new PostgresPreferenceStore(pool);
+    await expect(store.listHistory("account-id", 5, 25)).resolves.toEqual([{ revision: 4, createdAt: createdAt.toISOString() }]);
+    await expect(store.getHistory("account-id", 4)).resolves.toEqual({ revision: 4, createdAt: createdAt.toISOString(), snapshot });
+    await expect(store.deleteHistory("account-id", 4)).resolves.toBe(true);
+    expect(queries.every((sql) => sql.includes("account_id = $1"))).toBe(true);
+  });
+
+  it("devuelve ausencia para una versión borrada o inexistente", async () => {
+    const { pool } = createPool(() => ({ rows: [], rowCount: 0 }));
+    const store = new PostgresPreferenceStore(pool);
+    await expect(store.getHistory("account-id", 99)).resolves.toBeNull();
+    await expect(store.deleteHistory("account-id", 99)).resolves.toBe(false);
+    await expect(store.listHistory("account-id", undefined, 25)).resolves.toEqual([]);
+  });
+
   it("escribe en una transacción y guarda una idempotencia", async () => {
     const { pool, queries, release } = createPool((sql) => {
       if (sql.includes("FROM accounts")) return { rows: [{ id: "account-id" }] };
       if (sql.includes("FROM preference_idempotency")) return { rows: [] };
-      if (sql.includes("FROM account_preferences")) return { rows: [{ revision: "3" }] };
+      if (sql.includes("FROM account_preferences")) return { rows: [{ revision: "3", snapshot, updated_at: new Date("2026-11-22T12:00:00.000Z") }] };
       return { rows: [] };
     });
     const store = new PostgresPreferenceStore(pool);
@@ -49,6 +71,7 @@ describe("almacén PostgreSQL de preferencias", () => {
     expect(queries[0]).toBe("BEGIN");
     expect(queries).toContain("COMMIT");
     expect(queries.some((sql) => sql.includes("INSERT INTO preference_idempotency"))).toBe(true);
+    expect(queries.some((sql) => sql.includes("INSERT INTO preference_snapshot_history"))).toBe(true);
     expect(release).toHaveBeenCalledOnce();
   });
 

@@ -2,6 +2,8 @@
 
 ## Sin publicar
 
+- Añadido historial cloud de preferencias: consulta paginada, borrado por versión y restauración como revisión nueva con concurrencia e idempotencia. Se conserva la revisión reemplazada y la app crea una copia `.laural` antes de aplicar la restauración; las API keys siguen excluidas. Migración 010, ADR-0045 y documentación actualizados.
+- Verificación: servidor 140 pruebas pasadas, 9 omitidas por no disponer de `TEST_DATABASE_URL`, 80,91 % de líneas globales; interfaz 162/162, 79,39 % de líneas; Rust 131 pasadas, 1 ignorada y `cargo check` correcto. `cargo llvm-cov` ejecuta los tests, pero MSVC no genera datos de cobertura.
 - Los cambios de preferencias de Microsoft Defender mediante `Add-MpPreference`, `Set-MpPreference` o `Remove-MpPreference` ahora requieren aprobación; las consultas `Get-MpPreference` siguen siendo de lectura.
 - Verificación: Rust 131 pasadas y 1 ignorada; UI 161/161 (79,18 % de líneas), ocho gates y formato correctos. LLVM ejecuta Rust, pero MSVC no genera el informe local.
 - El agente exige aprobación manual para `runas`, `gsudo`, `doas`, `su` y `pkexec`, que pueden cambiar de usuario o ejecutar procesos con privilegios elevados; las reglas permitidas no eluden esta revisión.

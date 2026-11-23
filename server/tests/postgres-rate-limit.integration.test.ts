@@ -364,6 +364,22 @@ describePostgres("integración real de PostgreSQL para rate limits", () => {
       expect(conflict.statusCode).toBe(412);
       expect(conflict.json()).toEqual({ error: "revision_conflict", revision: 1 });
 
+      const laterSnapshot = { ...snapshot, preferences: { ...snapshot.preferences, themeId: "rose" } };
+      const later = await app.inject({
+        method: "PUT", url: "/v1/preferences/current",
+        headers: { ...headers, "if-match": '"1"', "idempotency-key": "pg-integration-write-0004" }, payload: laterSnapshot,
+      });
+      expect(later.statusCode).toBe(200);
+      expect((await app.inject({ method: "GET", url: "/v1/preferences/history", headers })).json().entries.map((entry: { revision: number }) => entry.revision)).toEqual([1]);
+      const restored = await app.inject({
+        method: "POST", url: "/v1/preferences/history/1/restore",
+        headers: { ...headers, "if-match": '"2"', "idempotency-key": "pg-integration-restore-0001" },
+      });
+      expect(restored.statusCode).toBe(200);
+      expect(restored.json()).toEqual({ snapshot, revision: 3 });
+      expect((await app.inject({ method: "GET", url: "/v1/preferences/history", headers })).json().entries.map((entry: { revision: number }) => entry.revision)).toEqual([2, 1]);
+      expect((await app.inject({ method: "DELETE", url: "/v1/preferences/history/1", headers })).statusCode).toBe(204);
+
       const otherAccount = await app.inject({ method: "GET", url: "/v1/preferences/current", headers: { authorization: "Bearer second" } });
       expect(otherAccount.statusCode).toBe(200);
       expect(otherAccount.json()).toEqual({ snapshot: null, revision: 0 });

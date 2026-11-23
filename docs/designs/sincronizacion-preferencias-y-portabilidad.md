@@ -1,7 +1,7 @@
 # Optional Preference Sync and Profile Portability
 
 * **Author:** Antonio Moles
-* **Status:** Approved; local encrypted export/import, snapshot API foundation, native email/password and passkey login, manual desktop sync, automatic preference sync with durable local pending state and three-hour checks, and the local public status page are implemented behind account feature flags. Google OAuth, user-visible cloud snapshot history/restore, privileged VPS recovery, detailed component health status, and production deployment/validation remain pending.
+* **Status:** Approved; local encrypted export/import, snapshot API, native email/password and passkey login, manual/automatic preference sync, user-visible cloud snapshot history/restore, and the local public status page are implemented behind account feature flags. Google OAuth, privileged VPS recovery, detailed component health status, and production deployment/validation remain pending.
 * **Date:** 2026-11-21
 
 --------------------------------------------------------------------------------
@@ -89,6 +89,12 @@ The no-off-site-copy decision is accepted. The [account recovery runbook](../run
 * **Given**: Sync is enabled and a device loses network access or another device changes the cloud snapshot.
 * **When**: The user saves settings offline, reconnects, or presses **Sync now**.
 * **Then**: Local settings remain saved and pending is visible. A stale cloud revision stops automatic writes and prompts for a whole-snapshot choice; no last-write-wins overwrite occurs.
+
+### Recover an earlier cloud preference snapshot
+
+* **Given**: The account has prior saved preference revisions and the user has acknowledged cloud-sync risk.
+* **When**: They browse history, choose a version and confirm restore.
+* **Then**: The selected version is written as a new current revision with concurrency protection, the prior cloud revision is retained, and the desktop creates a local `.laural` copy before applying it. Versions have no automatic expiry and the owner may delete them. API keys are never in cloud history.
 
 ### Recover an account after losing all factors
 
@@ -292,7 +298,7 @@ Unless noted otherwise, paths in this table are relative to the repository root.
 | `src-tauri/src/account.rs` (implemented) | Launch the fixed external authentication origin, create a random loopback listener/state/PKCE verifier, and exchange one-use auth codes. |
 | `src-tauri/src/configuration_transfer.rs` (implemented) | Read/write the versioned export format; preview, validate, back up, merge/replace and roll back imports. |
 | `src-tauri/src/configuration_transfer.rs` crypto helpers (implemented) | Versioned Argon2id key derivation and AES-256-GCM authenticated encryption envelope for key-bearing exports; never implement primitives locally. |
-| `src-tauri/src/sync.rs` (implemented locally) | HTTP client, conditional revisions, retry/coalescing, three-hour open-app check, resume check, conflict stop and local pending state. Cloud history/restore remains pending. |
+| `src-tauri/src/sync.rs` (implemented locally) | HTTP client, conditional revisions, retry/coalescing, three-hour open-app check, resume check, conflict stop and local pending state. Cloud history/restore implemented locally; PostgreSQL/VPS validation remains pending. |
 | `src-tauri/Cargo.toml` and `src-tauri/Cargo.lock` (modify) | Add maintained authenticated-encryption and external-browser dependencies; pin the resolved dependency graph. |
 | `src-tauri/capabilities/default.json` (modify) | Grant only the specific opener permission needed to launch the fixed official authentication origin. |
 | `package.json` and `package-lock.json` (modify) | Add the opener plugin client and scripts for service build/test/coverage. |
@@ -303,17 +309,17 @@ Unless noted otherwise, paths in this table are relative to the repository root.
 | `server/src/config.ts` and pool setup in `server/src/main.ts` (implemented) | Validate environment variables and manage PostgreSQL connections with parameterized SQL. |
 | `server/src/plugins/security.ts`, `server/src/plugins/authenticate.ts` (create) | Set security headers, strict origin handling, request limits/rate limits and account-scoped session authentication. |
 | `server/src/app.ts` with `native-auth.ts`, `postgres-native-auth-store.ts`, `email-auth.ts`, `account-mfa.ts`, `account-passkeys.ts` and `account-deletion.ts` (implemented) | Expose validated, rate-limited account, sync, deletion, password, PIN, TOTP and passkey flows. Google OAuth and privileged recovery are pending. |
-| `server/src/resend-mailer.ts`, `security-email-outbox.ts` and `server/src/postgres-store.ts` (implemented locally) | Deliver transactional security email through the outbox and persist the current account snapshot with revisions/idempotency. User-visible snapshot history/restore remains pending. |
-| `server/migrations/010_preference_snapshot_history.sql` (pending) | Preserve each accepted prior cloud preference revision by account, without automatic expiry, and cascade versions when the account is deleted. |
-| `server/src/postgres-store.ts`, `server/src/app.ts`, `server/openapi.yaml` (pending) | List/delete/restore complete preference versions. Restore must check current revision and idempotency, add a new revision and leave history immutable. |
+| `server/src/resend-mailer.ts`, `security-email-outbox.ts` and `server/src/postgres-store.ts` (implemented locally) | Deliver transactional security email through the outbox and persist current snapshots and immutable prior revisions with conditional writes/idempotency. PostgreSQL/VPS history validation remains pending. |
+| `server/migrations/010_preference_snapshot_history.sql` (implemented locally) | Preserve each accepted prior cloud preference revision by account, without automatic expiry, and cascade versions when the account is deleted. |
+| `server/src/postgres-store.ts`, `server/src/app.ts`, `server/openapi.yaml` (implemented locally) | List/delete/restore complete preference versions. Restore checks current revision and idempotency, adds a new revision and leaves history immutable. |
 | `server/src/app.ts` and `server/web/auth.css` (implemented) | Serve a same-origin browser-only sign-in/registration surface so WebAuthn uses the official HTTPS origin; current HTML is rendered by Fastify. Google OAuth remains missing. |
 | `server/web/status.html`, `server/web/status.js`, `server/web/status.css` (implemented locally) | Provide a Spanish, unauthenticated status page with overall state and notices; health by API/sync/email component is pending. |
 | `server/src/public-status.ts`, `server/scripts/validate-status.mjs` (implemented) | Validate a closed, bounded public status document and provide an operator-side validator without printing its contents. |
 | `server/deploy/Caddyfile` (initial implementation) and `/var/lib/laural/status/status.json` (runtime file, not committed) | Serve the page and status document directly from Caddy, outside Fastify; let the administrator publish bounded notices over SSH without relying on the API database. VPS installation and Caddy validation remain pending. |
-| `server/openapi.yaml` (implemented) | Specify request/response schemas, auth steps, revision headers, error categories and size limits as the API contract. Google OAuth and cloud history/restore are not yet specified as live routes. |
+| `server/openapi.yaml` (implemented locally) | Specify request/response schemas, auth steps, revision headers, error categories and size limits as the API contract. Google OAuth remains pending. |
 | `server/src/admin/review-recovery.ts` (create) | Operator-only command over VPS SSH to approve/reject a reviewed case, revoke factors/sessions, notify the user and append a minimal audit event. No public reset route or admin web panel. |
 | `server/src/request-rate-limit.ts` and `server/migrations/004_request_rate_limits.sql` | Persist route/IP request windows atomically in PostgreSQL with an HMAC key; thresholds and forwarded-IP trust are subject to VPS load validation. |
-| `server/migrations/001_initial.sql` and `002`–`009` (implemented) | Create account, session, current-snapshot/idempotency, PIN, TOTP, outbox and passkey tables. No cloud preference revision-history/recovery table exists yet; add a migration for user-visible, account-scoped versions and cascade deletion. |
+| `server/migrations/001_initial.sql` and `002`–`010` (implemented locally) | Create account, session, current-snapshot/history/idempotency, PIN, TOTP, outbox and passkey tables. Preference history is account-scoped and cascades on deletion. |
 | `server/Dockerfile`, `server/compose.yaml`, `server/deploy/Caddyfile` (create) | Run the API and PostgreSQL locally and on the VPS; terminate TLS, route `/v1` to the API, and serve `/status` plus its public announcement document as static files outside the API process. Inject production secrets outside source control. |
 | `tests/configuration-transfer.test.tsx`, `tests/sync-settings.test.tsx`, `tests/sync-preferences.test.ts` (create) | Cover transfer UX, password/key consent, sync state, automatic triggers, three-hour schedule and whole-snapshot conflicts. |
 | `tests/app.test.tsx`, `tests/update-manager.test.tsx` (modify) | Prove local chat and terminal history never enter sync payloads and update preference saves trigger only the allowlisted path. |

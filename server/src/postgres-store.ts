@@ -1,5 +1,5 @@
 import type { Pool } from "pg";
-import type { PreferenceSnapshot, PreferenceStore, StoredSnapshot, WriteSnapshotResult } from "./contracts.js";
+import type { PreferenceHistoryEntry, PreferenceSnapshot, PreferenceStore, StoredSnapshot, WriteSnapshotResult } from "./contracts.js";
 import { snapshotDigest } from "./app.js";
 
 export class PostgresPreferenceStore implements PreferenceStore {
@@ -19,6 +19,43 @@ export class PostgresPreferenceStore implements PreferenceStore {
     return row
       ? { snapshot: row.snapshot, revision: Number(row.revision) }
       : { snapshot: null, revision: 0 };
+  }
+
+  async listHistory(accountId: string, beforeRevision: number | undefined, limit: number): Promise<PreferenceHistoryEntry[]> {
+    const result = await this.pool.query<{ revision: string; created_at: Date }>(
+      `SELECT h.revision::text AS revision, h.created_at
+         FROM preference_snapshot_history AS h
+         JOIN accounts AS a ON a.id = h.account_id
+        WHERE h.account_id = $1 AND a.email_verified_at IS NOT NULL AND a.deleted_at IS NULL
+          AND ($2::bigint IS NULL OR h.revision < $2)
+        ORDER BY h.revision DESC LIMIT $3`,
+      [accountId, beforeRevision ?? null, limit],
+    );
+    return result.rows.map((row) => ({ revision: Number(row.revision), createdAt: row.created_at.toISOString() }));
+  }
+
+  async getHistory(accountId: string, revision: number): Promise<PreferenceHistoryEntry | null> {
+    const result = await this.pool.query<{ snapshot: PreferenceSnapshot; revision: string; created_at: Date }>(
+      `SELECT h.snapshot, h.revision::text AS revision, h.created_at
+         FROM preference_snapshot_history AS h
+         JOIN accounts AS a ON a.id = h.account_id
+        WHERE h.account_id = $1 AND h.revision = $2
+          AND a.email_verified_at IS NOT NULL AND a.deleted_at IS NULL`,
+      [accountId, revision],
+    );
+    const row = result.rows[0];
+    return row ? { snapshot: row.snapshot, revision: Number(row.revision), createdAt: row.created_at.toISOString() } : null;
+  }
+
+  async deleteHistory(accountId: string, revision: number): Promise<boolean> {
+    const result = await this.pool.query(
+      `DELETE FROM preference_snapshot_history AS h
+        USING accounts AS a
+        WHERE h.account_id = a.id AND h.account_id = $1 AND h.revision = $2
+          AND a.email_verified_at IS NOT NULL AND a.deleted_at IS NULL`,
+      [accountId, revision],
+    );
+    return result.rowCount === 1;
   }
 
   async put(
@@ -60,8 +97,8 @@ export class PostgresPreferenceStore implements PreferenceStore {
           : { kind: "idempotency_key_reused" };
       }
 
-      const current = await client.query<{ revision: string }>(
-        "SELECT revision::text AS revision FROM account_preferences WHERE account_id = $1 FOR UPDATE",
+      const current = await client.query<{ revision: string; snapshot: PreferenceSnapshot; updated_at: Date }>(
+        "SELECT revision::text AS revision, snapshot, updated_at FROM account_preferences WHERE account_id = $1 FOR UPDATE",
         [accountId],
       );
       const revision = Number(current.rows[0]?.revision ?? "0");
@@ -71,6 +108,15 @@ export class PostgresPreferenceStore implements PreferenceStore {
       }
 
       const nextRevision = revision + 1;
+      const old = current.rows[0];
+      if (old) {
+        await client.query(
+          `INSERT INTO preference_snapshot_history (account_id, revision, snapshot, created_at)
+           VALUES ($1, $2, $3::jsonb, $4)
+           ON CONFLICT (account_id, revision) DO NOTHING`,
+          [accountId, revision, JSON.stringify(old.snapshot), old.updated_at],
+        );
+      }
       await client.query(
         `INSERT INTO account_preferences (account_id, snapshot, revision, updated_at)
          VALUES ($1, $2::jsonb, $3, now())

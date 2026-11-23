@@ -1,6 +1,6 @@
 # Casos de uso: portabilidad y sincronización
 
-- **Estado:** UC-17/18 están implementados localmente; login Tauri, revocación de sesiones y cliente manual/automático también. Pendientes pruebas de reconexión, Google OAuth, historial cloud recuperable y VPS. TOTP, challenge, códigos y cola transaccional de avisos están integrados localmente; UC-21 conserva pendiente la recuperación administrativa tras perder todos los factores. UC-22 tiene sitio/contrato local estático, pero no comprobaciones de salud por componente ni operación VPS. UC-25 implementa restablecimiento de contraseña con PIN, aún sin despliegue VPS/Resend.
+- **Estado:** UC-17/18 están implementados localmente; login Tauri, revocación de sesiones y cliente manual/automático también. Pendientes pruebas de reconexión, Google OAuth y validación VPS; historial cloud paginado/restaurable/borrable implementado localmente. TOTP, challenge, códigos y cola transaccional de avisos están integrados localmente; UC-21 conserva pendiente la recuperación administrativa tras perder todos los factores. UC-22 tiene sitio/contrato local estático, pero no comprobaciones de salud por componente ni operación VPS. UC-25 implementa restablecimiento de contraseña con PIN, aún sin despliegue VPS/Resend.
 - **Especificación:** [plan de sincronización](../plans/sincronizacion-preferencias.md).
 - **Diseño técnico:** [diseño formal](../designs/sincronizacion-preferencias-y-portabilidad.md).
 
@@ -42,7 +42,7 @@
 
 **Pendiente:** ensayar desconexión/reconexión, suspensión/reanudación, conflicto concurrente y despliegue real del VPS en Windows.
 
-**Aceptación:** escritura condicional e idempotente; no hay «última escritura gana» silenciosa; no se muestran diferencias por campo; la implementación actual crea una copia local antes de reemplazar, pero todavía no conserva un historial cloud consultable/restaurable; un schema futuro/corrupto no se trata como nube vacía.
+**Aceptación:** escritura condicional e idempotente; no hay «última escritura gana» silenciosa; no se muestran diferencias por campo; la implementación conserva versiones cloud consultables/restaurables y crea copia local antes de aplicar; un schema futuro/corrupto no se trata como nube vacía.
 
 ## UC-21 — Recuperar cuenta tras perder factores
 
@@ -83,3 +83,11 @@
 **Flujo:** desde Cuenta, la persona inicia sesión otra vez para renovar la autenticación si hace falta, escribe `ELIMINAR` y confirma la solicitud. El servidor borra la cuenta y sus datos vinculados en una transacción. La app elimina del Credential Manager la sesión y borra la línea base local de sync.
 
 **Aceptación:** la sesión debe haberse emitido en los últimos diez minutos; con TOTP, login exige completar ese factor. Frase incorrecta no modifica datos; la ruta limita intentos. El borrado en cascada cubre snapshots, idempotencias, sesiones, desafíos y factores sin tocar otra cuenta. La configuración, perfiles y API keys locales permanecen. Si se pierde la respuesta de red, el resultado puede ser indeterminado y la UI debe advertir antes de reintentar.
+
+## UC-28 — Consultar y restaurar historial de preferencias en nube
+
+**Actor:** titular de una cuenta con sincronización habilitada y riesgo de VPS aceptado en el equipo.
+
+**Flujo:** desde Configuración, abre el historial paginado, revisa fechas/revisiones y elige restaurar o eliminar una versión. Al restaurar, Laural confirma la revisión actual del servidor y usa una clave idempotente; el servidor publica el snapshot elegido como revisión nueva y conserva el actual. El cliente genera una copia local `.laural` antes de aplicar la configuración restaurada.
+
+**Aceptación:** el historial no caduca automáticamente, solo lo ve y administra su cuenta, cada versión es inmutable salvo borrado explícito, el borrado de cuenta elimina las versiones en cascada, y ninguna API key aparece en ellas. Un conflicto concurrente no sobrescribe datos. La pérdida total del VPS puede destruir historial y cuenta: no hay copia de desastre fuera del servidor.

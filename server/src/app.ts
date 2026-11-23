@@ -611,6 +611,51 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
     return reply.code(200).send({ snapshot: result.snapshot, revision: result.revision });
   });
 
+  app.get<{ Querystring: { before?: string; limit?: string } }>("/v1/preferences/history", { preHandler: limited(rateLimit, "preferences-history-read", 60, 60) }, async (request, reply) => {
+    const accountId = await dependencies.authenticate(request.headers.authorization);
+    if (!accountId) return reply.code(401).send({ error: "unauthorized" });
+    const before = request.query.before === undefined ? undefined : parsePathRevision(request.query.before);
+    const limit = request.query.limit === undefined ? 25 : Number(request.query.limit);
+    if ((request.query.before !== undefined && before === null) || !Number.isInteger(limit) || limit < 1 || limit > 50) {
+      return reply.code(400).send({ error: "invalid_history_query" });
+    }
+    const entries = await dependencies.store.listHistory(accountId, before ?? undefined, limit);
+    return { entries, nextBefore: entries.length === limit ? entries.at(-1)?.revision ?? null : null };
+  });
+
+  app.delete<{ Params: { revision: string } }>("/v1/preferences/history/:revision", { preHandler: limited(rateLimit, "preferences-history-delete", 20, 60) }, async (request, reply) => {
+    const accountId = await dependencies.authenticate(request.headers.authorization);
+    if (!accountId) return reply.code(401).send({ error: "unauthorized" });
+    const revision = parsePathRevision(request.params.revision);
+    if (revision === null) return reply.code(400).send({ error: "invalid_revision" });
+    const deleted = await dependencies.store.deleteHistory(accountId, revision);
+    return deleted ? reply.code(204).send() : reply.code(404).send({ error: "history_not_found" });
+  });
+
+  app.post<{ Params: { revision: string } }>("/v1/preferences/history/:revision/restore", { preHandler: limited(rateLimit, "preferences-history-restore", 15, 60) }, async (request, reply) => {
+    const accountId = await dependencies.authenticate(request.headers.authorization);
+    if (!accountId) return reply.code(401).send({ error: "unauthorized" });
+    const revision = parsePathRevision(request.params.revision);
+    const expectedRevision = parseRevision(request.headers["if-match"]);
+    const idempotencyKey = request.headers["idempotency-key"];
+    if (revision === null) return reply.code(400).send({ error: "invalid_revision" });
+    if (expectedRevision === null) return reply.code(428).send({ error: "if_match_required" });
+    if (typeof idempotencyKey !== "string" || !/^[A-Za-z0-9_-]{16,128}$/.test(idempotencyKey)) {
+      return reply.code(400).send({ error: "invalid_idempotency_key" });
+    }
+    const historical = await dependencies.store.getHistory(accountId, revision);
+    if (!historical?.snapshot) return reply.code(404).send({ error: "history_not_found" });
+    const result = await dependencies.store.put(accountId, expectedRevision, idempotencyKey, historical.snapshot);
+    if (result.kind === "unauthorized") return reply.code(401).send({ error: "unauthorized" });
+    if (result.kind === "conflict") {
+      reply.header("ETag", `"${result.revision}"`);
+      return reply.code(412).send({ error: "revision_conflict", revision: result.revision });
+    }
+    if (result.kind === "idempotency_key_reused") return reply.code(409).send({ error: "idempotency_key_reused" });
+    reply.header("ETag", `"${result.revision}"`);
+    return reply.code(200).send({ snapshot: result.snapshot, revision: result.revision });
+  });
+
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof Error && "statusCode" in error && (error as Error & { statusCode?: number }).statusCode === 413) {
       return reply.code(413).send({ error: "payload_too_large" });
@@ -662,6 +707,12 @@ function parseRevision(header: string | undefined): number | null {
   const match = header?.match(/^"(0|[1-9][0-9]*)"$/);
   if (!match) return null;
   const revision = Number(match[1]);
+  return Number.isSafeInteger(revision) ? revision : null;
+}
+
+function parsePathRevision(value: string): number | null {
+  if (!/^[1-9][0-9]{0,15}$/.test(value)) return null;
+  const revision = Number(value);
   return Number.isSafeInteger(revision) ? revision : null;
 }
 

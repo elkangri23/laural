@@ -22,6 +22,20 @@ pub struct RemoteSnapshot {
     pub revision: u64,
 }
 
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PreferenceHistoryPage {
+    pub entries: Vec<PreferenceHistorySummary>,
+    pub next_before: Option<u64>,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PreferenceHistorySummary {
+    pub revision: u64,
+    pub created_at: String,
+}
+
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct SyncState {
@@ -67,6 +81,96 @@ pub enum RemoteWriteResult {
 pub async fn read_remote_preferences() -> Result<RemoteSnapshot, String> {
     let token = account::session_token()?;
     fetch_remote_preferences(&token).await
+}
+
+#[command]
+pub async fn read_remote_preference_history(
+    before_revision: Option<u64>,
+) -> Result<PreferenceHistoryPage, String> {
+    let token = account::session_token()?;
+    let mut url = format!("{SYNC_ORIGIN}/v1/preferences/history?limit=25");
+    if let Some(before) = before_revision {
+        url.push_str(&format!("&before={before}"));
+    }
+    let response = sync_client()?
+        .get(url)
+        .bearer_auth(token.as_str())
+        .send()
+        .await
+        .map_err(|_| "No se pudo consultar el historial de preferencias.".to_string())?;
+    if response.status() == reqwest::StatusCode::UNAUTHORIZED {
+        return Err("La sesión no es válida o ha caducado. Inicia sesión de nuevo.".into());
+    }
+    if !response.status().is_success() {
+        return Err("El servicio no pudo leer el historial de preferencias.".into());
+    }
+    serde_json::from_slice(&bounded_body(response).await?)
+        .map_err(|_| "El servicio devolvió un historial inválido.".to_string())
+}
+
+#[command]
+pub async fn delete_remote_preference_history(revision: u64) -> Result<(), String> {
+    let token = account::session_token()?;
+    let response = sync_client()?
+        .delete(format!("{SYNC_ORIGIN}/v1/preferences/history/{revision}"))
+        .bearer_auth(token.as_str())
+        .send()
+        .await
+        .map_err(|_| "No se pudo eliminar la versión de la nube.".to_string())?;
+    if response.status() == reqwest::StatusCode::UNAUTHORIZED {
+        return Err("La sesión no es válida o ha caducado. Inicia sesión de nuevo.".into());
+    }
+    if response.status() == reqwest::StatusCode::NOT_FOUND {
+        return Err("La versión ya no está disponible.".into());
+    }
+    if !response.status().is_success() {
+        return Err("El servicio no pudo eliminar la versión.".into());
+    }
+    Ok(())
+}
+
+#[command]
+pub async fn restore_remote_preference_history(
+    revision: u64,
+    current_revision: u64,
+) -> Result<RemoteSnapshot, String> {
+    let _guard = lock_sync().await;
+    let token = account::session_token()?;
+    let idempotency_key = random_idempotency_key()?;
+    let response = sync_client()?
+        .post(format!(
+            "{SYNC_ORIGIN}/v1/preferences/history/{revision}/restore"
+        ))
+        .bearer_auth(token.as_str())
+        .header(reqwest::header::IF_MATCH, format!("\"{current_revision}\""))
+        .header("Idempotency-Key", idempotency_key)
+        .send()
+        .await
+        .map_err(|_| "No se pudo restaurar la versión de la nube.".to_string())?;
+    if response.status() == reqwest::StatusCode::PRECONDITION_FAILED {
+        return Err(
+            "La nube cambió desde que cargaste el historial. Actualízalo antes de restaurar."
+                .into(),
+        );
+    }
+    if response.status() == reqwest::StatusCode::UNAUTHORIZED {
+        return Err("La sesión no es válida o ha caducado. Inicia sesión de nuevo.".into());
+    }
+    if !response.status().is_success() {
+        return Err("El servicio no pudo restaurar esa versión.".into());
+    }
+    let response_revision = etag_revision(&response)?;
+    let restored: RemoteSnapshot = serde_json::from_slice(&bounded_body(response).await?)
+        .map_err(|_| "El servicio devolvió una configuración inválida.".to_string())?;
+    if restored.revision != response_revision {
+        return Err("La revisión restaurada no coincide con la respuesta del servicio.".into());
+    }
+    let snapshot = restored
+        .snapshot
+        .as_ref()
+        .ok_or_else(|| "La versión restaurada está vacía.".to_string())?;
+    snapshot::encode(snapshot)?;
+    Ok(restored)
 }
 
 async fn fetch_remote_preferences(token: &str) -> Result<RemoteSnapshot, String> {
