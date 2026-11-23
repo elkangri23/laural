@@ -31,7 +31,7 @@ La pre-release `0.1.0-alpha.17` para Windows x64 está disponible en [Releases](
 - `nsis/Laural_0.1.0-alpha.17_x64-setup.exe`
 - `msi/Laural_0.1.0-alpha.17_x64_es-ES.msi`
 
-SHA-256 del instalador NSIS: `B965085B9EB6F193DBFE19BF1FB847FD1D179D0FB909EB791D7D62980A3B1DF8`. Desde alpha.14, los paquetes NSIS incorporan actualizaciones firmadas; las versiones anteriores requieren instalar alpha.14 manualmente. Alpha.17 incluye instalador firmado, `latest.json` firmado y `SHA256SUMS.txt`. El flujo entre alpha.15 y alpha.16 se validó desde la app; alpha.17 corrige que **Buscar ahora** respete la preferencia automática/manual, con regresiones de ambos modos y CI en verde. Falta validar ese flujo en el Windows instalado, además de instalación limpia y desinstalación. No se considera una versión estable.
+SHA-256 del instalador NSIS: `B965085B9EB6F193DBFE19BF1FB847FD1D179D0FB909EB791D7D62980A3B1DF8`. Desde alpha.14, los paquetes NSIS incorporan actualizaciones firmadas; las versiones anteriores requieren instalar alpha.14 manualmente. Alpha.17 incluye instalador firmado, `latest.json` firmado y `SHA256SUMS.txt`. En Windows, alpha.16 detecta alpha.17 y el modo manual descarga el instalador hasta dejarlo listo para instalar. Las regresiones cubren ambos modos; falta completar la instalación interactiva, probar el modo automático y validar instalación limpia y desinstalación. No se considera una versión estable.
 
 ## Requisitos para desarrollar
 
