@@ -31,7 +31,7 @@ La pre-release `0.1.0-alpha.16` para Windows x64 está disponible en [Releases](
 - `nsis/Laural_0.1.0-alpha.16_x64-setup.exe`
 - `msi/Laural_0.1.0-alpha.16_x64_es-ES.msi`
 
-SHA-256 del instalador NSIS: `A49D9017FB060B75DB5726EE4CA4DBE4093C49975B1BA80A57A531E4520A709B`. Desde alpha.14, los paquetes NSIS incorporan actualizaciones firmadas; las versiones anteriores requieren instalar alpha.14 manualmente. Alpha.16 incluye instalador firmado, `latest.json` firmado y `SHA256SUMS.txt`. La actualización real desde alpha.15 y la instalación limpia siguen pendientes de validación manual. No se considera una versión estable.
+SHA-256 del instalador NSIS: `A49D9017FB060B75DB5726EE4CA4DBE4093C49975B1BA80A57A531E4520A709B`. Desde alpha.14, los paquetes NSIS incorporan actualizaciones firmadas; las versiones anteriores requieren instalar alpha.14 manualmente. Alpha.16 incluye instalador firmado, `latest.json` firmado y `SHA256SUMS.txt`. La actualización desde alpha.15 se validó desde la app, incluida la reapertura y conservación del perfil; la instalación limpia y la desinstalación siguen pendientes. No se considera una versión estable.
 
 ## Requisitos para desarrollar
 

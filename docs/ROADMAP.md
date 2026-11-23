@@ -72,13 +72,13 @@ Estado al 23 de noviembre de 2026. «Implementado» describe código presente; �
 
 - Build de MSI/NSIS disponible localmente; alpha.13 configura MSI `es-ES` y NSIS en español. Pendiente validar ambos instaladores en una instalación limpia.
 - Workflow de GitHub Actions ejecutado correctamente en GitHub y artefactos generados.
-- Updater Tauri integrado para NSIS x64: preferencia manual/automática, chequeo al inicio y cada seis horas, descarga separada, reinicio y versión en Configuración. Falta validar una actualización real de alpha.14 a la siguiente release.
+- Updater Tauri integrado para NSIS x64: preferencia manual/automática, chequeo al inicio y cada seis horas, descarga separada, reinicio y versión en Configuración. Validado desde alpha.15: detectó alpha.16, descargó el paquete firmado, reinició y mostró la nueva versión; verificar el endpoint tras reiniciar vuelve a indicar que está al día.
 - Firma del updater configurada con clave privada como secreto de GitHub Actions y clave pública fijada en la app; firma Authenticode sigue fuera del alcance.
-- Validar instalación limpia, actualización y desinstalación.
+- Validar instalación limpia y desinstalación; el salto alpha.15 → alpha.16 ya está comprobado.
 - Publicación de alpha.14 validada en GitHub: instalador NSIS x64, firma `.sig` y `latest.json` firmados publicados; el manifiesto fue sincronizado a `main`.
 - Alpha.15 publicada en GitHub como pre-release NSIS x64: instalador firmado, `.sig`, `latest.json` firmado y `SHA256SUMS.txt`. Workflow `45134440452` completado en verde; el manifiesto se sincronizó a `main`. SHA-256 del instalador: `155A2CDFCF6878623B99F2FAF12C3953EBD903F8E9B5EB53C9DC30C4F67F14DE`.
 - Alpha.16 publicada el 23-11-2026 como pre-release NSIS x64. Workflow `45168520610` y CI de cobertura `45167601365` completados en verde. El release incluye instalador y manifiesto firmados y `SHA256SUMS.txt`; el SHA-256 del instalador verificado coincide con el asset. El manifiesto `updates/latest.json` de `main` apunta a `0.1.0-alpha.16`.
-- Validar en Windows la actualización real de alpha.15 a alpha.16, instalación limpia, reinicio y desinstalación; comprobar también la tarjeta del proveedor tras reiniciar.
+- La actualización real alpha.15 → alpha.16 quedó validada el 23-11-2026 desde Configuración. Tras el reinicio, la app muestra versión 0.1.0-alpha.16, conserva el perfil FreeLLMAPI y la tarjeta lateral muestra el proveedor y `Modelo: auto`; una nueva petición de chat recibió respuesta. La instalación limpia y la desinstalación siguen pendientes.
 - Resolver incidencias críticas de validación manual antes de declarar estable.
 
 ## Auditoría de seguridad (primera revisión completada; validación manual pendiente)
