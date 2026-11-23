@@ -26,10 +26,11 @@ Una persona que pierde TOTP, códigos de recuperación y passkeys necesita conta
 ## Verificación
 
 - Pruebas unitarias cubren PIN aleatorio, normalización, delegación de verificación y respuestas inválidas.
-- Integración PostgreSQL cubre consumo de un solo uso, almacenamiento del digest, outbox tras confirmación, reintento del aviso y ausencia de creación de sesión. Suite del servicio: 166/166 pruebas; 89,72 % de líneas y 79,82 % de ramas. Falta CI remoto y despliegue.
+- Integración PostgreSQL cubre consumo de un solo uso, almacenamiento del digest, outbox tras confirmación, reintento del aviso y ausencia de creación de sesión. La suite de servicio actual abarca 173/173 pruebas; 89,88 % de líneas y 80,21 % de ramas. Falta CI remoto y despliegue.
 
 ## Referencias
 
 - [Runbook de recuperación](../runbooks/recuperacion-cuenta.md)
 - [ADR-0038: MFA TOTP](0038-fundamentos-de-mfa-totp.md)
 - [ADR-0037: restablecimiento de contraseña](0037-restablecimiento-de-contrasena-por-pin.md)
+- [ADR-0049: revisión administrativa local](0049-revision-administrativa-local-de-recuperaciones.md)

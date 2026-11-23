@@ -6,6 +6,7 @@ import { AccountDeletionService } from "../src/account-deletion.js";
 import { createAccountSessionLister, createAccountSessionRevoker, createOtherSessionsRevoker, createSessionAuthenticator, createSessionRevoker } from "../src/auth.js";
 import { AccountMfaService } from "../src/account-mfa.js";
 import { EmailAuthService } from "../src/email-auth.js";
+import { isOperator, listPendingRecoveryCases, recordRecoveryDecision } from "../src/account-recovery-admin.js";
 import { applyMigrations, MIGRATION_FILES } from "../src/migration-runner.js";
 import { NativeAuthService } from "../src/native-auth.js";
 import { GoogleOAuthService } from "../src/google-oauth.js";
@@ -112,6 +113,18 @@ describePostgres("integración real de PostgreSQL para rate limits", () => {
     expect(sendNotice).toHaveBeenCalledWith(expect.objectContaining({ caseId: expect.any(String), accountEmail: email }));
     expect(await deliverAccountRecoveryNoticeBatch(isolatedPool, { sendAccountRecoveryNotice: sendNotice })).toEqual({ delivered: 0, deferred: 0 });
     expect(sendNotice).toHaveBeenCalledOnce();
+    const caseId = (await isolatedPool.query<{ id: string }>("SELECT id FROM account_recovery_cases WHERE account_id = $1", [accountId])).rows[0]!.id;
+    const pendingCases = await listPendingRecoveryCases(isolatedPool);
+    expect(pendingCases.some(({ id }) => id === caseId)).toBe(true);
+    expect(isOperator("laura.admin")).toBe(true);
+    expect(isOperator("admin\u001b[31m")).toBe(false);
+    expect(await recordRecoveryDecision(isolatedPool, { caseId, decision: "approved", evidence: "insufficient", operator: "laura" })).toBe(false);
+    expect(await recordRecoveryDecision(isolatedPool, { caseId, decision: "approved", evidence: "other_independent", operator: "laura.admin" })).toBe(true);
+    expect(await recordRecoveryDecision(isolatedPool, { caseId, decision: "denied", evidence: "insufficient", operator: "laura.admin" })).toBe(false);
+    expect(await isolatedPool.query("SELECT review_decision FROM account_recovery_cases WHERE id = $1", [caseId]).then(({ rows }) => rows[0])).toMatchObject({ review_decision: "approved" });
+    expect((await listPendingRecoveryCases(isolatedPool)).some(({ id }) => id === caseId)).toBe(false);
+    expect((await isolatedPool.query("SELECT id FROM account_sessions WHERE account_id = $1", [accountId])).rowCount).toBe(0);
+    expect((await isolatedPool.query("SELECT account_id FROM account_totp_factors WHERE account_id = $1", [accountId])).rowCount).toBe(0);
   });
 
   it("vincula Google por sub verificado y consume cada transacción una sola vez", async () => {

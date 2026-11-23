@@ -21,7 +21,7 @@ Los casos describen el comportamiento esperado del producto. Los estados disting
 | UC-18 | Transferir claves en archivo cifrado | Usuario | Implementación inicial; pruebas de rollback pendientes |
 | UC-19 | Activar cuenta y escoger snapshot inicial | Usuario | Login Tauri y elección manual inicial disponibles; VPS pendiente |
 | UC-20 | Sincronizar cambios y resolver conflicto | Usuario | Cliente manual/automático inicial; VPS y reconexión real pendientes |
-| UC-21 | Recuperar acceso tras perder factores | Usuario/administrador | Códigos TOTP integrados; recuperación administrativa y ensayo pendientes |
+| UC-21 | Recuperar acceso tras perder factores | Usuario/administrador | Intake y decisión admin por CLI local implementados; sustitución de factores y ensayo pendientes |
 | UC-22 | Consultar estado público del servicio | Visitante | Página y contrato iniciales; despliegue y operación pendientes |
 | UC-23 | Consultar rama, cambios y diff Git | Desarrollador | Implementación inicial de solo lectura |
 | UC-24 | Preparar una tarea repetible con una receta del agente | Desarrollador | Implementación inicial; se guarda localmente |
@@ -30,7 +30,7 @@ Los casos describen el comportamiento esperado del producto. Los estados disting
 | UC-27 | Eliminar la cuenta de sincronización | Titular de cuenta | API y cliente iniciales; ensayo Windows/VPS pendiente |
 | UC-28 | Registrarse o iniciar sesión con Google | Usuario | Implementación local detrás de flag; credenciales y prueba real pendientes |
 
-Los casos UC-17 y UC-18 están disponibles en Configuración en su implementación inicial. UC-19 y UC-20 tienen un cliente inicial, pero requieren un servicio desplegado para su validación real. UC-21 permite usar códigos de recuperación TOTP; la revisión administrativa tras perder todos los factores sigue pendiente. UC-22 tiene una implementación local que requiere operación del VPS. UC-25 implementa restablecimiento de contraseña, independiente de recuperar factores. Los flujos de sincronización están detallados en [portabilidad y sincronización](sincronizacion-preferencias.md). El acceso Google se especifica en [UC-28](google-oauth.md).
+Los casos UC-17 y UC-18 están disponibles en Configuración en su implementación inicial. UC-19 y UC-20 tienen un cliente inicial, pero requieren un servicio desplegado para su validación real. UC-21 permite usar códigos TOTP, pedir revisión por buzón y registrar la decisión del administrador desde el VPS. La decisión no cambia la cuenta; falta implementar el enrolamiento restringido de un factor nuevo y ensayarlo. UC-22 tiene una implementación local que requiere operación del VPS. UC-25 implementa restablecimiento de contraseña, independiente de recuperar factores. Los flujos de sincronización están detallados en [portabilidad y sincronización](sincronizacion-preferencias.md). El acceso Google se especifica en [UC-28](google-oauth.md).
 
 ## UC-01 — Abrir terminal
 
@@ -238,4 +238,4 @@ Después de aplicar un archivo, el usuario puede listar copias y restaurar una v
 
 **Criterios y límites:** cinco intentos por PIN, enfriamiento de un minuto y hasta tres solicitudes cada quince minutos por cuenta, además de límites por IP/correo. El PIN no crea sesión, no cambia contraseña y no elimina TOTP ni passkeys. El aviso requiere revisión humana y prueba preexistente independiente del buzón. No hay panel ni endpoint público para retirar factores. Si falta evidencia, el administrador deniega la solicitud.
 
-**Estado:** flujo de buzón y aviso implementados localmente; herramienta administrativa, ensayo integral y despliegue pendientes.
+**Estado:** flujo de buzón y aviso implementados detrás de flag; CLI local muestra casos y registra la decisión sin modificar la cuenta. Sustitución restringida de factores, ensayo integral y despliegue pendientes.
