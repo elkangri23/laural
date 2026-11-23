@@ -2,6 +2,7 @@
 
 ## Sin publicar
 
+- El agente solicita aprobación antes de abrir `diskpart` de forma interactiva o pasarle scripts y operaciones; solo deja pasar la ayuda explícita.
 - El agente requiere aprobación para comandos de BitLocker que cifran, descifran, bloquean o desbloquean unidades y que administran protectores; conserva ayuda y consultas de estado acotadas.
 
 ## 0.1.0-alpha.15

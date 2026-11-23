@@ -2121,6 +2121,9 @@ fn external_tool_is_high_risk(command: &str, executable: &str) -> bool {
     if executable == "manage-bde" {
         return manage_bde_command_is_high_risk(command);
     }
+    if executable == "diskpart" {
+        return diskpart_command_is_high_risk(command);
+    }
     let mut arguments = command.split_whitespace();
     arguments.next();
     let Some(subcommand) = arguments.next() else {
@@ -2350,6 +2353,18 @@ fn manage_bde_command_is_high_risk(command: &str) -> bool {
         }
     }
     skip_computer_name
+}
+
+fn diskpart_command_is_high_risk(command: &str) -> bool {
+    let mut arguments = command.split_whitespace().skip(1);
+    match (arguments.next(), arguments.next()) {
+        (None, _) => true,
+        (Some(help), None) => !matches!(
+            help.to_ascii_lowercase().as_str(),
+            "/?" | "-?" | "--help" | "-h"
+        ),
+        _ => true,
+    }
 }
 
 fn netsh_command_is_high_risk(command: &str) -> bool {
@@ -3902,6 +3917,33 @@ mod tests {
         ] {
             assert!(
                 !external_tool_is_high_risk(command, "manage-bde"),
+                "{command}"
+            );
+        }
+    }
+
+    #[test]
+    fn exige_revision_para_diskpart_salvo_ayuda_explicita() {
+        for command in [
+            "diskpart",
+            "diskpart /s C:\\scripts\\limpiar-disco.txt",
+            "diskpart /s",
+            "diskpart clean",
+            "diskpart format fs=ntfs quick",
+            "diskpart delete partition override",
+            "diskpart opcion-desconocida",
+        ] {
+            assert!(external_tool_is_high_risk(command, "diskpart"), "{command}");
+        }
+
+        for command in [
+            "diskpart /?",
+            "diskpart -?",
+            "diskpart --help",
+            "diskpart -h",
+        ] {
+            assert!(
+                !external_tool_is_high_risk(command, "diskpart"),
                 "{command}"
             );
         }
