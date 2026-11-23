@@ -2186,6 +2186,9 @@ fn external_tool_is_high_risk(command: &str, executable: &str) -> bool {
     if executable == "dism" {
         return dism_command_is_high_risk(command);
     }
+    if executable == "sfc" {
+        return sfc_command_is_high_risk(command);
+    }
     if executable == "manage-bde" {
         return manage_bde_command_is_high_risk(command);
     }
@@ -2560,6 +2563,50 @@ fn dism_command_is_high_risk(command: &str) -> bool {
     }
 
     !has_read_operation || (has_cleanup_container && !has_read_cleanup_operation)
+}
+
+fn sfc_command_is_high_risk(command: &str) -> bool {
+    let arguments: Vec<_> = command.split_whitespace().skip(1).collect();
+    if arguments.is_empty() {
+        return false;
+    }
+
+    let mut has_verification = false;
+    let mut has_help = false;
+    let mut accepts_path = false;
+    for argument in arguments {
+        match argument {
+            "/?" | "-?" => has_help = true,
+            "/verifyonly" => {
+                has_verification = true;
+                accepts_path = false;
+            }
+            "/filesonly" => accepts_path = false,
+            "/verifyfile" => {
+                has_verification = true;
+                accepts_path = true;
+            }
+            "/offwindir" | "/offbootdir" => accepts_path = true,
+            "/scannow" | "/scanonce" | "/scanboot" | "/revert" | "/purgecache" | "/enable" => {
+                return true;
+            }
+            _ if argument.starts_with("/verifyfile=") => {
+                has_verification = true;
+                accepts_path = false;
+            }
+            _ if argument.starts_with("/offwindir=") || argument.starts_with("/offbootdir=") => {
+                accepts_path = false;
+            }
+            _ if argument.starts_with("/offlogfile=") || argument.starts_with("/cachesize=") => {
+                return true;
+            }
+            _ if argument.starts_with('/') || argument.starts_with('-') => return true,
+            _ if accepts_path => accepts_path = false,
+            _ => return true,
+        }
+    }
+
+    !has_verification && !has_help
 }
 
 fn is_unambiguous_net_user_name(value: &str) -> bool {
@@ -4384,6 +4431,35 @@ mod tests {
     }
 
     #[test]
+    fn exige_revision_para_reparaciones_de_archivos_del_sistema() {
+        for command in [
+            "sfc /scannow",
+            "sfc /scanfile=C:\\Windows\\System32\\ejemplo.dll",
+            "sfc /scanonce",
+            "sfc /scanboot",
+            "sfc /purgecache",
+            "sfc /cachesize=100",
+            "sfc /revert",
+            "sfc /verifyonly /offlogfile=C:\\Temp\\sfc.log",
+            "sfc /operacion-desconocida",
+        ] {
+            assert!(command_is_high_risk("cmd", command), "{command}");
+        }
+
+        for command in [
+            "sfc",
+            "sfc /?",
+            "sfc /verifyonly",
+            "sfc /verifyonly /filesonly",
+            "sfc /verifyfile=C:\\Windows\\System32\\ejemplo.dll",
+            "sfc /verifyfile C:\\Windows\\System32\\ejemplo.dll",
+            "sfc /verifyonly /offwindir=D:\\Windows /offbootdir=D:\\",
+        ] {
+            assert!(!command_is_high_risk("cmd", command), "{command}");
+        }
+    }
+
+    #[test]
     fn exige_revision_para_modificar_credenciales_de_windows() {
         for (command, executable) in [
             (
@@ -4789,6 +4865,7 @@ mod tests {
                 "netdom query /domain:ejemplo /reset".into(),
                 "powercfg /hibernate off".into(),
                 "dism /Online /Enable-Feature /FeatureName:TelnetClient".into(),
+                "sfc /scannow".into(),
                 "ssh servidor hostname".into(),
                 "Enter-PSSession servidor".into(),
                 "msiexec /i paquete.msi /quiet".into(),
@@ -4847,6 +4924,7 @@ mod tests {
                 "cmd",
                 "dism /Online /Enable-Feature /FeatureName:TelnetClient",
             ),
+            ("cmd", "sfc /scannow"),
             ("git-bash", "ssh servidor hostname"),
             ("powershell", "Enter-PSSession servidor"),
             ("cmd", "msiexec /i paquete.msi /quiet"),
