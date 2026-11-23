@@ -2256,11 +2256,12 @@ fn external_tool_is_high_risk(command: &str, executable: &str) -> bool {
             subcommand,
             "create" | "config" | "delete" | "start" | "stop" | "failure"
         ),
-        "net" => {
-            matches!(subcommand, "start" | "stop")
-                || (matches!(subcommand, "user" | "localgroup")
-                    && arguments.any(|argument| matches!(argument, "/add" | "/delete")))
-        }
+        "net" => match subcommand {
+            "start" | "stop" => true,
+            "user" => net_user_command_is_high_risk(command),
+            "localgroup" => arguments.any(|argument| matches!(argument, "/add" | "/delete")),
+            _ => false,
+        },
         "wevtutil" => matches!(subcommand, "cl" | "clear-log" | "dl" | "delete-log" | "sl"),
         "winget" => matches!(
             subcommand,
@@ -2394,6 +2395,24 @@ fn docker_command_is_high_risk(command: &str) -> bool {
         ),
         _ => false,
     }
+}
+
+fn net_user_command_is_high_risk(command: &str) -> bool {
+    let mut tokens = command.split_whitespace();
+    tokens.next();
+    tokens.next();
+    let arguments: Vec<_> = tokens.collect();
+    match arguments.as_slice() {
+        [] | ["/?"] | ["/domain"] => false,
+        [username] if is_unambiguous_net_user_name(username) => false,
+        [username, "/domain"] | [username, "/?"] if is_unambiguous_net_user_name(username) => false,
+        [username, "/domain", "/?"] if is_unambiguous_net_user_name(username) => false,
+        _ => true,
+    }
+}
+
+fn is_unambiguous_net_user_name(value: &str) -> bool {
+    !value.starts_with('/') && !value.starts_with('-')
 }
 
 fn windows_credential_tool_is_high_risk(command: &str, executable: &str) -> bool {
@@ -4006,6 +4025,10 @@ mod tests {
             ("cmd", "schtasks /Create /TN tarea /TR programa.exe"),
             ("git-bash", "sc.exe config servicio start= disabled"),
             ("wsl", "net.exe user cuenta clave /add"),
+            ("powershell", "net user cuenta nueva-clave"),
+            ("wsl", "net user cuenta /active:no"),
+            ("cmd", "net user --help"),
+            ("cmd", "net user cuenta * /domain"),
             ("cmd", "net localgroup Administrators cuenta /delete"),
             ("powershell", "wevtutil cl Security"),
         ] {
@@ -4017,6 +4040,10 @@ mod tests {
             ("schtasks /Query /FO LIST", "schtasks"),
             ("sc.exe query servicio", "sc"),
             ("net user", "net"),
+            ("net user /domain", "net"),
+            ("net user cuenta", "net"),
+            ("net user cuenta /domain", "net"),
+            ("net user cuenta /?", "net"),
             ("wevtutil gl Security", "wevtutil"),
         ] {
             assert!(
@@ -4421,6 +4448,7 @@ mod tests {
                 "npx paquete".into(),
                 "cmdkey /add:servidor /user:laura /pass:valor-prueba".into(),
                 "vaultcmd /deletecreds /vault:WindowsVault".into(),
+                "net user cuenta nueva-clave".into(),
                 "ssh servidor hostname".into(),
                 "Enter-PSSession servidor".into(),
                 "msiexec /i paquete.msi /quiet".into(),
@@ -4465,6 +4493,7 @@ mod tests {
             ("powershell", "npx paquete"),
             ("cmd", "cmdkey /add:servidor /user:laura /pass:valor-prueba"),
             ("powershell", "vaultcmd /deletecreds /vault:WindowsVault"),
+            ("cmd", "net user cuenta nueva-clave"),
             ("git-bash", "ssh servidor hostname"),
             ("powershell", "Enter-PSSession servidor"),
             ("cmd", "msiexec /i paquete.msi /quiet"),
