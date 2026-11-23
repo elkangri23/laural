@@ -2115,6 +2115,9 @@ fn external_tool_is_high_risk(command: &str, executable: &str) -> bool {
     if executable == "pnputil" {
         return pnputil_command_is_high_risk(command);
     }
+    if matches!(executable, "vssadmin" | "wbadmin" | "diskshadow") {
+        return windows_backup_tool_is_high_risk(command, executable);
+    }
     let mut arguments = command.split_whitespace();
     arguments.next();
     let Some(subcommand) = arguments.next() else {
@@ -2285,6 +2288,31 @@ fn pnputil_command_is_high_risk(command: &str) -> bool {
         return arguments.iter().any(|argument| argument == "/output-file");
     }
     true
+}
+
+fn windows_backup_tool_is_high_risk(command: &str, executable: &str) -> bool {
+    let arguments = command
+        .split_whitespace()
+        .skip(1)
+        .map(|argument| argument.trim_matches('"').to_ascii_lowercase())
+        .collect::<Vec<_>>();
+    let Some(operation) = arguments.first() else {
+        return executable == "diskshadow";
+    };
+    if matches!(operation.as_str(), "/?" | "-?" | "/h" | "/help") {
+        return false;
+    }
+    match executable {
+        "vssadmin" => operation != "list",
+        "wbadmin" => {
+            operation != "get"
+                || !arguments.get(1).is_some_and(|query| {
+                    matches!(query.as_str(), "versions" | "items" | "status" | "disks")
+                })
+        }
+        "diskshadow" => true,
+        _ => true,
+    }
 }
 
 fn netsh_command_is_high_risk(command: &str) -> bool {
@@ -3761,6 +3789,45 @@ mod tests {
             "pnputil /enum-classes",
         ] {
             assert!(!external_tool_is_high_risk(command, "pnputil"), "{command}");
+        }
+    }
+
+    #[test]
+    fn exige_revision_para_operaciones_de_copias_sombra_y_respaldo() {
+        for (command, executable) in [
+            ("vssadmin delete shadows /all /quiet", "vssadmin"),
+            (
+                "vssadmin resize shadowstorage /for=C: /on=C: /maxsize=10%",
+                "vssadmin",
+            ),
+            ("vssadmin unknown-operation", "vssadmin"),
+            ("wbadmin delete catalog -quiet", "wbadmin"),
+            (
+                "wbadmin delete systemstatebackup -keepVersions:0",
+                "wbadmin",
+            ),
+            ("wbadmin start recovery", "wbadmin"),
+            ("wbadmin unknown-operation", "wbadmin"),
+            ("diskshadow", "diskshadow"),
+            ("diskshadow /s script.dsh", "diskshadow"),
+        ] {
+            assert!(external_tool_is_high_risk(command, executable), "{command}");
+        }
+
+        for (command, executable) in [
+            ("vssadmin list shadows", "vssadmin"),
+            ("vssadmin list shadowstorage", "vssadmin"),
+            ("vssadmin /?", "vssadmin"),
+            ("wbadmin get versions", "wbadmin"),
+            ("wbadmin get status", "wbadmin"),
+            ("wbadmin get items -version:01/01/2026-00:00", "wbadmin"),
+            ("wbadmin /?", "wbadmin"),
+            ("diskshadow /?", "diskshadow"),
+        ] {
+            assert!(
+                !external_tool_is_high_risk(command, executable),
+                "{command}"
+            );
         }
     }
 

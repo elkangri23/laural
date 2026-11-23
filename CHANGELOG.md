@@ -2,6 +2,7 @@
 
 ## Sin publicar
 
+- El agente requiere aprobación para eliminar o modificar copias sombra y respaldos con `vssadmin`, `wbadmin` y `diskshadow`; conserva las consultas de listado/estado y ayuda.
 - El agente requiere aprobación para operaciones de `pnputil` que instalan o eliminan controladores, cambian el estado de dispositivos o escriben exportaciones; las enumeraciones sin salida a archivo y la ayuda siguen siendo de lectura.
 - El agente ahora exige revisión para comandos `netsh` interactivos o que modifiquen red/firewall, y para exportaciones que revelen claves Wi-Fi en texto claro; conserva ayuda y consultas de solo lectura.
 - El filtro del agente ahora requiere revisión para crear, modificar, renombrar o eliminar grupos/cuentas locales y para crear, retirar, reanudar o suspender servicios; las consultas `Get-*` siguen siendo de lectura.
