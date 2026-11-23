@@ -1,15 +1,15 @@
 {
-  "version": "0.1.0-alpha.14",
+  "version": "0.1.0-alpha.15",
   "notes": "Instalador oficial de Laural para Windows x64. Consulta el registro de cambios del repositorio.",
-  "pub_date": "2026-11-20T12:34:52.747Z",
+  "pub_date": "2026-11-23T08:03:04.885Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRT2xYT2o1K3RWWTdSNGFIMGwyTGZtQU1YQVNnallNcXFUVmhXMDZPaTBod1RNbldqTFFYMm9XeWhPWDRUU0lIbGVSMmFKODAwSGVqTVR4Wi9zQjlKTCtkVTdhUnhkVGdZPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1MTc4MDg5CWZpbGU6TGF1cmFsXzAuMS4wLWFscGhhLjE0X3g2NC1zZXR1cC5leGUJdmVyc2lvbjowLjEuMC1hbHBoYS4xNApXc3lXNTZyaHFRRFlpYmQyQUtGczZiVXhyK3RLL3VFN0k3S1JER2k3c0xrdWtYbll1L09NZGJlSVdodjk2dnI3SkNsVnJ5bFdHMEFyRmk5RHVRaUNEQT09Cg==",
-      "url": "https://api.github.com/repos/elkangri23/laural/releases/assets/771767518"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRT2xYT2o1K3RWWTZMTHVNM1Vub3dVcS8yVE44Z0xmVzhuZDRvTEkyU2dQeTZ4WkZ4eHlqZ2hRWWEvNlpVRVZCM0pZRkZ2SmlLb1VNY0VQL0JidldRNmd3OGdqUEkza2c0PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1NDIwOTgxCWZpbGU6TGF1cmFsXzAuMS4wLWFscGhhLjE1X3g2NC1zZXR1cC5leGUJdmVyc2lvbjowLjEuMC1hbHBoYS4xNQpVV0RLVDBLbkJOZGt6eXQ2cHZFWmFhUzlLRmNjWTZpVmVSbWpvdDZiOVphQ1FDNURuM2NEekRhblpwTmxOemFaa1VBY08wa1Fvd0hpbU1xaG1ORUVBdz09Cg==",
+      "url": "https://api.github.com/repos/elkangri23/laural/releases/assets/782077688"
     },
     "windows-x86_64-nsis": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRT2xYT2o1K3RWWTdSNGFIMGwyTGZtQU1YQVNnallNcXFUVmhXMDZPaTBod1RNbldqTFFYMm9XeWhPWDRUU0lIbGVSMmFKODAwSGVqTVR4Wi9zQjlKTCtkVTdhUnhkVGdZPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1MTc4MDg5CWZpbGU6TGF1cmFsXzAuMS4wLWFscGhhLjE0X3g2NC1zZXR1cC5leGUJdmVyc2lvbjowLjEuMC1hbHBoYS4xNApXc3lXNTZyaHFRRFlpYmQyQUtGczZiVXhyK3RLL3VFN0k3S1JER2k3c0xrdWtYbll1L09NZGJlSVdodjk2dnI3SkNsVnJ5bFdHMEFyRmk5RHVRaUNEQT09Cg==",
-      "url": "https://api.github.com/repos/elkangri23/laural/releases/assets/771767518"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRT2xYT2o1K3RWWTZMTHVNM1Vub3dVcS8yVE44Z0xmVzhuZDRvTEkyU2dQeTZ4WkZ4eHlqZ2hRWWEvNlpVRVZCM0pZRkZ2SmlLb1VNY0VQL0JidldRNmd3OGdqUEkza2c0PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1NDIwOTgxCWZpbGU6TGF1cmFsXzAuMS4wLWFscGhhLjE1X3g2NC1zZXR1cC5leGUJdmVyc2lvbjowLjEuMC1hbHBoYS4xNQpVV0RLVDBLbkJOZGt6eXQ2cHZFWmFhUzlLRmNjWTZpVmVSbWpvdDZiOVphQ1FDNURuM2NEekRhblpwTmxOemFaa1VBY08wa1Fvd0hpbU1xaG1ORUVBdz09Cg==",
+      "url": "https://api.github.com/repos/elkangri23/laural/releases/assets/782077688"
     }
   }
 }
