@@ -7,6 +7,7 @@
 - La integración PostgreSQL y los gates de cobertura terminaron en verde en CI (`45185068795`).
 - El inicio de sesión limita a diez intentos por correo normalizado y minuto entre IP, después de validar CSRF.
 - Corregida la actualización transaccional de intentos fallidos en PostgreSQL: el contador se incrementa en SQL y no produce una incompatibilidad de tipos.
+- CI `45189988942` pasa en los tres jobs: integración PostgreSQL, cobertura de escritorio y gates de cobertura Rust.
 
 ## 0.1.0-alpha.17
 
