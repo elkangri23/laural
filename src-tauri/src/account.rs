@@ -108,6 +108,18 @@ struct RecoveryCodesResponse {
     recovery_codes: Vec<String>,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PasskeyStatusResponse {
+    enabled: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PasskeyManagementLinkResponse {
+    url: String,
+}
+
 #[tauri::command]
 pub fn account_session_status() -> Result<bool, String> {
     Ok(read_session()?.is_some())
@@ -291,6 +303,63 @@ pub async fn get_account_mfa_status() -> Result<AccountMfaStatus, String> {
         .await
         .map_err(|_| "No se pudo consultar la seguridad de la cuenta.".to_string())?;
     bounded_response_json(response, "No se pudo consultar la seguridad de la cuenta.").await
+}
+
+#[tauri::command]
+pub async fn get_account_passkeys_enabled() -> Result<bool, String> {
+    let token = session_token()?;
+    let response = account_api_client()?
+        .get(format!("{SYNC_ORIGIN}/v1/auth/passkeys/status"))
+        .bearer_auth(token.as_str())
+        .send()
+        .await
+        .map_err(|_| "No se pudo consultar la disponibilidad de passkeys.".to_string())?;
+    bounded_response_json::<PasskeyStatusResponse>(
+        response,
+        "No se pudo consultar la disponibilidad de passkeys.",
+    )
+    .await
+    .map(|result| result.enabled)
+}
+
+#[tauri::command]
+pub async fn start_passkey_management(app: AppHandle) -> Result<(), String> {
+    let token = session_token()?;
+    let response = account_api_client()?
+        .post(format!("{SYNC_ORIGIN}/v1/auth/passkeys/manage-link"))
+        .bearer_auth(token.as_str())
+        .send()
+        .await
+        .map_err(|_| "No se pudo abrir la gestión de passkeys.".to_string())?;
+    if response.status() == reqwest::StatusCode::FORBIDDEN {
+        return Err("Vuelve a iniciar sesión para gestionar tus passkeys.".into());
+    }
+    let link = bounded_response_json::<PasskeyManagementLinkResponse>(
+        response,
+        "No se pudo abrir la gestión de passkeys.",
+    )
+    .await?;
+    let url =
+        Url::parse(&link.url).map_err(|_| "El enlace de passkeys no es válido.".to_string())?;
+    if !is_allowed_passkey_management_url(&url) {
+        return Err("El servicio devolvió un enlace de passkeys no permitido.".into());
+    }
+    app.opener()
+        .open_url(url.as_str(), None::<&str>)
+        .map_err(|_| "No se pudo abrir el navegador para gestionar passkeys.".to_string())
+}
+
+fn is_allowed_passkey_management_url(url: &Url) -> bool {
+    let ticket_valid = url
+        .fragment()
+        .and_then(|fragment| fragment.strip_prefix("ticket="))
+        .is_some_and(valid_token);
+    ticket_valid
+        && url.query().is_none()
+        && url.origin().ascii_serialization() == SYNC_ORIGIN
+        && url.path() == "/auth/passkeys/manage"
+        && url.username().is_empty()
+        && url.password().is_none()
 }
 
 #[tauri::command]
@@ -803,5 +872,35 @@ mod tests {
         assert!(valid_session_id("d5363ea7-f6cb-4cca-8e03-85aa33089e7a"));
         assert!(!valid_session_id("../../v1/auth/session/revoke"));
         assert!(!valid_session_id("d5363ea7-f6cb-4cca-8e03-85aa33089e7z"));
+    }
+
+    #[test]
+    fn limita_el_enlace_de_gestion_de_passkeys_al_vps_y_ticket_opaco() {
+        let valid = Url::parse(&format!(
+            "{SYNC_ORIGIN}/auth/passkeys/manage#ticket={}",
+            "a".repeat(43)
+        ))
+        .unwrap();
+        assert!(is_allowed_passkey_management_url(&valid));
+        for value in [
+            format!(
+                "https://attacker.test/auth/passkeys/manage?ticket={}",
+                "a".repeat(43)
+            ),
+            format!("{SYNC_ORIGIN}/other?ticket={}", "a".repeat(43)),
+            format!("{SYNC_ORIGIN}/auth/passkeys/manage#ticket=short"),
+            format!(
+                "{SYNC_ORIGIN}/auth/passkeys/manage#ticket={}&extra=1",
+                "a".repeat(43)
+            ),
+            format!(
+                "{SYNC_ORIGIN}/auth/passkeys/manage?ticket={}",
+                "a".repeat(43)
+            ),
+        ] {
+            assert!(!is_allowed_passkey_management_url(
+                &Url::parse(&value).unwrap()
+            ));
+        }
     }
 }

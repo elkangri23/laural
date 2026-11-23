@@ -47,10 +47,11 @@ export class PostgresNativeAuthStore implements NativeAuthStore {
     const accountResult = await this.pool.query<{
       id: string;
       password_hash: string | null;
+      email: string;
       email_verified_at: Date | null;
       mfa_enabled: boolean;
     }>(
-      `SELECT a.id, a.password_hash, a.email_verified_at,
+      `SELECT a.id, a.email, a.password_hash, a.email_verified_at,
               EXISTS (SELECT 1 FROM account_totp_factors t WHERE t.account_id = a.id AND t.enabled_at IS NOT NULL) AS mfa_enabled
          FROM accounts a WHERE lower(a.email) = $1 AND a.deleted_at IS NULL`,
       [email],
@@ -65,7 +66,41 @@ export class PostgresNativeAuthStore implements NativeAuthStore {
       passwordHash: account?.password_hash ?? null,
       emailVerified: account?.email_verified_at !== null && account !== undefined,
       mfaEnabled: account?.mfa_enabled ?? false,
+      email: account?.email ?? email,
     };
+  }
+
+  async findPasskeyLoginCandidate(cookieDigest: string, csrfDigest: string, accountId: string): Promise<NativeLoginCandidate | null> {
+    const result = await this.pool.query<{
+      flow_id: string;
+      redirect_uri: string;
+      state: string;
+      code_challenge: string;
+      id: string;
+      email: string;
+      mfa_enabled: boolean;
+    }>(
+      `SELECT f.id AS flow_id, f.redirect_uri, f.state, f.code_challenge,
+              a.id, a.email,
+              EXISTS (SELECT 1 FROM account_totp_factors t WHERE t.account_id = a.id AND t.enabled_at IS NOT NULL) AS mfa_enabled
+         FROM native_auth_flows f
+         JOIN accounts a ON a.id = $3 AND a.deleted_at IS NULL AND a.email_verified_at IS NOT NULL
+        WHERE f.cookie_digest = $1 AND f.csrf_digest = $2
+          AND f.consumed_at IS NULL AND f.expires_at > now() AND f.attempts < 5`,
+      [cookieDigest, csrfDigest, accountId],
+    );
+    const candidate = result.rows[0];
+    return candidate ? {
+      flowId: candidate.flow_id,
+      redirectUri: candidate.redirect_uri,
+      state: candidate.state,
+      codeChallenge: candidate.code_challenge,
+      accountId: candidate.id,
+      email: candidate.email,
+      passwordHash: null,
+      emailVerified: true,
+      mfaEnabled: candidate.mfa_enabled,
+    } : null;
   }
 
   async failLogin(cookieDigest: string, csrfDigest: string): Promise<void> {

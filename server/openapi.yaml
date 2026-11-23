@@ -98,6 +98,82 @@ paths:
         '303': { description: Login válido; redirige solo al callback loopback con code y state }
         '400': { description: Error genérico de credenciales o solicitud expirada }
         '429': { $ref: '#/components/responses/RateLimited' }
+  /auth/native/passkey/options:
+    post:
+      summary: Genera opciones de autenticación passkey para el flujo actual
+      description: Requiere la cookie segura del flujo y CSRF. Reto de un solo uso, cuenta discoverable y verificación de usuario requerida.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [csrf]
+              properties: { csrf: { type: string, minLength: 43, maxLength: 43 } }
+      responses:
+        '200': { description: Opciones WebAuthn; la RP/origen los fija el servidor }
+        '400': { description: Flujo caducado o inválido }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /auth/native/passkey/verify:
+    post:
+      summary: Verifica una aserción passkey e inicia el flujo nativo
+      description: Si la cuenta tiene TOTP activo, devuelve mfaRequired y el login solo termina al validar el segundo factor.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [csrf, response]
+              properties: { csrf: { type: string, minLength: 43, maxLength: 43 }, response: { type: object, additionalProperties: true } }
+      responses:
+        '200': { description: Callback loopback permitido o segundo factor TOTP requerido }
+        '400': { description: Flujo caducado o solicitud inválida }
+        '401': { description: Aserción inválida }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/auth/passkeys/status:
+    get:
+      summary: Consulta si passkeys están habilitadas
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Estado booleano
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: false, required: [enabled], properties: { enabled: { type: boolean } } }
+        '401': { description: Sesión no autorizada }
+  /v1/auth/passkeys/manage-link:
+    post:
+      summary: Emite un ticket efímero para administrar passkeys
+      description: Exige sesión reciente (menos de diez minutos). El ticket dura dos minutos, se usa una vez y solo va en el fragmento URL.
+      security:
+        - bearerAuth: []
+      responses:
+        '201': { description: Enlace seguro de gestión }
+        '403': { description: La sesión requiere reautenticación reciente }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /auth/passkeys/manage/redeem:
+    post:
+      summary: Canjea el ticket efímero por una sesión web corta
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [ticket]
+              properties: { ticket: { type: string, pattern: '^[A-Za-z0-9_-]{43}$', writeOnly: true } }
+      responses:
+        '200': { description: Token CSRF y cookies HttpOnly/Secure de cinco minutos }
+        '410': { description: Ticket caducado, consumido o inválido }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /auth/native/login/mfa:
     post:
       summary: Completa el segundo factor del flujo de login nativo

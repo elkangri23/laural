@@ -483,6 +483,8 @@ pub fn run() {
             account::revoke_account_session,
             account::revoke_other_account_sessions,
             account::get_account_mfa_status,
+            account::get_account_passkeys_enabled,
+            account::start_passkey_management,
             account::start_totp_enrollment,
             account::confirm_totp_enrollment,
             account::complete_totp_enrollment,

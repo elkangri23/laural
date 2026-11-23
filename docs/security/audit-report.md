@@ -1,11 +1,19 @@
 # Auditoría de seguridad
 
-- Fecha: 2026-11-21
+- Fecha: 2026-11-23
 - Alcance: código fuente de Laural, configuración de Tauri, dependencias declaradas, controles de tamaño, canal de actualización y verificación de firma.
 - Objetivo de distribución: aplicación de escritorio Windows.
 - Tipo: revisión estática y pruebas automatizadas; no es una certificación ni una prueba de penetración externa.
 
 ## Hallazgos corregidos
+
+### Revisión de passkeys (23-11-2026)
+
+- Se añadió WebAuthn passwordless, con verificación de usuario y comprobación exacta de origen/RP ID. Los retos se consumen en base de datos y el login conserva TOTP si la cuenta lo tiene activo.
+- La página de gestión solo obtiene un ticket después de validar una sesión de menos de diez minutos. El ticket tiene hash en base de datos, vence en dos minutos y viaja en el fragmento URL; se canjea una sola vez por cookie de sesión corta y CSRF.
+- Se añadieron límite transaccional de diez credenciales, CSP, cookies `Secure`/`HttpOnly`/`SameSite=Strict`, rate limits y limpieza de retos/tickets. Dependencias auditadas: `npm audit --audit-level=low`, cero vulnerabilidades.
+- Cobertura del módulo passkeys: 90,07 % de líneas y 92,17 % de ramas. Servicio sync: 129 pruebas correctas y 8 pruebas PostgreSQL omitidas porque `TEST_DATABASE_URL` no está configurada; cobertura global del servicio 79,30 % de líneas y 75,49 % de ramas. UI: 159 pruebas correctas y cobertura global 79,18 % de líneas; las pruebas dirigidas de Configuración para passkeys pasan. Rust: 126 pruebas correctas y 1 ignorada; `cargo llvm-cov` ejecuta las pruebas, pero en este host Windows MSVC no encuentra los datos instrumentados y no genera informe.
+- Riesgo pendiente antes de producción: avisos por alta/baja de passkeys, pruebas con autenticadores/navegadores reales en Windows y migración/ensayo VPS. Google OAuth sigue sin implementar. La autenticación permanece desactivada por defecto y esta revisión no es una prueba de penetración.
 
 | Severidad | Hallazgo | Corrección |
 | --- | --- | --- |

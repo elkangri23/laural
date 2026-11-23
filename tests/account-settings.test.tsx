@@ -54,6 +54,31 @@ test("inicia login en navegador y muestra el resultado de la sesión", async () 
   expect([...host.querySelectorAll("button")].map((button) => button.textContent)).toContain("Quitar cuenta de este equipo");
 });
 
+test("muestra passkeys habilitadas y abre la gestión en el navegador", async () => {
+  mocks.invoke.mockImplementation(async (command: string) => {
+    if (command === "account_session_status") return true;
+    if (command === "get_account_passkeys_enabled") return true;
+    if (command === "start_passkey_management") return undefined;
+    return undefined;
+  });
+  await act(async () => root.render(renderAccountSettings()));
+  await act(async () => new Promise((resolve) => window.setTimeout(resolve, 0)));
+
+  const manage = [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Gestionar passkeys en el navegador");
+  expect(manage).toBeDefined();
+  expect(host.textContent).toContain("Si TOTP está activo");
+  await act(async () => manage?.click());
+  expect(mocks.invoke).toHaveBeenCalledWith("start_passkey_management");
+  expect(host.textContent).toContain("Se abrió la gestión segura de passkeys");
+});
+
+test("oculta la gestión de passkeys cuando el servicio las mantiene desactivadas", async () => {
+  mocks.invoke.mockImplementation(async (command: string) => command === "account_session_status" ? true : command === "get_account_passkeys_enabled" ? false : undefined);
+  await act(async () => root.render(renderAccountSettings()));
+  await act(async () => new Promise((resolve) => window.setTimeout(resolve, 0)));
+  expect(host.textContent).not.toContain("Gestionar passkeys en el navegador");
+});
+
 test("muestra sesiones activas y pide confirmación para revocar otra", async () => {
   const otherId = "d5363ea7-f6cb-4cca-8e03-85aa33089e7a";
   mocks.invoke.mockImplementation(async (command: string) => {

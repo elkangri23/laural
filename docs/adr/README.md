@@ -45,6 +45,7 @@ Los ADR registran por qué se eligió una opción y qué costes trae. Un ADR ace
 | [0039](0039-outbox-de-avisos-de-seguridad.md) | Cola PostgreSQL transaccional para avisos de cambios MFA | Aceptada; entrega Resend real y despliegue pendientes |
 | [0040](0040-borrado-definitivo-de-cuenta.md) | Borrado definitivo en servidor con autenticación reciente | Aceptada; API/cliente iniciales, ensayo VPS pendiente |
 | [0041](0041-interrupcion-aislada-de-terminal-windows.md) | Señales de interrupción aisladas por sesión ConPTY | Aceptada; el prototipo seguro sigue pendiente |
+| [0042](0042-passkeys-para-cuentas.md) | Passkeys passwordless con TOTP adicional y gestión web acotada | Aceptada; primera implementación local, despliegue pendiente |
 
 ## Crear un ADR
 

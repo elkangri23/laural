@@ -7,6 +7,7 @@ import { EmailAuthService } from "../src/email-auth.js";
 import { NativeAuthService, type NativeAuthStore } from "../src/native-auth.js";
 import type { AccountMfaService } from "../src/account-mfa.js";
 import type { AccountDeletionService } from "../src/account-deletion.js";
+import type { AccountPasskeyService } from "../src/account-passkeys.js";
 import type { RequestRateLimiter } from "../src/request-rate-limit.js";
 
 const snapshot: PreferenceSnapshot = {
@@ -40,7 +41,7 @@ class MemoryStore implements PreferenceStore {
 }
 
 const instances: Array<ReturnType<typeof createApp>> = [];
-function createTestApp(options: { store?: PreferenceStore; checkReadiness?: () => Promise<void>; emailAuth?: EmailAuthService; nativeAuth?: NativeAuthService; accountMfa?: AccountMfaService; accountDeletion?: AccountDeletionService; requestRateLimiter?: RequestRateLimiter; revokeSession?: (accountId: string, authorization: string | undefined) => Promise<boolean>; listAccountSessions?: (accountId: string, authorization: string | undefined) => Promise<{ id: string; createdAt: string; expiresAt: string; current: boolean }[]>; revokeAccountSession?: (accountId: string, authorization: string | undefined, sessionId: string) => Promise<boolean>; revokeOtherSessions?: (accountId: string, authorization: string | undefined) => Promise<number> } = {}): ReturnType<typeof createApp> {
+function createTestApp(options: { store?: PreferenceStore; checkReadiness?: () => Promise<void>; emailAuth?: EmailAuthService; nativeAuth?: NativeAuthService; accountMfa?: AccountMfaService; accountDeletion?: AccountDeletionService; accountPasskeys?: AccountPasskeyService; requestRateLimiter?: RequestRateLimiter; revokeSession?: (accountId: string, authorization: string | undefined) => Promise<boolean>; listAccountSessions?: (accountId: string, authorization: string | undefined) => Promise<{ id: string; createdAt: string; expiresAt: string; current: boolean }[]>; revokeAccountSession?: (accountId: string, authorization: string | undefined, sessionId: string) => Promise<boolean>; revokeOtherSessions?: (accountId: string, authorization: string | undefined) => Promise<number> } = {}): ReturnType<typeof createApp> {
   const store = options.store ?? new MemoryStore();
   const requestRateLimiter = options.requestRateLimiter ?? new TestRateLimiter();
   const app = createApp({
@@ -59,6 +60,7 @@ function createTestApp(options: { store?: PreferenceStore; checkReadiness?: () =
     ...(options.nativeAuth ? { nativeAuth: options.nativeAuth } : {}),
     ...(options.accountMfa ? { accountMfa: options.accountMfa } : {}),
     ...(options.accountDeletion ? { accountDeletion: options.accountDeletion } : {}),
+    ...(options.accountPasskeys ? { accountPasskeys: options.accountPasskeys } : {}),
   });
   instances.push(app);
   return app;
@@ -99,6 +101,53 @@ describe("rutas MFA de cuenta", () => {
     const valid = await app.inject({ method: "POST", url: "/v1/auth/mfa/totp/enrollment/confirm", headers: { authorization: "Bearer account-user1" }, payload: { code: "123456" } });
     expect(valid.statusCode).toBe(200);
     expect(valid.json()).toEqual({ recoveryCodes: ["AAAA-BBBB-CCCC-DDDD"] });
+  });
+});
+
+describe("rutas de passkeys", () => {
+  it("expone disponibilidad autenticada y exige reautenticación para generar el enlace", async () => {
+    let recentLogin = false;
+    const passkeys = {
+      createManagementTicket: vi.fn(async (_accountId: string, authorization: string | undefined) => recentLogin && authorization === "Bearer account-user1" ? "t".repeat(43) : null),
+      managementUrl: vi.fn((ticket: string) => `https://sync.example.test/auth/passkeys/manage#ticket=${ticket}`),
+      consumeManagementTicket: vi.fn(async (ticket: string) => ticket === "t".repeat(43) ? { cookieToken: "a".repeat(43), csrfToken: "b".repeat(43) } : null),
+    } as unknown as AccountPasskeyService;
+    const nativeStore: NativeAuthStore = {
+      createFlow: async () => undefined,
+      isFlowActive: async () => true,
+      findLoginCandidate: async () => null,
+      failLogin: async () => undefined,
+      requireMfa: async () => true,
+      completeLogin: async () => null,
+      exchangeCode: async () => null,
+    };
+    const emailAuth = new EmailAuthService({
+      createUnverifiedAccount: async () => null,
+      createVerification: async () => null,
+      verifyEmail: async () => false,
+      createPasswordReset: async () => null,
+      checkPasswordReset: async () => false,
+      resetPassword: async () => false,
+    }, { sendVerification: async () => undefined, sendPasswordReset: async () => undefined }, "a-pepper-long-enough-for-auth-page-test");
+    const app = createTestApp({ accountPasskeys: passkeys, emailAuth, nativeAuth: new NativeAuthService(nativeStore) });
+
+    expect((await app.inject({ method: "GET", url: "/v1/auth/passkeys/status" })).statusCode).toBe(401);
+    const status = await app.inject({ method: "GET", url: "/v1/auth/passkeys/status", headers: { authorization: "Bearer account-user1" } });
+    expect(status.json()).toEqual({ enabled: true });
+    const denied = await app.inject({ method: "POST", url: "/v1/auth/passkeys/manage-link", headers: { authorization: "Bearer account-user1" } });
+    expect(denied.statusCode).toBe(403);
+    recentLogin = true;
+    const link = await app.inject({ method: "POST", url: "/v1/auth/passkeys/manage-link", headers: { authorization: "Bearer account-user1" } });
+    expect(link.statusCode).toBe(201);
+    expect(link.json().url).toBe(`https://sync.example.test/auth/passkeys/manage#ticket=${"t".repeat(43)}`);
+    expect(passkeys.createManagementTicket).toHaveBeenCalledWith("user1", "Bearer account-user1");
+    const redeemed = await app.inject({ method: "POST", url: "/auth/passkeys/manage/redeem", payload: { ticket: "t".repeat(43) } });
+    expect(redeemed.statusCode).toBe(200);
+    expect(redeemed.headers["set-cookie"]).toEqual(expect.arrayContaining([
+      expect.stringContaining("__Host-laural-passkey-session="),
+      expect.stringContaining("__Host-laural-passkey-csrf="),
+    ]));
+    expect(redeemed.body).not.toContain("t".repeat(43));
   });
 });
 

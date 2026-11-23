@@ -126,6 +126,27 @@ describe("autenticación nativa con navegador y PKCE", () => {
     expect(verifier.completeMfaLogin).toHaveBeenCalledWith(expect.objectContaining({ email: "user@example.test", proof: "123456" }));
   });
 
+  it("permite login passwordless con passkey y añade TOTP si la cuenta lo exige", async () => {
+    const candidate: NativeLoginCandidate = {
+      flowId: "flow-passkey", redirectUri: parameters.redirectUri, state: parameters.state,
+      codeChallenge: parameters.codeChallenge, accountId: "account-1", passwordHash: null,
+      emailVerified: true, mfaEnabled: false, email: "user@example.test",
+    };
+    const store = fakeStore();
+    store.findPasskeyLoginCandidate = vi.fn(async () => candidate);
+    const service = new NativeAuthService(store);
+    const credentials = { cookieToken: "a".repeat(43), csrfToken: "b".repeat(43) };
+
+    const login = await service.completePasskeyLogin({ ...credentials, accountId: "account-1" });
+    expect(login).toMatchObject({ kind: "authorized", redirectUri: parameters.redirectUri, state: parameters.state });
+    expect(store.completeLogin).toHaveBeenCalledWith(expect.objectContaining({ accountId: "account-1" }));
+
+    store.findPasskeyLoginCandidate = vi.fn(async () => ({ ...candidate, mfaEnabled: true }));
+    const mfaLogin = await service.completePasskeyLogin({ ...credentials, accountId: "account-1" });
+    expect(mfaLogin).toEqual({ kind: "mfa_required", email: "user@example.test" });
+    expect(store.requireMfa).toHaveBeenCalledWith(expect.objectContaining({ accountId: "account-1" }));
+  });
+
   it("intercambia el código una sola vez usando el verificador PKCE y crea token de sesión opaco", async () => {
     const store = fakeStore();
     const service = new NativeAuthService(store);

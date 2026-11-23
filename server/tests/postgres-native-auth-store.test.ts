@@ -39,7 +39,7 @@ describe("almacén PostgreSQL de autenticación nativa", () => {
     const store = new PostgresNativeAuthStore(test.pool);
     await expect(store.findLoginCandidate("cookie", "csrf", "user@example.test")).resolves.toEqual({
       flowId: "flow-id", redirectUri: flow.redirect_uri, state: flow.state,
-      codeChallenge: flow.code_challenge, accountId: "account-id", passwordHash: "argon-hash", emailVerified: true, mfaEnabled: false,
+      codeChallenge: flow.code_challenge, accountId: "account-id", email: "user@example.test", passwordHash: "argon-hash", emailVerified: true, mfaEnabled: false,
     });
     expect(test.queries).toHaveLength(2);
 
@@ -56,6 +56,24 @@ describe("almacén PostgreSQL de autenticación nativa", () => {
     const store = new PostgresNativeAuthStore(test.pool);
     expect(await store.isFlowActive("cookie", "csrf")).toBe(false);
     await expect(store.findLoginCandidate("cookie", "csrf", "user@example.test")).resolves.toBeNull();
+  });
+
+  it("selecciona la cuenta verificada ligada al flow para completar un login passkey", async () => {
+    const test = fakePool((sql) => sql.includes("FROM native_auth_flows")
+      ? { rows: [{ flow_id: "flow-id", ...flow, id: "account-id", email: "user@example.test", mfa_enabled: true }] }
+      : { rows: [] });
+    const store = new PostgresNativeAuthStore(test.pool);
+    await expect(store.findPasskeyLoginCandidate("cookie-hash", "csrf-hash", "account-id")).resolves.toEqual({
+      flowId: "flow-id", redirectUri: flow.redirect_uri, state: flow.state,
+      codeChallenge: flow.code_challenge, accountId: "account-id", email: "user@example.test",
+      passwordHash: null, emailVerified: true, mfaEnabled: true,
+    });
+    expect(test.queries).toHaveLength(1);
+    expect(test.queries[0]).toContain("a.email_verified_at IS NOT NULL");
+
+    const expired = fakePool(() => ({ rows: [] }));
+    await expect(new PostgresNativeAuthStore(expired.pool).findPasskeyLoginCandidate("cookie", "csrf", "missing"))
+      .resolves.toBeNull();
   });
 
   it("consume los intentos de login en una transacción y revoca el flow al quinto", async () => {

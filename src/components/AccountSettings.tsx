@@ -30,6 +30,7 @@ export function AccountSettings({ onClose, preferences, onImported, onSyncSettle
   const [sessions, setSessions] = useState<AccountSession[]>([]);
   const [sessionsMessage, setSessionsMessage] = useState("");
   const [mfaStatus, setMfaStatus] = useState<AccountMfaStatus | null>(null);
+  const [passkeysEnabled, setPasskeysEnabled] = useState(false);
   const [enrollment, setEnrollment] = useState<TotpEnrollment | null>(null);
   const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
   const [recoveryAction, setRecoveryAction] = useState<"enrollment" | "rotation" | null>(null);
@@ -53,6 +54,7 @@ export function AccountSettings({ onClose, preferences, onImported, onSyncSettle
         setConnected(true);
         void loadAccountSessions();
         void loadAccountMfa();
+        void loadPasskeysAvailability();
         window.dispatchEvent(new Event("laural:account-connected"));
       }
       setMessage(payload.message);
@@ -74,6 +76,7 @@ export function AccountSettings({ onClose, preferences, onImported, onSyncSettle
         if (hasSession) {
           void loadAccountSessions();
           void loadAccountMfa();
+          void loadPasskeysAvailability();
         }
       }
     }).catch(() => {
@@ -118,6 +121,26 @@ export function AccountSettings({ onClose, preferences, onImported, onSyncSettle
     } catch {
       setMfaStatus(null);
       setMfaMessage("No se pudo consultar la seguridad de la cuenta.");
+    }
+  }
+
+  async function loadPasskeysAvailability() {
+    try {
+      setPasskeysEnabled(await invoke<boolean>("get_account_passkeys_enabled"));
+    } catch {
+      setPasskeysEnabled(false);
+    }
+  }
+
+  async function managePasskeys() {
+    setBusy(true);
+    try {
+      await invoke("start_passkey_management");
+      setMfaMessage("Se abrió la gestión segura de passkeys en el navegador.");
+    } catch (error) {
+      setMfaMessage(typeof error === "string" ? error : "No se pudo abrir la gestión de passkeys.");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -455,6 +478,11 @@ export function AccountSettings({ onClose, preferences, onImported, onSyncSettle
             </ul>}
           </div>
           <section className="account-mfa" aria-labelledby="account-mfa-title">
+            {passkeysEnabled && <section aria-labelledby="account-passkeys-title">
+              <h4 id="account-passkeys-title">Passkeys</h4>
+              <p className="dialog-copy">Inicia sesión sin contraseña con una clave de acceso de tu dispositivo o gestor. Si TOTP está activo, también se pedirá ese código.</p>
+              <button className="secondary-button" disabled={busy} onClick={() => void managePasskeys()}>Gestionar passkeys en el navegador</button>
+            </section>}
             <h4 id="account-mfa-title">Autenticación en dos pasos</h4>
             <p className="dialog-copy">Protege el inicio de sesión con una aplicación TOTP. Para cambiar esta opción debes haber iniciado sesión en los últimos diez minutos.</p>
             {mfaMessage && <p className="form-message" role="status" aria-live="polite">{mfaMessage}</p>}

@@ -7,6 +7,7 @@ import type { PreferenceSnapshot, PreferenceStore, ReadinessCheck, Authenticate,
 import type { EmailAuthService } from "./email-auth.js";
 import type { AccountMfaService } from "./account-mfa.js";
 import type { AccountDeletionService } from "./account-deletion.js";
+import { AccountPasskeyService, type PasskeySummary } from "./account-passkeys.js";
 import { NativeAuthService, validateNativeFlowParameters, type LoginResult } from "./native-auth.js";
 import type { RequestRateLimiter } from "./request-rate-limit.js";
 import snapshotSchema from "../../shared/preference-snapshot-v1.schema.json" with { type: "json" };
@@ -27,6 +28,7 @@ export type AppDependencies = {
   nativeAuth?: NativeAuthService;
   accountMfa?: AccountMfaService;
   accountDeletion?: AccountDeletionService;
+  accountPasskeys?: AccountPasskeyService;
   requestRateLimiter: RequestRateLimiter;
 };
 
@@ -43,8 +45,13 @@ type PasswordResetBody = EmailPinBody & { password: string };
 type NativePasswordResetConfirmBody = NativePinBody & { password: string };
 type NativeStartQuery = { redirect_uri: string; state: string; code_challenge: string; code_challenge_method: "S256" };
 type NativeExchangeBody = { code: string; codeVerifier: string };
+type PasskeyLoginBody = { csrf: string; response?: unknown };
+type PasskeyRegistrationBody = { csrf: string; displayName: string };
+type PasskeyVerifyRegistrationBody = { csrf: string; response: unknown };
 
 const FLOW_COOKIE = "__Host-laural-flow";
+const PASSKEY_SESSION_COOKIE = "__Host-laural-passkey-session";
+const PASSKEY_CSRF_COOKIE = "__Host-laural-passkey-csrf";
 
 export function createApp(dependencies: AppDependencies): FastifyInstance {
   const app = Fastify({ logger: false, bodyLimit: BODY_LIMIT, trustProxy: ["127.0.0.1", "::1"] });
@@ -55,7 +62,7 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
     reply.header("X-Frame-Options", "DENY");
     reply.header("Referrer-Policy", "no-referrer");
     reply.header("Cache-Control", "no-store");
-    reply.header("Content-Security-Policy", "default-src 'none'; style-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'");
+    reply.header("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'");
     return payload;
   });
 
@@ -73,6 +80,12 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
   const nativeAuth = dependencies.nativeAuth;
   const accountMfa = dependencies.accountMfa;
   const accountDeletion = dependencies.accountDeletion;
+  const accountPasskeys = dependencies.accountPasskeys;
+
+  app.get("/v1/auth/passkeys/status", { preHandler: limited(rateLimit, "passkey-status", 30, 60) }, async (request, reply) => {
+    if (!await dependencies.authenticate(request.headers.authorization)) return reply.code(401).send({ error: "unauthorized" });
+    return reply.send({ enabled: Boolean(accountPasskeys) });
+  });
 
   app.post("/v1/auth/session/revoke", { preHandler: limited(rateLimit, "session-revoke", 10, 60) }, async (request, reply) => {
     const authorization = request.headers.authorization;
@@ -155,7 +168,7 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
       }
       const credentials = await nativeAuth.startFlow({ redirectUri, state, codeChallenge });
       reply.header("Set-Cookie", flowCookie(credentials.cookieToken));
-      return reply.type("text/html; charset=utf-8").send(renderAuthPage(credentials.csrfToken));
+      return reply.type("text/html; charset=utf-8").send(renderAuthPage(credentials.csrfToken, "", Boolean(accountPasskeys)));
     });
 
     app.get("/auth.css", async (_request, reply) => {
@@ -272,6 +285,126 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
       const grant = await nativeAuth.exchange(request.body.code, request.body.codeVerifier);
       if (!grant) return reply.code(400).send({ error: "invalid_or_expired_code" });
       return reply.send({ sessionToken: grant.token, expiresAt: grant.expiresAt });
+    });
+  }
+
+  if (accountPasskeys && nativeAuth) {
+    app.get("/auth/passkeys.js", async (_request, reply) => {
+      const script = await readFile(new URL("../web/passkeys-client.js", import.meta.url), "utf8");
+      return reply.type("text/javascript; charset=utf-8").send(script);
+    });
+
+    app.post<{ Body: { csrf: string } }>("/auth/native/passkey/options", {
+      bodyLimit: 1024,
+      preHandler: limited(rateLimit, "passkey-login-options", 10, 60),
+      schema: { body: { type: "object", additionalProperties: false, required: ["csrf"], properties: { csrf: { type: "string", minLength: 43, maxLength: 43 } } } },
+    }, async (request, reply) => {
+      const cookie = readCookie(request.headers.cookie, FLOW_COOKIE) ?? "";
+      if (!await nativeAuth.isBrowserFlowValid(cookie, request.body.csrf)) return reply.code(400).send({ error: "invalid_or_expired_flow" });
+      const options = await accountPasskeys.createLoginOptions(cookie, request.body.csrf);
+      return options ? reply.send(options) : reply.code(400).send({ error: "invalid_or_expired_flow" });
+    });
+
+    app.post<{ Body: PasskeyLoginBody }>("/auth/native/passkey/verify", {
+      bodyLimit: 24 * 1024,
+      preHandler: limited(rateLimit, "passkey-login-verify", 10, 60),
+      schema: {
+        body: {
+          type: "object", additionalProperties: false, required: ["csrf", "response"],
+          properties: { csrf: { type: "string", minLength: 43, maxLength: 43 }, response: { type: "object", additionalProperties: true } },
+        },
+      },
+    }, async (request, reply) => {
+      const cookie = readCookie(request.headers.cookie, FLOW_COOKIE) ?? "";
+      if (!request.body.response || !await nativeAuth.isBrowserFlowValid(cookie, request.body.csrf)) {
+        return reply.code(400).send({ error: "invalid_or_expired_flow" });
+      }
+      const verified = await accountPasskeys.verifyLogin(cookie, request.body.csrf, request.body.response as never);
+      if (!verified) {
+        await nativeAuth.failPasskeyLogin(cookie, request.body.csrf);
+        return reply.code(401).send({ error: "authentication_failed" });
+      }
+      const result = await nativeAuth.completePasskeyLogin({ cookieToken: cookie, csrfToken: request.body.csrf, accountId: verified.accountId });
+      if (!result) return reply.code(401).send({ error: "authentication_failed" });
+      if (result.kind === "mfa_required") return reply.send({ mfaRequired: true, email: result.email });
+      reply.header("Set-Cookie", expiredFlowCookie());
+      return reply.send({ redirect: nativeLoginUrl(result) });
+    });
+
+    app.post("/v1/auth/passkeys/manage-link", { preHandler: limited(rateLimit, "passkey-management-link", 5, 60) }, async (request, reply) => {
+      const accountId = await dependencies.authenticate(request.headers.authorization);
+      if (!accountId) return reply.code(401).send({ error: "unauthorized" });
+      const ticket = await accountPasskeys.createManagementTicket(accountId, request.headers.authorization);
+      if (!ticket) return reply.code(403).send({ error: "recent_auth_required" });
+      return reply.code(201).send({ url: accountPasskeys.managementUrl(ticket) });
+    });
+
+    app.post<{ Body: { ticket: string } }>("/auth/passkeys/manage/redeem", {
+      bodyLimit: 1024,
+      preHandler: limited(rateLimit, "passkey-management-redeem", 5, 60),
+      schema: { body: { type: "object", additionalProperties: false, required: ["ticket"], properties: { ticket: { type: "string", pattern: "^[A-Za-z0-9_-]{43}$" } } } },
+    }, async (request, reply) => {
+      const session = await accountPasskeys.consumeManagementTicket(request.body.ticket);
+      if (!session) return reply.code(410).send({ error: "ticket_expired" });
+      reply.header("Set-Cookie", [passkeySessionCookie(session.cookieToken), passkeyCsrfCookie(session.csrfToken)]);
+      return reply.send({ csrf: session.csrfToken });
+    });
+
+    app.get("/auth/passkeys/manage", async (request, reply) => {
+      const cookie = readCookie(request.headers.cookie, PASSKEY_SESSION_COOKIE) ?? "";
+      const csrf = readCookie(request.headers.cookie, PASSKEY_CSRF_COOKIE) ?? "";
+      const passkeys = await accountPasskeys.listManagementPasskeys(cookie, csrf);
+      if (!passkeys) return reply.type("text/html; charset=utf-8").send(renderPasskeyBootstrapPage());
+      return reply.type("text/html; charset=utf-8").send(renderPasskeyManagementPage(csrf, passkeys));
+    });
+
+    app.get("/auth/passkeys/manage/list", { preHandler: limited(rateLimit, "passkey-management-list", 30, 60) }, async (request, reply) => {
+      const cookie = readCookie(request.headers.cookie, PASSKEY_SESSION_COOKIE) ?? "";
+      const csrf = request.headers["x-csrf-token"];
+      if (typeof csrf !== "string" || csrf !== readCookie(request.headers.cookie, PASSKEY_CSRF_COOKIE)) return reply.code(403).send({ error: "invalid_csrf" });
+      const passkeys = await accountPasskeys.listManagementPasskeys(cookie, csrf);
+      return passkeys ? reply.send(passkeys) : reply.code(401).send({ error: "session_expired" });
+    });
+
+    app.post<{ Body: PasskeyRegistrationBody }>("/auth/passkeys/manage/options", {
+      bodyLimit: 1024,
+      preHandler: limited(rateLimit, "passkey-registration-options", 5, 900),
+      schema: {
+        body: { type: "object", additionalProperties: false, required: ["csrf", "displayName"], properties: {
+          csrf: { type: "string", minLength: 43, maxLength: 43 }, displayName: { type: "string", minLength: 1, maxLength: 80 },
+        } },
+      },
+    }, async (request, reply) => {
+      const cookie = readCookie(request.headers.cookie, PASSKEY_SESSION_COOKIE) ?? "";
+      if (request.body.csrf !== readCookie(request.headers.cookie, PASSKEY_CSRF_COOKIE)
+        || request.body.csrf !== request.headers["x-csrf-token"]) return reply.code(403).send({ error: "invalid_csrf" });
+      const options = await accountPasskeys.createRegistrationOptions(cookie, request.body.csrf, request.body.displayName);
+      return options ? reply.send(options) : reply.code(409).send({ error: "registration_not_allowed" });
+    });
+
+    app.post<{ Body: PasskeyVerifyRegistrationBody }>("/auth/passkeys/manage/register", {
+      bodyLimit: 24 * 1024,
+      preHandler: limited(rateLimit, "passkey-registration-verify", 5, 900),
+      schema: { body: { type: "object", additionalProperties: false, required: ["csrf", "response"], properties: {
+        csrf: { type: "string", minLength: 43, maxLength: 43 }, response: { type: "object", additionalProperties: true },
+      } } },
+    }, async (request, reply) => {
+      const cookie = readCookie(request.headers.cookie, PASSKEY_SESSION_COOKIE) ?? "";
+      if (request.body.csrf !== readCookie(request.headers.cookie, PASSKEY_CSRF_COOKIE)
+        || request.body.csrf !== request.headers["x-csrf-token"]) return reply.code(403).send({ error: "invalid_csrf" });
+      const saved = await accountPasskeys.verifyRegistration(cookie, request.body.csrf, request.body.response as never);
+      return saved ? reply.code(201).send({ status: "saved" }) : reply.code(400).send({ error: "registration_failed" });
+    });
+
+    app.delete<{ Params: { id: string } }>("/auth/passkeys/manage/:id", {
+      preHandler: limited(rateLimit, "passkey-management-delete", 5, 60),
+      schema: { params: { type: "object", additionalProperties: false, required: ["id"], properties: { id: { type: "string", format: "uuid" } } } },
+    }, async (request, reply) => {
+      const cookie = readCookie(request.headers.cookie, PASSKEY_SESSION_COOKIE) ?? "";
+      const csrf = request.headers["x-csrf-token"];
+      if (typeof csrf !== "string" || csrf !== readCookie(request.headers.cookie, PASSKEY_CSRF_COOKIE)) return reply.code(403).send({ error: "invalid_csrf" });
+      const removed = await accountPasskeys.removeManagementPasskey(cookie, csrf, request.params.id);
+      return removed ? reply.code(204).send() : reply.code(404).send({ error: "not_found" });
     });
   }
 
@@ -516,7 +649,7 @@ function formSchema(properties: Record<string, unknown>, required: string[]): Re
   return { type: "object", additionalProperties: false, required, properties };
 }
 
-function renderAuthPage(csrfToken: string, notice = ""): string {
+function renderAuthPage(csrfToken: string, notice = "", passkeysEnabled = false): string {
   const csrf = escapeHtml(csrfToken);
   const safeNotice = escapeHtml(notice);
   return `<!doctype html>
@@ -525,6 +658,10 @@ function renderAuthPage(csrfToken: string, notice = ""): string {
 <body><div class="shell"><header class="brand"><div class="mark" aria-hidden="true">L</div><div><div class="brand-name">Laural</div><div class="brand-caption">Cuenta y sincronización</div></div></header>
 <main><h1>Inicia sesión en Laural</h1><p class="intro">Usa tu cuenta para continuar. La contraseña se introduce únicamente en esta página segura del navegador.</p>
 <p class="notice" role="status">${safeNotice}</p>
+${passkeysEnabled ? `<p class="notice" role="status" data-passkey-notice></p><button type="button" data-passkey-login>Iniciar sesión con passkey</button>
+<form action="/auth/native/login/mfa" method="post" data-passkey-mfa hidden><input type="hidden" name="csrf" value="${csrf}">
+<label>Correo electrónico<input name="email" type="email" autocomplete="username" required maxlength="320"></label>
+<label>Código TOTP o de recuperación<input name="proof" autocomplete="one-time-code" required maxlength="19"></label><button type="submit">Verificar y continuar</button></form>` : ""}
 <form action="/auth/native/login" method="post"><input type="hidden" name="csrf" value="${csrf}">
 <label>Correo electrónico<input name="email" type="email" autocomplete="username" required maxlength="320"></label>
 <label>Contraseña<input name="password" type="password" autocomplete="current-password" required minlength="12" maxlength="128"></label>
@@ -550,7 +687,7 @@ function renderAuthPage(csrfToken: string, notice = ""): string {
 <label>Correo electrónico<input name="email" type="email" autocomplete="email" required maxlength="320"></label>
 <button type="submit">Reenviar PIN</button></form></details>
 <p class="privacy">El PIN solo verifica el correo o permite cambiar la contraseña. No inicia sesión ni elimina passkeys o MFA. Las claves de tus proveedores no forman parte de esta cuenta.</p>
-</main><footer>Laural · Acceso seguro desde navegador externo</footer></div></body></html>`;
+</main><footer>Laural · Acceso seguro desde navegador externo</footer>${passkeysEnabled ? '<script type="module" src="/auth/passkeys.js"></script>' : ""}</div></body></html>`;
 }
 
 function renderMfaPage(csrfToken: string, email: string, notice = ""): string {
@@ -572,11 +709,32 @@ function renderMfaPage(csrfToken: string, email: string, notice = ""): string {
 }
 
 function redirectNativeLogin(reply: FastifyReply, result: Extract<LoginResult, { kind: "authorized" }>): FastifyReply {
+  reply.header("Set-Cookie", expiredFlowCookie());
+  return reply.code(303).header("Location", nativeLoginUrl(result)).send();
+}
+
+function nativeLoginUrl(result: Extract<LoginResult, { kind: "authorized" }>): string {
   const callback = new URL(result.redirectUri);
   callback.searchParams.set("code", result.code);
   callback.searchParams.set("state", result.state);
-  reply.header("Set-Cookie", expiredFlowCookie());
-  return reply.code(303).header("Location", callback.href).send();
+  return callback.href;
+}
+
+function passkeySessionCookie(token: string): string {
+  return `${PASSKEY_SESSION_COOKIE}=${token}; Path=/; Max-Age=300; Secure; HttpOnly; SameSite=Strict`;
+}
+
+function passkeyCsrfCookie(token: string): string {
+  return `${PASSKEY_CSRF_COOKIE}=${token}; Path=/; Max-Age=300; Secure; SameSite=Strict`;
+}
+
+function renderPasskeyBootstrapPage(): string {
+  return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Acceso seguro · Laural</title><link rel="stylesheet" href="/auth.css"></head><body><div class="shell"><main><h1>Gestión segura de passkeys</h1><p class="intro" data-passkey-bootstrap-notice>Validando el enlace de un solo uso…</p></main><footer>Laural · Gestión de passkeys</footer><script type="module" src="/auth/passkeys.js"></script></div></body></html>`;
+}
+
+function renderPasskeyManagementPage(csrfToken: string, passkeys: PasskeySummary[]): string {
+  const csrf = escapeHtml(csrfToken);
+  return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Passkeys · Laural</title><link rel="stylesheet" href="/auth.css"></head><body><div class="shell"><header class="brand"><div class="mark" aria-hidden="true">L</div><div><div class="brand-name">Laural</div><div class="brand-caption">Seguridad de la cuenta</div></div></header><main><h1>Passkeys</h1><p class="intro">Añade una passkey para iniciar sesión sin contraseña. Si TOTP está activo, también tendrás que confirmarlo.</p><input type="hidden" name="csrf" value="${csrf}"><div data-passkey-management><label>Nombre para identificarla<input data-passkey-name maxlength="80" autocomplete="off" placeholder="Ej.: portátil personal"></label><button type="button" data-passkey-create>Añadir passkey</button><p class="notice" role="status" aria-live="polite" data-passkey-management-notice></p><div data-passkey-list>${passkeys.map((item) => `<div class="passkey-row"><span>${escapeHtml(item.name)} · añadida ${escapeHtml(new Date(item.createdAt).toLocaleDateString("es-ES"))}</span><button type="button" data-initial-passkey-id="${escapeHtml(item.id)}">Eliminar</button></div>`).join("")}</div></div><p class="privacy">La passkey permite iniciar sesión. No sustituye TOTP si está activado.</p></main><footer>Laural · Gestión de passkeys</footer><script type="module" src="/auth/passkeys.js"></script></div></body></html>`;
 }
 
 function escapeHtml(value: string): string {

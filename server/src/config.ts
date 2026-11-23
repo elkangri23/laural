@@ -13,6 +13,12 @@ export type EmailAuthConfig = {
   totpEncryptionKey: Buffer;
 };
 
+export type PasskeyConfig = {
+  rpName: string;
+  rpId: string;
+  origin: string;
+};
+
 export function readConfig(environment: NodeJS.ProcessEnv): ServiceConfig {
   const databaseUrl = environment.DATABASE_URL?.trim();
   const host = environment.HOST?.trim() || "127.0.0.1";
@@ -55,4 +61,28 @@ export function readEmailAuthConfig(environment: NodeJS.ProcessEnv): EmailAuthCo
   }
 
   return { resendApiKey, resendFrom, pinPepper, recoveryPepper, totpEncryptionKey };
+}
+
+export function readPasskeyConfig(environment: NodeJS.ProcessEnv, emailAuthEnabled: boolean): PasskeyConfig | null {
+  if (environment.PASSKEYS_ENABLED?.trim().toLowerCase() !== "true") return null;
+  if (!emailAuthEnabled) throw new Error("PASSKEYS_ENABLED requiere EMAIL_AUTH_ENABLED=true.");
+
+  const rpName = environment.PASSKEY_RP_NAME?.trim() || "Laural";
+  const rpId = environment.PASSKEY_RP_ID?.trim().toLowerCase();
+  const origin = environment.PASSKEY_ORIGIN?.trim();
+  if (!rpId || rpId.length > 253 || !/^(localhost|(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,})$/.test(rpId)) {
+    throw new Error("PASSKEY_RP_ID debe ser un nombre DNS o localhost válido.");
+  }
+  if (rpName.length < 1 || rpName.length > 64) throw new Error("PASSKEY_RP_NAME debe tener entre 1 y 64 caracteres.");
+  let parsedOrigin: URL;
+  try {
+    parsedOrigin = new URL(origin ?? "");
+  } catch {
+    throw new Error("PASSKEY_ORIGIN debe ser un origen HTTPS válido.");
+  }
+  const localOrigin = rpId === "localhost" && parsedOrigin.protocol === "http:" && parsedOrigin.hostname === "localhost";
+  if ((!localOrigin && parsedOrigin.protocol !== "https:") || parsedOrigin.origin !== origin || parsedOrigin.hostname !== rpId) {
+    throw new Error("PASSKEY_ORIGIN debe ser HTTPS y coincidir exactamente con PASSKEY_RP_ID.");
+  }
+  return { rpName, rpId, origin: parsedOrigin.origin };
 }

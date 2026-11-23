@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readConfig, readEmailAuthConfig } from "../src/config.js";
+import { readConfig, readEmailAuthConfig, readPasskeyConfig } from "../src/config.js";
 
 describe("configuración del servicio", () => {
   it("usa localhost y el puerto predeterminado", () => {
@@ -26,6 +26,16 @@ describe("configuración del servicio", () => {
 
   it("mantiene apagada la autenticación por correo de forma predeterminada", () => {
     expect(readEmailAuthConfig({} as NodeJS.ProcessEnv)).toBeNull();
+  });
+
+  it("mantiene passkeys desactivadas y exige origen HTTPS alineado con el RP", () => {
+    expect(readPasskeyConfig({} as NodeJS.ProcessEnv, false)).toBeNull();
+    expect(() => readPasskeyConfig({ PASSKEYS_ENABLED: "true" } as NodeJS.ProcessEnv, false)).toThrow("EMAIL_AUTH_ENABLED");
+    const valid = { PASSKEYS_ENABLED: "true", PASSKEY_RP_ID: "sync.example.test", PASSKEY_RP_NAME: "Laural", PASSKEY_ORIGIN: "https://sync.example.test" } as NodeJS.ProcessEnv;
+    expect(readPasskeyConfig(valid, true)).toEqual({ rpId: "sync.example.test", rpName: "Laural", origin: "https://sync.example.test" });
+    expect(() => readPasskeyConfig(valid, false)).toThrow("EMAIL_AUTH_ENABLED");
+    expect(() => readPasskeyConfig({ ...valid, PASSKEY_ORIGIN: "https://attacker.test" }, true)).toThrow("coincidir");
+    expect(() => readPasskeyConfig({ ...valid, PASSKEY_ORIGIN: "http://sync.example.test" }, true)).toThrow("HTTPS");
   });
 
   it("activa correo solo con claves, remitente sin controles y parámetros TOTP válidos", () => {

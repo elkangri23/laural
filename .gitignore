@@ -31,3 +31,4 @@ src-tauri/target
 *.sw?
 /coverage/
 /server/coverage/
+/server/web/passkeys-client.js
