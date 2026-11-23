@@ -16,7 +16,7 @@ Estado al 23 de noviembre de 2026. «Implementado» describe código presente; �
 - Planes de agente, modos revisar/reglas/automático y aprobación explícita para cambios de archivos.
 - Icono y favicon propios; build de Windows automatizable desde GitHub Actions.
 - Código dividido para carga progresiva: build actual 23-11-2026: entrada JS de 301,81 KB (91,44 KB gzip), terminal en bloque de 336,25 KB (85,13 KB gzip), Markdown de 164,77 KB cargado al necesitarlo y paneles secundarios bajo demanda. No quedan bloques mayores de 500 KB. En el build release de Windows, una muestra de la instancia ya abierta registró 107,9 MiB de working set y 258 MiB de memoria privada sumando Laural y sus 8 procesos descendientes; cuatro mediciones durante 34 segundos no mostraron variación al MiB. Es una línea base de una sola máquina, no una garantía de consumo ni una medida de arranque frío. Falta medir el paquete instalado, arranque en frío y consumo durante uso sostenido.
-- La tarjeta del lateral refleja el proveedor y modelo activos en vez de seguir mostrando la invitación inicial; regresión de `app.test.tsx`. Suite UI: 160/160 pruebas, 79,18 % de líneas. Build de producción correcto; falta confirmar el cambio en una nueva build instalada de Windows.
+- La tarjeta del lateral refleja el proveedor y modelo activos en vez de seguir mostrando la invitación inicial; regresión de `app.test.tsx`. Suite UI: 160/160 pruebas, 79,18 % de líneas. Build de producción correcta y validación visual en la build Tauri de desarrollo en Windows (`FreeLLMAPI · auto`). Falta repetir la comprobación desde un paquete instalado.
 - README, arquitectura, requisitos, ADR, casos de uso y documentación de contribución.
 
 ## M1 — Estabilidad de terminal (parcial)
