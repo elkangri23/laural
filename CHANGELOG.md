@@ -1,6 +1,7 @@
 # Registro de cambios
 
 ## Sin publicar
+- Añadida al roadmap una cuarta muestra pasiva de recursos de la instalación Windows y el resultado de la revisión visual intentada. Siete muestras en 42 s: 9 procesos, 127,3–127,4 MiB de working set, 253,7–253,9 MiB de memoria privada y CPU acumulada estable; no representa carga activa. La herramienta no pudo activar la ventana, por lo que la inspección visual sigue pendiente.
 - Añadido `npm run status:publish -- <archivo-status.json>` para publicar el estado público desde Linux/SSH. Valida el esquema cerrado antes de escribir, sincroniza un temporal con permisos 0644 y sustituye el archivo de forma atómica; limpia temporales ante fallos y conserva el documento anterior. Actualizados ADR-0032, runbook, requisitos, diseño, roadmap y backlog. No añade sondeos en vivo ni una ruta web de escritura.
 - Verificación local: servicio 180/180 pruebas con PostgreSQL 16, cobertura 90,26 % de líneas / 80,01 % de ramas; `public-status.ts` alcanza 100 % de líneas. UI 162/162 con 79,37 % de líneas (repetición con timeout ampliado tras un timeout aislado al ejecutar en paralelo); builds de UI y servicio correctos.
 - Añadido el reenrolamiento TOTP tras aprobación administrativa: enlace temporal de un uso, ticket cifrado en outbox, CSRF y cookie segura. Solo al confirmar el TOTP nuevo sustituye factores, elimina passkeys anteriores, revoca sesiones/códigos pendientes y encola aviso. No crea sesión y entrega códigos nuevos una sola vez. Migración 014, ADR-0050, UC-21, roadmap, backlog y runbook actualizados.
