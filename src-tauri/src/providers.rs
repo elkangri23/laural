@@ -2189,6 +2189,9 @@ fn external_tool_is_high_risk(command: &str, executable: &str) -> bool {
     if executable == "sfc" {
         return sfc_command_is_high_risk(command);
     }
+    if executable == "reagentc" {
+        return reagentc_command_is_high_risk(command);
+    }
     if executable == "manage-bde" {
         return manage_bde_command_is_high_risk(command);
     }
@@ -2607,6 +2610,17 @@ fn sfc_command_is_high_risk(command: &str) -> bool {
     }
 
     !has_verification && !has_help
+}
+
+fn reagentc_command_is_high_risk(command: &str) -> bool {
+    let arguments: Vec<_> = command.split_whitespace().skip(1).collect();
+    match arguments.as_slice() {
+        [] => false,
+        ["/?"] | ["-?"] => false,
+        ["/info"] | ["/info", "/?"] => false,
+        ["/info", "/target", path] if !path.starts_with('/') && !path.starts_with('-') => false,
+        _ => true,
+    }
 }
 
 fn is_unambiguous_net_user_name(value: &str) -> bool {
@@ -4460,6 +4474,33 @@ mod tests {
     }
 
     #[test]
+    fn exige_revision_para_cambiar_windows_re_con_reagentc() {
+        for command in [
+            "reagentc /enable",
+            "reagentc /disable",
+            "reagentc /boottore",
+            "reagentc /setreimage /path R:\\Recovery\\WindowsRE",
+            "reagentc /setosimage /path R:\\RecoveryImage /index 1",
+            "reagentc /setbootshelllink /configfile menu.xml",
+            "reagentc /operacion-desconocida",
+            "reagentc /info /disable",
+        ] {
+            assert!(command_is_high_risk("cmd", command), "{command}");
+        }
+
+        for command in [
+            "reagentc",
+            "reagentc /?",
+            "reagentc -?",
+            "reagentc /info",
+            "reagentc /info /target W:\\Windows",
+            "reagentc /info /?",
+        ] {
+            assert!(!command_is_high_risk("cmd", command), "{command}");
+        }
+    }
+
+    #[test]
     fn exige_revision_para_modificar_credenciales_de_windows() {
         for (command, executable) in [
             (
@@ -4866,6 +4907,7 @@ mod tests {
                 "powercfg /hibernate off".into(),
                 "dism /Online /Enable-Feature /FeatureName:TelnetClient".into(),
                 "sfc /scannow".into(),
+                "reagentc /disable".into(),
                 "ssh servidor hostname".into(),
                 "Enter-PSSession servidor".into(),
                 "msiexec /i paquete.msi /quiet".into(),
@@ -4925,6 +4967,7 @@ mod tests {
                 "dism /Online /Enable-Feature /FeatureName:TelnetClient",
             ),
             ("cmd", "sfc /scannow"),
+            ("cmd", "reagentc /disable"),
             ("git-bash", "ssh servidor hostname"),
             ("powershell", "Enter-PSSession servidor"),
             ("cmd", "msiexec /i paquete.msi /quiet"),
