@@ -2,6 +2,7 @@
 
 ## 0.1.0-alpha.15
 
+- Publicada el 23-11-2026 como pre-release NSIS x64 con firma del updater, manifiesto `latest.json` y suma SHA-256 del instalador.
 - El agente requiere aprobación para eliminar o modificar copias sombra y respaldos con `vssadmin`, `wbadmin` y `diskshadow`; conserva las consultas de listado/estado y ayuda.
 - El agente requiere aprobación para operaciones de `pnputil` que instalan o eliminan controladores, cambian el estado de dispositivos o escriben exportaciones; las enumeraciones sin salida a archivo y la ayuda siguen siendo de lectura.
 - El agente ahora exige revisión para comandos `netsh` interactivos o que modifiquen red/firewall, y para exportaciones que revelen claves Wi-Fi en texto claro; conserva ayuda y consultas de solo lectura.

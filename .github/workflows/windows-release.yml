@@ -38,6 +38,18 @@ jobs:
           args: --bundles nsis
           uploadUpdaterJson: true
           updaterJsonPreferNsis: true
+      - name: Publicar suma SHA-256 del instalador
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: |
+          $installers = @(Get-ChildItem "src-tauri/target/release/bundle/nsis" -Filter "*.exe")
+          if ($installers.Count -ne 1) { throw "Se esperaba un único instalador NSIS; encontrados: $($installers.Count)." }
+          $hash = (Get-FileHash -LiteralPath $installers[0].FullName -Algorithm SHA256).Hash
+          $checksumPath = Join-Path $env:RUNNER_TEMP "SHA256SUMS.txt"
+          "$hash  $($installers[0].Name)" | Set-Content -LiteralPath $checksumPath -Encoding ascii
+          gh release upload $env:GITHUB_REF_NAME $checksumPath --repo $env:GITHUB_REPOSITORY --clobber
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Publicar el manifiesto para el cliente
         uses: actions/github-script@v9
         with:
