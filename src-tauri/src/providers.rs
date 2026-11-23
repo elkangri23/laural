@@ -2174,6 +2174,9 @@ fn external_tool_is_high_risk(command: &str, executable: &str) -> bool {
     if executable == "auditpol" {
         return auditpol_command_is_high_risk(command);
     }
+    if executable == "secedit" {
+        return secedit_command_is_high_risk(command);
+    }
     if executable == "manage-bde" {
         return manage_bde_command_is_high_risk(command);
     }
@@ -2456,6 +2459,15 @@ fn auditpol_command_is_high_risk(command: &str) -> bool {
         return false;
     };
     !matches!(operation, "/?" | "/get" | "/list")
+}
+
+fn secedit_command_is_high_risk(command: &str) -> bool {
+    let mut arguments = command.split_whitespace();
+    arguments.next();
+    match arguments.next() {
+        None | Some("/?") | Some("/help") | Some("/validate") => false,
+        _ => true,
+    }
 }
 
 fn is_unambiguous_net_user_name(value: &str) -> bool {
@@ -4149,6 +4161,29 @@ mod tests {
     }
 
     #[test]
+    fn exige_revision_para_aplicar_o_exportar_plantillas_de_seguridad() {
+        for command in [
+            "secedit /configure /db politica.sdb",
+            "secedit /import /db politica.sdb /cfg plantilla.inf",
+            "secedit /export /cfg copia.inf",
+            "secedit /generaterollback /db politica.sdb /cfg plantilla.inf /rbk vuelta.inf",
+            "secedit /analyze /db politica.sdb",
+            "secedit /operacion-desconocida",
+        ] {
+            assert!(command_is_high_risk("cmd", command), "{command}");
+        }
+
+        for command in [
+            "secedit",
+            "secedit /?",
+            "secedit /help",
+            "secedit /validate plantilla.inf",
+        ] {
+            assert!(!command_is_high_risk("cmd", command), "{command}");
+        }
+    }
+
+    #[test]
     fn exige_revision_para_modificar_credenciales_de_windows() {
         for (command, executable) in [
             (
@@ -4549,6 +4584,7 @@ mod tests {
                 "net session \\\\equipo /delete".into(),
                 "net use Z: \\\\equipo\\datos".into(),
                 "auditpol /set /subcategory:* /success:enable".into(),
+                "secedit /configure /db politica.sdb".into(),
                 "ssh servidor hostname".into(),
                 "Enter-PSSession servidor".into(),
                 "msiexec /i paquete.msi /quiet".into(),
@@ -4599,6 +4635,7 @@ mod tests {
             ("cmd", "net session \\\\equipo /delete"),
             ("cmd", "net use Z: \\\\equipo\\datos"),
             ("cmd", "auditpol /set /subcategory:* /success:enable"),
+            ("cmd", "secedit /configure /db politica.sdb"),
             ("git-bash", "ssh servidor hostname"),
             ("powershell", "Enter-PSSession servidor"),
             ("cmd", "msiexec /i paquete.msi /quiet"),
