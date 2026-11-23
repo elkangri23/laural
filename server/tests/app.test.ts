@@ -323,6 +323,26 @@ describe("API de snapshots de preferencias", () => {
     expect(revokeOtherSessions).toHaveBeenCalledWith("a", "Bearer account-a");
   });
 
+  it("solo confía en X-Forwarded-For cuando la conexión procede de loopback", async () => {
+    const clientAddresses: string[] = [];
+    const requestRateLimiter: RequestRateLimiter = {
+      consume: async (_scope, clientAddress) => {
+        clientAddresses.push(clientAddress);
+        return true;
+      },
+    };
+    const app = createTestApp({ requestRateLimiter });
+    const headers = { authorization: "Bearer account-a", "x-forwarded-for": "198.51.100.77" };
+
+    const direct = await app.inject({ method: "GET", url: "/v1/preferences/current", remoteAddress: "203.0.113.9", headers });
+    expect(direct.statusCode).toBe(200);
+    expect(clientAddresses.at(-1)).toBe("203.0.113.9");
+
+    const proxied = await app.inject({ method: "GET", url: "/v1/preferences/current", remoteAddress: "127.0.0.1", headers });
+    expect(proxied.statusCode).toBe(200);
+    expect(clientAddresses.at(-1)).toBe("198.51.100.77");
+  });
+
   it("limita las lecturas de preferencias por IP y devuelve Retry-After", async () => {
     const app = createTestApp();
     const request = { method: "GET" as const, url: "/v1/preferences/current", headers: { authorization: "Bearer account-a" } };
