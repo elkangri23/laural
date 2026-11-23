@@ -104,6 +104,54 @@ describe("rutas MFA de cuenta", () => {
   });
 });
 
+describe("límites de acceso nativo por cuenta", () => {
+  it("comparte entre IP el límite de intentos y no consume el contador si falla CSRF", async () => {
+    const hits = new Map<string, number>();
+    const requestRateLimiter: RequestRateLimiter = {
+      consume: async (scope, key, maximum) => {
+        const counterKey = `${scope}:${key}`;
+        const count = (hits.get(counterKey) ?? 0) + 1;
+        hits.set(counterKey, count);
+        return count <= maximum;
+      },
+    };
+    const validCsrf = "c".repeat(43);
+    const login = vi.fn<NativeAuthService["login"]>(async () => null);
+    const nativeAuth = {
+      isBrowserFlowValid: vi.fn(async (_cookie: string | null, csrf: string) => csrf === validCsrf),
+      login,
+    } as unknown as NativeAuthService;
+    const emailAuth = new EmailAuthService({
+      createUnverifiedAccount: async () => null,
+      createVerification: async () => null,
+      verifyEmail: async () => false,
+      createPasswordReset: async () => null,
+      checkPasswordReset: async () => false,
+      resetPassword: async () => false,
+    }, { sendVerification: async () => undefined, sendPasswordReset: async () => undefined }, "a-server-pepper-with-enough-entropy-for-this-test");
+    const app = createTestApp({ requestRateLimiter, emailAuth, nativeAuth });
+    const emails = ["Persona@Example.test", " persona@example.test ", "PERSONA@example.test"];
+
+    const invalidFlow = await app.inject({
+      method: "POST", url: "/auth/native/login", remoteAddress: "198.51.100.1",
+      payload: { csrf: "x".repeat(43), email: emails[0], password: "password de prueba 2026" },
+    });
+    expect(invalidFlow.statusCode).toBe(400);
+    expect(hits.has("native-login-email:persona@example.test")).toBe(false);
+
+    for (let index = 0; index < 11; index += 1) {
+      const response = await app.inject({
+        method: "POST", url: "/auth/native/login", remoteAddress: `198.51.100.${index + 10}`,
+        payload: { csrf: validCsrf, email: emails[index % emails.length], password: "password de prueba 2026" },
+      });
+      expect(response.statusCode).toBe(index < 10 ? 400 : 429);
+      if (index === 10) expect(response.headers["retry-after"]).toBe("60");
+    }
+    expect(login).toHaveBeenCalledTimes(10);
+    expect(hits.get("native-login-email:persona@example.test")).toBe(11);
+  });
+});
+
 describe("rutas de passkeys", () => {
   it("expone disponibilidad autenticada y exige reautenticación para generar el enlace", async () => {
     let recentLogin = false;

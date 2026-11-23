@@ -406,7 +406,51 @@ describePostgres("integración real de PostgreSQL para rate limits", () => {
       nativeAuth: new NativeAuthService(new PostgresNativeAuthStore(isolatedPool)),
     });
 
+    async function startNativeFlow(remoteAddress: string) {
+      const verifier = randomBytes(32).toString("base64url");
+      const challenge = createHash("sha256").update(verifier).digest("base64url");
+      const state = randomBytes(32).toString("base64url");
+      const response = await app.inject({
+        method: "GET", remoteAddress,
+        url: `/auth/native?${new URLSearchParams({
+          redirect_uri: "http://127.0.0.1:49152/callback", state,
+          code_challenge: challenge, code_challenge_method: "S256",
+        })}`,
+      });
+      return {
+        cookie: String(response.headers["set-cookie"]).split(";")[0] ?? "",
+        csrf: /name="csrf" value="([^"]+)"/.exec(response.body)?.[1] ?? "",
+      };
+    }
+
     try {
+      const throttledEmail = `${randomUUID()}@example.test`;
+      for (let attempt = 0; attempt < 11; attempt += 1) {
+        const remoteAddress = `198.51.100.${attempt + 10}`;
+        const flow = await startNativeFlow(remoteAddress);
+        const response = await app.inject({
+          method: "POST", url: "/auth/native/login", remoteAddress,
+          headers: { cookie: flow.cookie, "content-type": "application/x-www-form-urlencoded" },
+          payload: new URLSearchParams({
+            csrf: flow.csrf, email: ` ${throttledEmail.toUpperCase()} `,
+            password: "contraseña errónea de integración 2026",
+          }).toString(),
+        });
+        expect(response.statusCode).toBe(attempt < 10 ? 400 : 429);
+        if (attempt === 10) expect(response.headers["retry-after"]).toBe("60");
+      }
+      const loginLimitDigest = createHmac("sha256", "integracion-rate-limit-pepper-32-bytes-minimo")
+        .update("native-login-email")
+        .update("\0")
+        .update(throttledEmail)
+        .digest("hex");
+      const storedLoginLimit = await isolatedPool.query<{ key_digest: string; request_count: number }>(
+        "SELECT key_digest, request_count FROM request_rate_limits WHERE scope = $1",
+        ["native-login-email"],
+      );
+      expect(storedLoginLimit.rows).toEqual([{ key_digest: loginLimitDigest, request_count: 11 }]);
+      expect(JSON.stringify(storedLoginLimit.rows)).not.toContain(throttledEmail);
+
       const registered = await app.inject({
         method: "POST", url: "/v1/auth/register",
         payload: { displayName: "Cuenta de integración", email, password },

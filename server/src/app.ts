@@ -181,6 +181,12 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
       schema: { body: nativeLoginSchema },
     }, async (request, reply) => {
       const cookieToken = readCookie(request.headers.cookie, FLOW_COOKIE);
+      if (!await nativeAuth.isBrowserFlowValid(cookieToken, request.body.csrf)) {
+        return reply.code(400).type("text/html; charset=utf-8").send(renderAuthPage("", "La sesión de autenticación caducó. Vuelve a iniciar el proceso en Laural."));
+      }
+      if (await emailLimitExceeded(rateLimit, "native-login-email", request.body.email, 10, 60, reply)) {
+        return reply.type("text/html; charset=utf-8").send(renderAuthPage(request.body.csrf, "Demasiados intentos para este correo. Espera antes de volver a intentarlo."));
+      }
       const result = await nativeAuth.login({
         cookieToken: cookieToken ?? "",
         csrfToken: request.body.csrf,
