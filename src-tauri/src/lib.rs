@@ -7,7 +7,6 @@ use std::{
 };
 
 use portable_pty::{Child, CommandBuilder, MasterPty, PtySize, native_pty_system};
-use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 
 mod account;
@@ -19,6 +18,9 @@ mod git_panel;
 pub mod preferences;
 mod providers;
 mod sync;
+mod terminal_output;
+
+use terminal_output::TerminalOutput;
 
 struct TerminalIo {
     master: Box<dyn MasterPty + Send>,
@@ -79,12 +81,6 @@ impl PtyStore {
         };
         drop(sessions);
     }
-}
-
-#[derive(Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct TerminalOutput {
-    data: Vec<u8>,
 }
 
 fn git_bash_path() -> Option<PathBuf> {
@@ -252,12 +248,7 @@ fn create_terminal(
                     Ok(0) | Err(_) => break,
                     Ok(length) => {
                         if app
-                            .emit(
-                                &output_event,
-                                TerminalOutput {
-                                    data: buffer[..length].to_vec(),
-                                },
-                            )
+                            .emit(&output_event, TerminalOutput::from_bytes(&buffer[..length]))
                             .is_err()
                         {
                             break;

@@ -4,13 +4,13 @@ import { FitAddon } from "@xterm/addon-fit";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { terminalTheme, type AppearanceMode, type ThemeDefinition } from "../themes";
-import { createTerminalTextBatcher, terminalSizeChanged, type TerminalSize } from "../terminalOutput";
+import { createTerminalTextBatcher, decodeTerminalOutput, terminalSizeChanged, type TerminalSize } from "../terminalOutput";
 import "@xterm/xterm/css/xterm.css";
 
 type Shell = "powershell" | "cmd" | "wsl" | "git-bash";
 const TERMINAL_SCROLLBACK_LINES = 2_500;
 const UNTRACKED_LINE_EDIT_KEYS = /[\u0001-\u0002\u0004-\u0007\u0009\u000b\u000c\u000e-\u001f]/;
-type OutputEvent = { data: number[] };
+type OutputEvent = { dataBase64: string };
 type TerminalRequest = { sequence: number; terminalId: string };
 type TerminalPaneProps = { terminalId: string; shell: Shell; cwd: string | null; visible: boolean; active: boolean; copyRequest: TerminalRequest; clearRequest: TerminalRequest; onActionNotice: (message: string) => void; onRestart: (terminalId: string) => void; theme: ThemeDefinition; appearance: AppearanceMode; onTextOutput: (terminalId: string, text: string) => void; onCommandSubmit: (terminalId: string, command: string) => void; onCommandFinish: (terminalId: string, exitCode: number | null) => void };
 
@@ -63,7 +63,8 @@ function TerminalPane({ terminalId, shell, cwd, visible, active, copyRequest, cl
     });
     const onOutput = (event: { payload: OutputEvent }) => {
       if (!disposed) {
-        const bytes = new Uint8Array(event.payload.data);
+        const bytes = decodeTerminalOutput(event.payload.dataBase64);
+        if (!bytes) return;
         terminal.write(bytes);
         textBatcher.push(decoder.decode(bytes, { stream: true }));
       }

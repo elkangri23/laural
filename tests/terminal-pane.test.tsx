@@ -35,6 +35,7 @@ function pane(visible = true, copyRequest = { sequence: 0, terminalId: "" }, cle
     appearance="dark" theme={themes[0]} onCommandFinish={finished} onRestart={restart}
     onTextOutput={output} onCommandSubmit={submit} />;
 }
+const outputEvent = (data: number[]) => ({ payload: { dataBase64: btoa(String.fromCharCode(...data)) } });
 beforeEach(() => {
   vi.resetAllMocks();
   handlers.clear();
@@ -77,8 +78,8 @@ test("no repite el IPC de resize con el tamaño usado al crear la terminal", asy
 test("ocultar la pestaña conserva el proceso y su salida; salir permite reiniciar", async () => {
   await act(async () => root!.render(pane()));
   await act(async () => root!.render(pane(false)));
-  handlers.get("terminal-output-uno")!({ payload: { data: [65] } });
-  handlers.get("terminal-output-uno")!({ payload: { data: [66] } });
+  handlers.get("terminal-output-uno")!(outputEvent([65]));
+  handlers.get("terminal-output-uno")!(outputEvent([66]));
   expect(write).toHaveBeenCalledTimes(2);
   expect(output).not.toHaveBeenCalled();
   await act(async () => new Promise((resolve) => window.setTimeout(resolve, 20)));
@@ -87,7 +88,7 @@ test("ocultar la pestaña conserva el proceso y su salida; salir permite reinici
   await act(async () => root!.render(pane()));
   expect(invoke.mock.calls.filter(([name]) => name === "create_terminal")).toHaveLength(1);
   expect(host.querySelector("button")).toBeNull();
-  handlers.get("terminal-output-uno")!({ payload: { data: [67] } });
+  handlers.get("terminal-output-uno")!(outputEvent([67]));
   await act(async () => handlers.get("terminal-exit-uno")!({ payload: undefined }));
   expect(output).toHaveBeenLastCalledWith("uno", "C");
   expect(finished).toHaveBeenCalledWith("uno", null);

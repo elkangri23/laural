@@ -2,11 +2,26 @@ export const COMMAND_BLOCK_OUTPUT_LIMIT = 8_000;
 const TERMINAL_CONTEXT_OUTPUT_LIMIT = 24_000;
 const TERMINAL_TEXT_BATCH_MS = 16;
 const TERMINAL_TEXT_BATCH_COMPACT_THRESHOLD = 256;
+const TERMINAL_OUTPUT_BYTE_LIMIT = 32 * 1024;
+const TERMINAL_OUTPUT_BASE64_LIMIT = Math.ceil(TERMINAL_OUTPUT_BYTE_LIMIT / 3) * 4;
 
 export type TerminalSize = { rows: number; cols: number };
 
 export function terminalSizeChanged(previous: TerminalSize | null, next: TerminalSize) {
   return next.rows > 0 && next.cols > 0 && (previous === null || previous.rows !== next.rows || previous.cols !== next.cols);
+}
+
+export function decodeTerminalOutput(dataBase64: string): Uint8Array | null {
+  if (dataBase64.length > TERMINAL_OUTPUT_BASE64_LIMIT) return null;
+  try {
+    const binary = atob(dataBase64);
+    if (binary.length > TERMINAL_OUTPUT_BYTE_LIMIT) return null;
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+    return bytes;
+  } catch {
+    return null;
+  }
 }
 
 export function appendTerminalOutput(

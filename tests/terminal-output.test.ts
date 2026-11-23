@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { appendTerminalOutput, createTerminalTextBatcher, terminalSizeChanged } from "../src/terminalOutput";
+import { appendTerminalOutput, createTerminalTextBatcher, decodeTerminalOutput, terminalSizeChanged } from "../src/terminalOutput";
 
 afterEach(() => vi.useRealTimers());
 
@@ -121,4 +121,10 @@ test("solo solicita redimensionar cuando cambian filas o columnas válidas", () 
   expect(terminalSizeChanged(initial, { rows: 28, cols: 101 })).toBe(true);
   expect(terminalSizeChanged(initial, { rows: 0, cols: 100 })).toBe(false);
   expect(terminalSizeChanged(null, { rows: 28, cols: 100 })).toBe(true);
+});
+
+test("decodifica los bytes del PTY en Base64 y rechaza datos malformados", () => {
+  expect([...decodeTerminalOutput("AAEC/w==") ?? []]).toEqual([0, 1, 2, 255]);
+  expect(decodeTerminalOutput("%%%invalid%%%")).toBeNull();
+  expect(decodeTerminalOutput("A".repeat(44_000))).toBeNull();
 });

@@ -2,6 +2,7 @@
 
 ## Sin publicar
 
+- La salida de terminal viaja como Base64 en vez de arrays JSON numéricos, con límite estricto de 32 KiB al decodificar. Una carga de 32 KiB se serializa en menos de la mitad de bytes y mantiene el round-trip exacto.
 - Las terminales omiten peticiones de redimensionado repetidas cuando filas y columnas no cambiaron; los tamaños nuevos se aplican sin demora.
 - El chat acumula los fragmentos del streaming y solo compone el texto al solicitar una instantánea visual, reduciendo concatenaciones sin cambiar el ritmo de actualización. El benchmark sintético comparativo obtuvo ≈9,6 % menos tiempo al acumular 270.000 caracteres con 375 lecturas; no representa una medición del proceso de escritorio.
 - Durante el streaming del asistente, los deltas se acumulan cada 50 ms sin actualizar el estado global de React en cada lote; la interfaz se actualiza como máximo cada 200 ms. Primer fragmento y respuesta final inmediatos, y no se pierden fragmentos si falla la conexión. Regresiones dirigidas cubren los límites temporales, éxito y error.
