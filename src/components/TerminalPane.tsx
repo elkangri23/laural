@@ -4,7 +4,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { terminalTheme, type AppearanceMode, type ThemeDefinition } from "../themes";
-import { createTerminalTextBatcher, decodeTerminalOutput, terminalSizeChanged, type TerminalSize } from "../terminalOutput";
+import { createTerminalOutputBatcher, createTerminalTextBatcher, decodeTerminalOutput, terminalSizeChanged, type TerminalSize } from "../terminalOutput";
 import "@xterm/xterm/css/xterm.css";
 
 type Shell = "powershell" | "cmd" | "wsl" | "git-bash";
@@ -51,6 +51,7 @@ function TerminalPane({ terminalId, shell, cwd, visible, active, copyRequest, cl
     let lastSentSize: TerminalSize | null = null;
     const subscriptions: (() => void)[] = [];
     const decoder = new TextDecoder();
+    const outputBatcher = createTerminalOutputBatcher((bytes) => terminal.write(bytes));
     const textBatcher = createTerminalTextBatcher((text) => onTextOutput(terminalId, text));
     const commandOsc = terminal.parser.registerOscHandler(133, (payload) => {
       const [mark, rawCode] = payload.split(";", 2);
@@ -65,7 +66,7 @@ function TerminalPane({ terminalId, shell, cwd, visible, active, copyRequest, cl
       if (!disposed) {
         const bytes = decodeTerminalOutput(event.payload.dataBase64);
         if (!bytes) return;
-        terminal.write(bytes);
+        outputBatcher.push(bytes);
         textBatcher.push(decoder.decode(bytes, { stream: true }));
       }
     };
@@ -123,6 +124,7 @@ function TerminalPane({ terminalId, shell, cwd, visible, active, copyRequest, cl
       subscriptions.push(output);
       const exit = await listen<void>(`terminal-exit-${terminalId}`, () => {
         if (disposed) return;
+        outputBatcher.flush();
         textBatcher.push(decoder.decode());
         textBatcher.flush();
         exited = true;
@@ -149,6 +151,7 @@ function TerminalPane({ terminalId, shell, cwd, visible, active, copyRequest, cl
     });
     return () => {
       disposed = true;
+      outputBatcher.flush();
       textBatcher.push(decoder.decode());
       textBatcher.flush();
       observer.disconnect();

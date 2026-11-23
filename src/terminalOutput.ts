@@ -1,6 +1,8 @@
 export const COMMAND_BLOCK_OUTPUT_LIMIT = 8_000;
 const TERMINAL_CONTEXT_OUTPUT_LIMIT = 24_000;
 const TERMINAL_TEXT_BATCH_MS = 16;
+const TERMINAL_OUTPUT_BATCH_MS = 16;
+const TERMINAL_OUTPUT_BATCH_BYTE_LIMIT = 256 * 1024;
 const TERMINAL_TEXT_BATCH_COMPACT_THRESHOLD = 256;
 const TERMINAL_OUTPUT_BYTE_LIMIT = 32 * 1024;
 const TERMINAL_OUTPUT_BASE64_LIMIT = Math.ceil(TERMINAL_OUTPUT_BYTE_LIMIT / 3) * 4;
@@ -23,6 +25,58 @@ export function decodeTerminalOutput(dataBase64: string): Uint8Array | null {
   } catch {
     return null;
   }
+}
+
+export function createTerminalOutputBatcher(
+  onOutput: (bytes: Uint8Array) => void,
+  delayMs = TERMINAL_OUTPUT_BATCH_MS,
+) {
+  let chunks: Uint8Array[] = [];
+  let byteLength = 0;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+
+  function flush() {
+    if (timer !== null) clearTimeout(timer);
+    timer = null;
+    if (byteLength === 0) return;
+
+    let output: Uint8Array;
+    if (chunks.length === 1) {
+      output = chunks[0];
+    } else {
+      output = new Uint8Array(byteLength);
+      let offset = 0;
+      for (const chunk of chunks) {
+        output.set(chunk, offset);
+        offset += chunk.length;
+      }
+    }
+
+    chunks = [];
+    byteLength = 0;
+    onOutput(output);
+  }
+
+  function push(bytes: Uint8Array) {
+    if (bytes.length === 0) return;
+    chunks.push(bytes);
+    byteLength += bytes.length;
+
+    if (byteLength >= TERMINAL_OUTPUT_BATCH_BYTE_LIMIT) {
+      flush();
+    } else if (timer === null) {
+      timer = setTimeout(flush, delayMs);
+    }
+  }
+
+  function cancel() {
+    if (timer !== null) clearTimeout(timer);
+    timer = null;
+    chunks = [];
+    byteLength = 0;
+  }
+
+  return { push, flush, cancel };
 }
 
 export function appendTerminalOutput(

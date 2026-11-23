@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { appendTerminalOutput, createTerminalTextBatcher, decodeTerminalOutput, terminalSizeChanged } from "../src/terminalOutput";
+import { appendTerminalOutput, createTerminalOutputBatcher, createTerminalTextBatcher, decodeTerminalOutput, terminalSizeChanged } from "../src/terminalOutput";
 import fixture from "../shared/fixtures/terminal-output-event.json";
 
 afterEach(() => vi.useRealTimers());
@@ -46,6 +46,64 @@ test("agrupa la captura de texto PTY y limita la cola al sufijo útil", () => {
   batcher.push("x".repeat(24_001));
   batcher.flush();
   expect(onText).toHaveBeenLastCalledWith("x".repeat(24_000));
+});
+
+test("agrupa escrituras xterm durante 16 ms y conserva todos los bytes en orden", () => {
+  vi.useFakeTimers();
+  const onOutput = vi.fn();
+  const batcher = createTerminalOutputBatcher(onOutput, 16);
+  batcher.push(new Uint8Array([0xf0, 0x9f]));
+  batcher.push(new Uint8Array([0x8c, 0x8d]));
+
+  vi.advanceTimersByTime(15);
+  expect(onOutput).not.toHaveBeenCalled();
+  vi.advanceTimersByTime(1);
+
+  expect(onOutput).toHaveBeenCalledOnce();
+  expect(Array.from(onOutput.mock.calls[0][0] as Uint8Array)).toEqual([0xf0, 0x9f, 0x8c, 0x8d]);
+});
+
+test("vacía xterm inmediatamente al alcanzar el límite de 256 KiB", () => {
+  vi.useFakeTimers();
+  const onOutput = vi.fn();
+  const batcher = createTerminalOutputBatcher(onOutput);
+  const chunk = new Uint8Array(32 * 1024).fill(65);
+
+  for (let index = 0; index < 8; index += 1) batcher.push(chunk);
+
+  expect(onOutput).toHaveBeenCalledOnce();
+  expect(onOutput.mock.calls[0][0]).toHaveLength(256 * 1024);
+  vi.advanceTimersByTime(16);
+  expect(onOutput).toHaveBeenCalledOnce();
+});
+
+test("reduce a ocho las escrituras xterm de una ráfaga de 64 eventos máximos", () => {
+  vi.useFakeTimers();
+  const onOutput = vi.fn();
+  const batcher = createTerminalOutputBatcher(onOutput);
+  const chunk = new Uint8Array(32 * 1024).fill(65);
+
+  for (let index = 0; index < 64; index += 1) batcher.push(chunk);
+
+  expect(onOutput).toHaveBeenCalledTimes(8);
+  expect(onOutput.mock.calls.reduce((total, [bytes]) => total + (bytes as Uint8Array).length, 0))
+    .toBe(64 * 32 * 1024);
+});
+
+test("el vaciado final conserva un fragmento y cancelar elimina la cola pendiente", () => {
+  vi.useFakeTimers();
+  const onOutput = vi.fn();
+  const batcher = createTerminalOutputBatcher(onOutput);
+  const chunk = new Uint8Array([1, 2, 3]);
+
+  batcher.push(chunk);
+  batcher.flush();
+  expect(onOutput).toHaveBeenCalledWith(chunk);
+
+  batcher.push(new Uint8Array([4]));
+  batcher.cancel();
+  vi.advanceTimersByTime(16);
+  expect(onOutput).toHaveBeenCalledOnce();
 });
 
 test("reduce una ráfaga PTY de 1.500 eventos a una actualización acotada", () => {

@@ -80,9 +80,11 @@ test("ocultar la pestaña conserva el proceso y su salida; salir permite reinici
   await act(async () => root!.render(pane(false)));
   handlers.get("terminal-output-uno")!(outputEvent([65]));
   handlers.get("terminal-output-uno")!(outputEvent([66]));
-  expect(write).toHaveBeenCalledTimes(2);
+  expect(write).not.toHaveBeenCalled();
   expect(output).not.toHaveBeenCalled();
   await act(async () => new Promise((resolve) => window.setTimeout(resolve, 20)));
+  expect(write).toHaveBeenCalledOnce();
+  expect(Array.from(write.mock.calls[0][0] as Uint8Array)).toEqual([65, 66]);
   expect(output).toHaveBeenCalledOnce();
   expect(output).toHaveBeenCalledWith("uno", "AB");
   await act(async () => root!.render(pane()));
@@ -119,9 +121,10 @@ test("reconstruye UTF-8 dividido entre eventos PTY codificados en Base64", async
   handlers.get("terminal-output-uno")!(outputEvent([0xf0, 0x9f]));
   handlers.get("terminal-output-uno")!(outputEvent([0x8c, 0x8d]));
 
-  expect(Array.from(write.mock.calls[0][0] as Uint8Array)).toEqual([0xf0, 0x9f]);
-  expect(Array.from(write.mock.calls[1][0] as Uint8Array)).toEqual([0x8c, 0x8d]);
+  expect(write).not.toHaveBeenCalled();
   await act(async () => new Promise((resolve) => window.setTimeout(resolve, 20)));
+  expect(write).toHaveBeenCalledOnce();
+  expect(Array.from(write.mock.calls[0][0] as Uint8Array)).toEqual([0xf0, 0x9f, 0x8c, 0x8d]);
   expect(output).toHaveBeenCalledWith("uno", "🌍");
 });
 
