@@ -2192,6 +2192,9 @@ fn external_tool_is_high_risk(command: &str, executable: &str) -> bool {
     if executable == "reagentc" {
         return reagentc_command_is_high_risk(command);
     }
+    if executable == "bcdboot" {
+        return bcdboot_command_is_high_risk(command);
+    }
     if executable == "manage-bde" {
         return manage_bde_command_is_high_risk(command);
     }
@@ -2619,6 +2622,18 @@ fn reagentc_command_is_high_risk(command: &str) -> bool {
         ["/?"] | ["-?"] => false,
         ["/info"] | ["/info", "/?"] => false,
         ["/info", "/target", path] if !path.starts_with('/') && !path.starts_with('-') => false,
+        _ => true,
+    }
+}
+
+fn bcdboot_command_is_high_risk(command: &str) -> bool {
+    match command
+        .split_whitespace()
+        .skip(1)
+        .collect::<Vec<_>>()
+        .as_slice()
+    {
+        [] | ["/?"] | ["-?"] => false,
         _ => true,
     }
 }
@@ -4501,6 +4516,27 @@ mod tests {
     }
 
     #[test]
+    fn exige_revision_para_escribir_archivos_de_arranque_con_bcdboot() {
+        for command in [
+            "bcdboot C:\\Windows",
+            "bcdboot C:\\Windows /s S:",
+            "bcdboot C:\\Windows /s S: /f UEFI",
+            "bcdboot C:\\Windows /addlast",
+            "bcdboot C:\\Windows /p /d",
+            "bcdboot C:\\Windows /c",
+            "bcdboot C:\\Windows /bootex",
+            "bcdboot C:\\Windows /opcion-desconocida",
+            "bcdboot /? /s S:",
+        ] {
+            assert!(command_is_high_risk("cmd", command), "{command}");
+        }
+
+        for command in ["bcdboot", "bcdboot /?", "bcdboot -?"] {
+            assert!(!command_is_high_risk("cmd", command), "{command}");
+        }
+    }
+
+    #[test]
     fn exige_revision_para_modificar_credenciales_de_windows() {
         for (command, executable) in [
             (
@@ -4908,6 +4944,7 @@ mod tests {
                 "dism /Online /Enable-Feature /FeatureName:TelnetClient".into(),
                 "sfc /scannow".into(),
                 "reagentc /disable".into(),
+                "bcdboot C:\\Windows /s S: /f UEFI".into(),
                 "ssh servidor hostname".into(),
                 "Enter-PSSession servidor".into(),
                 "msiexec /i paquete.msi /quiet".into(),
@@ -4968,6 +5005,7 @@ mod tests {
             ),
             ("cmd", "sfc /scannow"),
             ("cmd", "reagentc /disable"),
+            ("cmd", "bcdboot C:\\Windows /s S: /f UEFI"),
             ("git-bash", "ssh servidor hostname"),
             ("powershell", "Enter-PSSession servidor"),
             ("cmd", "msiexec /i paquete.msi /quiet"),
