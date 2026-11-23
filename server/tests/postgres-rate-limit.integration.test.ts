@@ -16,6 +16,7 @@ import { PostgresPreferenceStore } from "../src/postgres-store.js";
 import { PostgresRequestRateLimiter } from "../src/request-rate-limit.js";
 import { cleanupExpiredRecords } from "../src/retention.js";
 import { deliverSecurityEmailBatch } from "../src/security-email-outbox.js";
+import { deliverAccountRecoveryNoticeBatch } from "../src/account-recovery-outbox.js";
 import { totpCode } from "../src/totp.js";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
@@ -72,6 +73,45 @@ describePostgres("integración real de PostgreSQL para rate limits", () => {
     expect(stored.rows).toHaveLength(2);
     expect(stored.rows.every(({ key_digest }) => /^[a-f0-9]{64}$/.test(key_digest))).toBe(true);
     expect(stored.rows.every(({ request_count }) => request_count >= 1)).toBe(true);
+  });
+
+  it("verifica el buzón una sola vez y encola aviso sin cambiar factores ni crear sesión", async () => {
+    const accountId = randomUUID();
+    const email = `${accountId}@example.test`;
+    await isolatedPool.query(
+      "INSERT INTO accounts (id, email, display_name, email_verified_at) VALUES ($1, $2, 'Recuperación', now())",
+      [accountId, email],
+    );
+    const sendAccountRecoveryPin = vi.fn(async () => undefined);
+    const service = new EmailAuthService(new PostgresEmailAuthStore(isolatedPool), {
+      sendVerification: async () => undefined,
+      sendPasswordReset: async () => undefined,
+      sendAccountRecoveryPin,
+    }, "a-pin-pepper-with-enough-entropy-for-integration-tests");
+
+    expect(await service.requestAccountRecovery(email)).toBe("accepted");
+    const sentPin = sendAccountRecoveryPin.mock.calls[0]?.[0].pin;
+    expect(sentPin).toMatch(/^\d{6}$/);
+    expect(await service.verifyAccountRecovery(email, sentPin!)).toBe("verified");
+    expect(await service.verifyAccountRecovery(email, sentPin!)).toBe("invalid_or_expired");
+
+    const stored = await isolatedPool.query<{ verifier_digest: string; mailbox_verified_at: Date | null; consumed_at: Date | null }>(
+      "SELECT verifier_digest, mailbox_verified_at, consumed_at FROM account_recovery_cases WHERE account_id = $1", [accountId],
+    );
+    expect(stored.rows).toHaveLength(1);
+    expect(stored.rows[0]?.verifier_digest).not.toBe(sentPin);
+    expect(stored.rows[0]?.mailbox_verified_at).toBeInstanceOf(Date);
+    expect(stored.rows[0]?.consumed_at).toBeInstanceOf(Date);
+    expect((await isolatedPool.query("SELECT case_id FROM account_recovery_notice_outbox WHERE case_id = (SELECT id FROM account_recovery_cases WHERE account_id = $1)", [accountId])).rowCount).toBe(1);
+    expect((await isolatedPool.query("SELECT id FROM account_sessions WHERE account_id = $1", [accountId])).rowCount).toBe(0);
+    const failingSender = vi.fn(async () => { throw new Error("Resend no disponible"); });
+    expect(await deliverAccountRecoveryNoticeBatch(isolatedPool, { sendAccountRecoveryNotice: failingSender })).toEqual({ delivered: 0, deferred: 1 });
+    await isolatedPool.query("UPDATE account_recovery_notice_outbox SET next_attempt_at = now() WHERE case_id = (SELECT id FROM account_recovery_cases WHERE account_id = $1)", [accountId]);
+    const sendNotice = vi.fn(async () => undefined);
+    expect(await deliverAccountRecoveryNoticeBatch(isolatedPool, { sendAccountRecoveryNotice: sendNotice })).toEqual({ delivered: 1, deferred: 0 });
+    expect(sendNotice).toHaveBeenCalledWith(expect.objectContaining({ caseId: expect.any(String), accountEmail: email }));
+    expect(await deliverAccountRecoveryNoticeBatch(isolatedPool, { sendAccountRecoveryNotice: sendNotice })).toEqual({ delivered: 0, deferred: 0 });
+    expect(sendNotice).toHaveBeenCalledOnce();
   });
 
   it("vincula Google por sub verificado y consume cada transacción una sola vez", async () => {
@@ -325,9 +365,19 @@ describePostgres("integración real de PostgreSQL para rate limits", () => {
     const accountId = randomUUID();
     const expiredFlow = randomUUID();
     const activeFlow = randomUUID();
+    const oldRecovery = randomUUID();
+    const expiredRecovery = randomUUID();
+    const freshRecovery = randomUUID();
     await isolatedPool.query(
       "INSERT INTO accounts (id, email, display_name, email_verified_at) VALUES ($1, $2, 'Retención', now())",
       [accountId, `${accountId}@example.test`],
+    );
+    await isolatedPool.query(
+      `INSERT INTO account_recovery_cases (id, account_id, verifier_digest, expires_at, consumed_at, mailbox_verified_at, created_at)
+       VALUES ($1, $4, repeat('a', 64), now() - interval '91 days', now() - interval '91 days', now() - interval '91 days', now() - interval '91 days'),
+              ($2, $4, repeat('b', 64), now() - interval '16 minutes', NULL, NULL, now() - interval '20 minutes'),
+              ($3, $4, repeat('c', 64), now() + interval '5 minutes', NULL, NULL, now() - interval '2 minutes')`,
+      [oldRecovery, expiredRecovery, freshRecovery, accountId],
     );
     await isolatedPool.query(
       `INSERT INTO email_verification_codes (account_id, verifier_digest, expires_at, created_at)
@@ -372,7 +422,7 @@ describePostgres("integración real de PostgreSQL para rate limits", () => {
 
     await cleanupExpiredRecords(isolatedPool);
 
-    const [emailCodes, authFlows, authCodes, sessions, idempotency, securityEmails] = await Promise.all([
+    const [emailCodes, authFlows, authCodes, sessions, idempotency, securityEmails, recoveryCases] = await Promise.all([
       isolatedPool.query("SELECT id FROM email_verification_codes WHERE account_id = $1", [accountId]),
       isolatedPool.query("SELECT id FROM native_auth_flows WHERE id = ANY($1::uuid[])", [[expiredFlow, activeFlow]]),
       isolatedPool.query("SELECT id FROM native_authorization_codes WHERE account_id = $1", [accountId]),
@@ -382,6 +432,7 @@ describePostgres("integración real de PostgreSQL para rate limits", () => {
         "SELECT event_type, delivered_at, abandoned_at FROM account_security_email_outbox WHERE account_id = $1",
         [accountId],
       ),
+      isolatedPool.query<{ id: string }>("SELECT id FROM account_recovery_cases WHERE account_id = $1 ORDER BY id", [accountId]),
     ]);
     expect(emailCodes.rows).toHaveLength(1);
     expect(authFlows.rows.map(({ id }) => id)).toEqual([activeFlow]);
@@ -390,6 +441,7 @@ describePostgres("integración real de PostgreSQL para rate limits", () => {
     expect(idempotency.rows.map(({ idempotency_key }) => idempotency_key)).toEqual(["fresh-retention-key"]);
     expect(securityEmails.rows).toHaveLength(2);
     expect(securityEmails.rows.filter(({ delivered_at, abandoned_at }) => delivered_at || abandoned_at)).toHaveLength(1);
+    expect(recoveryCases.rows.map(({ id }) => id)).toEqual([freshRecovery]);
   });
 
   it("sirve snapshots reales de PostgreSQL con aislamiento, revisión e idempotencia", async () => {

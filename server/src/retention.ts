@@ -13,6 +13,8 @@ const RETENTION_POLICIES = [
   "DELETE FROM account_sessions WHERE expires_at <= now() OR revoked_at IS NOT NULL",
   "DELETE FROM preference_idempotency WHERE created_at < now() - interval '30 days'",
   "DELETE FROM account_security_email_outbox WHERE created_at < now() - interval '30 days' AND (delivered_at IS NOT NULL OR abandoned_at IS NOT NULL)",
+  "DELETE FROM account_recovery_notice_outbox WHERE created_at < now() - interval '30 days' AND (delivered_at IS NOT NULL OR abandoned_at IS NOT NULL)",
+  "DELETE FROM account_recovery_cases WHERE (consumed_at IS NOT NULL AND created_at < now() - interval '90 days') OR (consumed_at IS NULL AND expires_at < now() - interval '15 minutes')",
 ] as const;
 
 export async function cleanupExpiredRecords(pool: Pick<Pool, "connect">): Promise<void> {

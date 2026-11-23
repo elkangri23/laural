@@ -227,3 +227,15 @@ Después de aplicar un archivo, el usuario puede listar copias y restaurar una v
 **Administración y privacidad:** solo el administrador actualiza el archivo por SSH. No existe modificación web. El contenido no debe incluir cuentas, correos, direcciones IP, logs, secretos, rutas privadas ni detalles de seguridad.
 
 **Limitación:** la página comparte el VPS; una caída total del host también la deja inaccesible.
+
+## UC-29 — Solicitar revisión por pérdida de factores
+
+**Objetivo:** informar al administrador de que se han perdido los factores de una cuenta sin convertir el correo en un acceso alternativo.
+
+**Precondiciones:** autenticación por correo habilitada y el administrador configurado mediante `ACCOUNT_RECOVERY_ENABLED=true` y `ACCOUNT_RECOVERY_ADMIN_EMAIL`.
+
+**Flujo principal:** desde la página de acceso, la persona envía el correo de la cuenta. La respuesta no revela si la cuenta existe. Si procede, recibe un PIN de seis dígitos con cinco minutos de vigencia; tras introducirlo, el servicio registra la verificación del buzón y encola un aviso al administrador con un identificador de caso.
+
+**Criterios y límites:** cinco intentos por PIN, enfriamiento de un minuto y hasta tres solicitudes cada quince minutos por cuenta, además de límites por IP/correo. El PIN no crea sesión, no cambia contraseña y no elimina TOTP ni passkeys. El aviso requiere revisión humana y prueba preexistente independiente del buzón. No hay panel ni endpoint público para retirar factores. Si falta evidencia, el administrador deniega la solicitud.
+
+**Estado:** flujo de buzón y aviso implementados localmente; herramienta administrativa, ensayo integral y despliegue pendientes.

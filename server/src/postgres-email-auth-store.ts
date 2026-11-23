@@ -1,6 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import type { Pool } from "pg";
-import type { EmailAuthStore, PasswordResetChallenge, VerificationChallenge } from "./email-auth.js";
+import type { AccountRecoveryChallenge, EmailAuthStore, PasswordResetChallenge, VerificationChallenge } from "./email-auth.js";
 
 export class PostgresEmailAuthStore implements EmailAuthStore {
   constructor(private readonly pool: Pool) {}
@@ -249,6 +249,71 @@ export class PostgresEmailAuthStore implements EmailAuthStore {
     } finally {
       client.release();
     }
+  }
+
+  async createAccountRecovery(email: string, verifier: string): Promise<AccountRecoveryChallenge | null> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const accountResult = await client.query<{ id: string; display_name: string }>(
+        `SELECT id, display_name FROM accounts
+          WHERE lower(email) = $1 AND email_verified_at IS NOT NULL AND deleted_at IS NULL
+          FOR UPDATE`, [email],
+      );
+      const account = accountResult.rows[0];
+      if (!account) { await client.query("COMMIT"); return null; }
+      const usage = await client.query<{ recent_count: string; cooldown: boolean }>(
+        `SELECT count(*) FILTER (WHERE created_at > now() - interval '15 minutes')::text AS recent_count,
+                coalesce(max(created_at) > now() - interval '60 seconds', false) AS cooldown
+           FROM account_recovery_cases WHERE account_id = $1`, [account.id],
+      );
+      const row = usage.rows[0];
+      if (!row || Number(row.recent_count) >= 3 || row.cooldown) { await client.query("COMMIT"); return null; }
+      await client.query(
+        `UPDATE account_recovery_cases SET consumed_at = now()
+          WHERE account_id = $1 AND consumed_at IS NULL`, [account.id],
+      );
+      const inserted = await client.query<{ id: string }>(
+        `INSERT INTO account_recovery_cases (account_id, verifier_digest, expires_at)
+         VALUES ($1, $2, now() + interval '5 minutes') RETURNING id`, [account.id, verifier],
+      );
+      await client.query("COMMIT");
+      const challengeId = inserted.rows[0]?.id;
+      return challengeId ? { accountId: account.id, displayName: account.display_name, challengeId } : null;
+    } catch (error) { await client.query("ROLLBACK"); throw error; }
+    finally { client.release(); }
+  }
+
+  async verifyAccountRecovery(email: string, verifier: string): Promise<{ challengeId: string; email: string } | null> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const accountResult = await client.query<{ id: string }>(
+        `SELECT id FROM accounts WHERE lower(email) = $1 AND email_verified_at IS NOT NULL AND deleted_at IS NULL FOR UPDATE`, [email],
+      );
+      const account = accountResult.rows[0];
+      if (!account) { await client.query("COMMIT"); return null; }
+      const result = await client.query<{ id: string; verifier_digest: string; attempts: number; is_expired: boolean; mailbox_verified_at: Date | null }>(
+        `SELECT id, verifier_digest, attempts, expires_at <= now() AS is_expired, mailbox_verified_at
+           FROM account_recovery_cases WHERE account_id = $1 AND consumed_at IS NULL
+          ORDER BY created_at DESC LIMIT 1 FOR UPDATE`, [account.id],
+      );
+      const code = result.rows[0];
+      if (!code || code.is_expired || code.attempts >= 5 || code.mailbox_verified_at) {
+        if (code && (code.is_expired || code.attempts >= 5)) await client.query("UPDATE account_recovery_cases SET consumed_at = now() WHERE id = $1", [code.id]);
+        await client.query("COMMIT"); return null;
+      }
+      const matches = safeDigestMatch(verifier, code.verifier_digest);
+      if (!matches) {
+        await client.query(`UPDATE account_recovery_cases SET attempts = $2, consumed_at = CASE WHEN $2 >= 5 THEN now() ELSE consumed_at END WHERE id = $1`, [code.id, code.attempts + 1]);
+        await client.query("COMMIT"); return null;
+      }
+      await client.query("UPDATE account_recovery_cases SET mailbox_verified_at = now(), consumed_at = now() WHERE id = $1", [code.id]);
+      await client.query("INSERT INTO account_recovery_notice_outbox (case_id) VALUES ($1) ON CONFLICT (case_id) DO NOTHING", [code.id]);
+      await client.query("COMMIT");
+      return { challengeId: code.id, email };
+    } catch (error) { await client.query("ROLLBACK"); throw error; }
+    finally { client.release(); }
   }
 
   private async lockVerifiedAccount(client: import("pg").PoolClient, email: string): Promise<{ id: string } | null> {

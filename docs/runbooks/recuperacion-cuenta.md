@@ -24,8 +24,8 @@ Un PIN válido sin TOTP/código válido **no** completa el login, no crea una se
 ### 2. Se han perdido todos los factores y códigos
 
 1. La persona contacta al administrador por el canal de soporte publicado. El correo registrado solo acredita acceso al buzón mediante el PIN; no demuestra por sí solo la titularidad de los factores perdidos.
-2. El administrador abre un caso con identificador aleatorio y registra únicamente categoría, fecha y estado. No solicita ni guarda contraseñas, claves API, códigos de recuperación, semillas TOTP o claves privadas de passkeys.
-3. El usuario verifica el correo registrado con el PIN de un solo uso y cinco minutos.
+2. Con el flujo opcional habilitado, la persona solicita revisión desde la página de acceso. La respuesta es genérica. El servicio limita los envíos y guarda solo HMAC del PIN. Al verificar el buzón con un PIN de un solo uso y cinco minutos, marca el caso como verificado y encola el aviso administrativo con reintentos.
+3. El administrador recibe el identificador aleatorio y el correo de la cuenta. El correo advierte que la verificación no constituye prueba independiente. Hasta que exista una herramienta privilegiada ensayada, el aviso solo inicia contacto y no autoriza ninguna operación sobre la cuenta.
 4. El administrador evalúa al menos una prueba de titularidad **preexistente**, obtenida antes de la pérdida y contrastable por una fuente independiente del buzón y de la cuenta Laural. Entre las pruebas que pueden cumplir el criterio están una identidad Google ya vinculada, otro factor MFA aún inscrito o un dispositivo de confianza que conserve una sesión autenticada. La prueba debe corresponder a la cuenta y no depender exclusivamente de información proporcionada dentro del mismo correo o de la cuenta posiblemente comprometida.
 5. El administrador decide y registra el resultado. La evaluación y la decisión son criterio del administrador; el PIN, la urgencia o el conocimiento de datos sincronizados no sustituyen la prueba independiente.
 6. Solo si la prueba es suficiente, el administrador podrá retirar/restablecer factores mediante un procedimiento privilegiado local al VPS cuando este esté implementado y ensayado. La operación deberá revocar todas las sesiones, exigir factores nuevos y enviar un aviso de seguridad. Mientras no exista, no se manipulan filas directamente ni se promete recuperación.
@@ -49,8 +49,8 @@ La app no sincroniza factores MFA ni códigos de recuperación. El operador del 
 
 ## No operar hasta completar
 
-- Mantener la autenticación desactivada hasta validar el despliegue, Resend, TOTP/códigos y su rate limit.
-- Implementar el mecanismo administrativo local al VPS con autorización explícita, confirmación y auditoría mínima; nunca una ruta pública para retirar factores.
+- Mantener la autenticación y `ACCOUNT_RECOVERY_ENABLED` desactivados hasta validar el despliegue, Resend, TOTP/códigos y sus límites.
+- Implementar el mecanismo administrativo local al VPS con autorización explícita, confirmación y auditoría mínima; nunca una ruta pública para retirar factores. El formulario de solicitud y el aviso al administrador ya están disponibles detrás del flag, pero no retiran factores.
 - Verificar que el PIN solo prueba el buzón, y que no crea sesión ni omite MFA.
 - Ensayar PIN vencido/reusado, código incorrecto/reusado, abuso de solicitudes, rechazo por prueba insuficiente, revocación de sesiones, notificación y fallo parcial.
 - Probar la restauración del servicio en el VPS y completar su runbook operativo antes de habilitar cuentas externas.

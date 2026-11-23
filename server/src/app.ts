@@ -31,6 +31,7 @@ export type AppDependencies = {
   accountDeletion?: AccountDeletionService;
   accountPasskeys?: AccountPasskeyService;
   googleOAuth?: GoogleOAuthService;
+  accountRecoveryEnabled?: boolean;
   requestRateLimiter: RequestRateLimiter;
 };
 
@@ -85,6 +86,7 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
   const accountDeletion = dependencies.accountDeletion;
   const accountPasskeys = dependencies.accountPasskeys;
   const googleOAuth = dependencies.googleOAuth;
+  const accountRecoveryEnabled = dependencies.accountRecoveryEnabled === true;
 
   app.get("/v1/auth/passkeys/status", { preHandler: limited(rateLimit, "passkey-status", 30, 60) }, async (request, reply) => {
     if (!await dependencies.authenticate(request.headers.authorization)) return reply.code(401).send({ error: "unauthorized" });
@@ -172,7 +174,7 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
       }
       const credentials = await nativeAuth.startFlow({ redirectUri, state, codeChallenge });
       reply.header("Set-Cookie", flowCookie(credentials.cookieToken));
-      return reply.type("text/html; charset=utf-8").send(renderAuthPage(credentials.csrfToken, "", Boolean(accountPasskeys), Boolean(googleOAuth)));
+      return reply.type("text/html; charset=utf-8").send(renderAuthPage(credentials.csrfToken, "", Boolean(accountPasskeys), Boolean(googleOAuth), accountRecoveryEnabled));
     });
 
     if (googleOAuth) {
@@ -347,6 +349,36 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
       if (result === "invalid_request") return reply.code(400).type("text/html; charset=utf-8").send(renderAuthPage(request.body.csrf, "Revisa el formato de los datos e inténtalo de nuevo."));
       return reply.type("text/html; charset=utf-8").send(renderAuthPage(request.body.csrf, "Solicitud procesada. Si el PIN era correcto, la contraseña se cambió; vuelve a iniciar sesión. El PIN no inicia sesión ni elimina factores de seguridad."));
     });
+
+    if (accountRecoveryEnabled) {
+      app.post<{ Body: NativeEmailBody }>("/auth/native/recovery/request", {
+        preHandler: limited(rateLimit, "account-recovery-request", 3, 900),
+        schema: { body: nativeEmailSchema },
+      }, async (request, reply) => {
+        if (!await nativeAuth.isBrowserFlowValid(readCookie(request.headers.cookie, FLOW_COOKIE), request.body.csrf)) {
+          return reply.code(400).type("text/html; charset=utf-8").send(renderAuthPage("", "La sesión de autenticación caducó. Vuelve a iniciar el proceso en Laural."));
+        }
+        if (await emailLimitExceeded(rateLimit, "account-recovery-request-email", request.body.email, 3, 900, reply)) {
+          return reply.type("text/html; charset=utf-8").send(renderAuthPage(request.body.csrf, "Demasiadas solicitudes para este correo. Espera antes de volver a intentarlo."));
+        }
+        await emailAuth.requestAccountRecovery(request.body.email);
+        return reply.type("text/html; charset=utf-8").send(renderAuthPage(request.body.csrf, "Si la cuenta puede iniciar una solicitud, enviaremos un PIN de seis dígitos al correo indicado."));
+      });
+
+      app.post<{ Body: NativePinBody }>("/auth/native/recovery/confirm", {
+        preHandler: limited(rateLimit, "account-recovery-confirm", 10, 300),
+        schema: { body: nativePinSchema },
+      }, async (request, reply) => {
+        if (!await nativeAuth.isBrowserFlowValid(readCookie(request.headers.cookie, FLOW_COOKIE), request.body.csrf)) {
+          return reply.code(400).type("text/html; charset=utf-8").send(renderAuthPage("", "La sesión de autenticación caducó. Vuelve a iniciar el proceso en Laural."));
+        }
+        if (await emailLimitExceeded(rateLimit, "account-recovery-confirm-email", request.body.email, 10, 300, reply)) {
+          return reply.type("text/html; charset=utf-8").send(renderAuthPage(request.body.csrf, "Demasiados intentos para este correo. Espera antes de volver a intentarlo."));
+        }
+        await emailAuth.verifyAccountRecovery(request.body.email, request.body.pin);
+        return reply.type("text/html; charset=utf-8").send(renderAuthPage(request.body.csrf, "Solicitud procesada. Si el PIN era correcto, el administrador revisará el caso. Verificar el buzón no crea una sesión ni elimina factores."));
+      });
+    }
 
     app.post<{ Body: NativeExchangeBody }>("/v1/auth/native/exchange", {
       preHandler: limited(rateLimit, "native-exchange", 10, 60),
@@ -804,7 +836,7 @@ function formSchema(properties: Record<string, unknown>, required: string[]): Re
   return { type: "object", additionalProperties: false, required, properties };
 }
 
-function renderAuthPage(csrfToken: string, notice = "", passkeysEnabled = false, googleEnabled = false): string {
+function renderAuthPage(csrfToken: string, notice = "", passkeysEnabled = false, googleEnabled = false, accountRecoveryEnabled = false): string {
   const csrf = escapeHtml(csrfToken);
   const safeNotice = escapeHtml(notice);
   return `<!doctype html>
@@ -830,6 +862,9 @@ ${passkeysEnabled ? `<p class="notice" role="status" data-passkey-notice></p><bu
 <label>PIN de seis dígitos<input name="pin" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" required></label>
 <label>Nueva contraseña<input name="password" type="password" autocomplete="new-password" required minlength="12" maxlength="128"></label>
 <button type="submit">Cambiar contraseña</button></form></details>
+${accountRecoveryEnabled ? `<details><summary>He perdido mis factores de seguridad</summary><p>El PIN solo confirma el acceso al buzón. No inicia sesión, no cambia la contraseña y no elimina TOTP ni passkeys. Tras verificarlo, el administrador revisará el caso y podrá pedir una prueba independiente.</p>
+<form action="/auth/native/recovery/request" method="post"><input type="hidden" name="csrf" value="${csrf}"><label>Correo de la cuenta<input name="email" type="email" autocomplete="email" required maxlength="320"></label><button type="submit">Solicitar revisión</button></form>
+<form action="/auth/native/recovery/confirm" method="post"><input type="hidden" name="csrf" value="${csrf}"><label>Correo de la cuenta<input name="email" type="email" autocomplete="email" required maxlength="320"></label><label>PIN recibido<input name="pin" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" required></label><button type="submit">Verificar buzón y enviar al administrador</button></form></details>` : ""}
 <details><summary>Crear una cuenta</summary><form action="/auth/native/register" method="post"><input type="hidden" name="csrf" value="${csrf}">
 <label>Nombre<input name="displayName" autocomplete="name" required minlength="1" maxlength="80"></label>
 <label>Correo electrónico<input name="email" type="email" autocomplete="email" required maxlength="320"></label>

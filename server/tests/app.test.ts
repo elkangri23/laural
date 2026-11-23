@@ -66,7 +66,7 @@ class MemoryStore implements PreferenceStore {
 }
 
 const instances: Array<ReturnType<typeof createApp>> = [];
-function createTestApp(options: { store?: PreferenceStore; checkReadiness?: () => Promise<void>; emailAuth?: EmailAuthService; nativeAuth?: NativeAuthService; accountMfa?: AccountMfaService; accountDeletion?: AccountDeletionService; accountPasskeys?: AccountPasskeyService; googleOAuth?: GoogleOAuthService; requestRateLimiter?: RequestRateLimiter; revokeSession?: (accountId: string, authorization: string | undefined) => Promise<boolean>; listAccountSessions?: (accountId: string, authorization: string | undefined) => Promise<{ id: string; createdAt: string; expiresAt: string; current: boolean }[]>; revokeAccountSession?: (accountId: string, authorization: string | undefined, sessionId: string) => Promise<boolean>; revokeOtherSessions?: (accountId: string, authorization: string | undefined) => Promise<number> } = {}): ReturnType<typeof createApp> {
+function createTestApp(options: { store?: PreferenceStore; checkReadiness?: () => Promise<void>; emailAuth?: EmailAuthService; nativeAuth?: NativeAuthService; accountRecoveryEnabled?: boolean; accountMfa?: AccountMfaService; accountDeletion?: AccountDeletionService; accountPasskeys?: AccountPasskeyService; googleOAuth?: GoogleOAuthService; requestRateLimiter?: RequestRateLimiter; revokeSession?: (accountId: string, authorization: string | undefined) => Promise<boolean>; listAccountSessions?: (accountId: string, authorization: string | undefined) => Promise<{ id: string; createdAt: string; expiresAt: string; current: boolean }[]>; revokeAccountSession?: (accountId: string, authorization: string | undefined, sessionId: string) => Promise<boolean>; revokeOtherSessions?: (accountId: string, authorization: string | undefined) => Promise<number> } = {}): ReturnType<typeof createApp> {
   const store = options.store ?? new MemoryStore();
   const requestRateLimiter = options.requestRateLimiter ?? new TestRateLimiter();
   const app = createApp({
@@ -87,6 +87,7 @@ function createTestApp(options: { store?: PreferenceStore; checkReadiness?: () =
     ...(options.accountDeletion ? { accountDeletion: options.accountDeletion } : {}),
     ...(options.accountPasskeys ? { accountPasskeys: options.accountPasskeys } : {}),
     ...(options.googleOAuth ? { googleOAuth: options.googleOAuth } : {}),
+    ...(options.accountRecoveryEnabled ? { accountRecoveryEnabled: true } : {}),
   });
   instances.push(app);
   return app;
@@ -131,6 +132,49 @@ describe("rutas MFA de cuenta", () => {
 });
 
 describe("límites de acceso nativo por cuenta", () => {
+  it("presenta recovery solo al habilitarlo y conserva respuestas genéricas tras los POST", async () => {
+    const csrf = "c".repeat(43);
+    const cookieToken = "t".repeat(43);
+    const nativeAuth = {
+      startFlow: vi.fn(async () => ({ cookieToken, csrfToken: csrf })),
+      isBrowserFlowValid: vi.fn(async (cookie: string | null, submittedCsrf: string) => cookie === cookieToken && submittedCsrf === csrf),
+    } as unknown as NativeAuthService;
+    const requestAccountRecovery = vi.fn(async () => "accepted" as const);
+    const verifyAccountRecovery = vi.fn(async () => "invalid_or_expired" as const);
+    const emailAuth = new EmailAuthService({
+      createUnverifiedAccount: async () => null,
+      createVerification: async () => null,
+      verifyEmail: async () => false,
+      createPasswordReset: async () => null,
+      checkPasswordReset: async () => false,
+      resetPassword: async () => false,
+      createAccountRecovery: async () => null,
+      verifyAccountRecovery: async () => null,
+    }, { sendVerification: async () => undefined, sendPasswordReset: async () => undefined }, "a-server-pepper-with-enough-entropy-for-this-test");
+    emailAuth.requestAccountRecovery = requestAccountRecovery;
+    emailAuth.verifyAccountRecovery = verifyAccountRecovery;
+    const app = createTestApp({ emailAuth, nativeAuth, accountRecoveryEnabled: true });
+    const query = new URLSearchParams({ redirect_uri: "http://127.0.0.1:49152/callback", state: "s".repeat(43), code_challenge: "h".repeat(43), code_challenge_method: "S256" });
+    const start = await app.inject({ method: "GET", url: `/auth/native?${query}` });
+    expect(start.body).toContain("/auth/native/recovery/request");
+    const cookie = String(start.headers["set-cookie"]).split(";")[0];
+    const headers = { cookie, "content-type": "application/x-www-form-urlencoded" };
+    const request = await app.inject({
+      method: "POST", url: "/auth/native/recovery/request", headers,
+      payload: new URLSearchParams({ csrf, email: "unknown@example.test" }).toString(),
+    });
+    expect(request.statusCode).toBe(200);
+    expect(request.body).toContain("Si la cuenta puede iniciar una solicitud");
+    const confirm = await app.inject({
+      method: "POST", url: "/auth/native/recovery/confirm", headers,
+      payload: new URLSearchParams({ csrf, email: "unknown@example.test", pin: "000000" }).toString(),
+    });
+    expect(confirm.statusCode).toBe(200);
+    expect(confirm.body).toContain("el administrador revisará el caso");
+    expect(requestAccountRecovery).toHaveBeenCalledWith("unknown@example.test");
+    expect(verifyAccountRecovery).toHaveBeenCalledWith("unknown@example.test", "000000");
+  });
+
   it("comparte entre IP el límite de intentos y no consume el contador si falla CSRF", async () => {
     const hits = new Map<string, number>();
     const requestRateLimiter: RequestRateLimiter = {

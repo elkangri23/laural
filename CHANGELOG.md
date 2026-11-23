@@ -2,6 +2,8 @@
 
 ## Sin publicar
 
+- Añadida la solicitud web de revisión por pérdida de factores, desactivada por defecto. El PIN de correo solo verifica el buzón; tras confirmarlo, una outbox envía al administrador el identificador del caso. El PIN no inicia sesión, cambia la contraseña ni altera TOTP/passkeys. ADR-0048, UC-29, runbook, roadmap y backlog actualizados.
+- Verificación del servicio: 166/166 pruebas con PostgreSQL 16 aislado, 89,72 % de líneas, 79,82 % de ramas; build correcto. La herramienta administrativa para decidir y retirar factores, y el ensayo VPS, siguen pendientes.
 - Añadido un runbook para configurar Google OAuth, aplicar migraciones, activar gradualmente el flag, probar registro/vinculación/MFA y revertir. Corregido el runbook de recuperación para reflejar passkeys y Google implementados localmente pero todavía desactivados; credenciales y ensayo VPS siguen pendientes.
 - Ampliadas las regresiones OAuth unitarias y PostgreSQL real: vincula una identidad verificada a una cuenta existente verificada y rechaza el correo local que aún no se verificó. Se amplió a 15 s el límite de la prueba integral de login que usa Argon2, tras observar un timeout ocasional con el límite general de 5 s.
 - Añadido acceso y registro opcional con Google OIDC para las cuentas de sincronización. Usa `state`, `nonce` y PKCE de un solo uso, exige correo verificado, vincula identidades por `sub`, conserva TOTP y no almacena tokens Google. La migración 011, ADR-0047, UC-28 y guías quedaron documentadas; el flag sigue apagado hasta configurar credenciales y validar el VPS.

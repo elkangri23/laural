@@ -4,6 +4,7 @@ import argon2 from "argon2";
 export type RegistrationInput = { displayName: string; email: string; password: string };
 export type VerificationChallenge = { accountId: string; displayName: string; challengeId: string };
 export type PasswordResetChallenge = { accountId: string; displayName: string; challengeId: string };
+export type AccountRecoveryChallenge = { accountId: string; displayName: string; challengeId: string };
 
 export interface EmailAuthStore {
   createUnverifiedAccount(input: { displayName: string; email: string; passwordHash: string }): Promise<{ id: string } | null>;
@@ -12,11 +13,14 @@ export interface EmailAuthStore {
   createPasswordReset(email: string, verifier: string): Promise<PasswordResetChallenge | null>;
   checkPasswordReset(email: string, verifier: string): Promise<boolean>;
   resetPassword(email: string, verifier: string, passwordHash: string): Promise<boolean>;
+  createAccountRecovery?(email: string, verifier: string): Promise<AccountRecoveryChallenge | null>;
+  verifyAccountRecovery?(email: string, verifier: string): Promise<{ challengeId: string; email: string } | null>;
 }
 
 export interface VerificationMailer {
   sendVerification(input: { email: string; displayName: string; pin: string; challengeId: string }): Promise<void>;
   sendPasswordReset(input: { email: string; displayName: string; pin: string; challengeId: string }): Promise<void>;
+  sendAccountRecoveryPin?(input: { email: string; displayName: string; pin: string; challengeId: string }): Promise<void>;
 }
 
 export type RegistrationResult = "accepted" | "invalid_request";
@@ -91,6 +95,28 @@ export class EmailAuthService {
     return await this.store.resetPassword(email, verifier, passwordHash) ? "reset" : "invalid_or_expired";
   }
 
+  async requestAccountRecovery(emailInput: string): Promise<"accepted" | "invalid_request"> {
+    const email = normalizeEmail(emailInput);
+    if (!email) return "invalid_request";
+    const pin = randomInt(0, 1_000_000).toString().padStart(6, "0");
+    const challenge = await this.store.createAccountRecovery?.(email, this.recoveryVerifier(email, pin));
+    if (challenge) {
+      try {
+        await this.mailer.sendAccountRecoveryPin?.({ ...challenge, email, pin });
+      } catch {
+        // Respuesta genérica; no revelar cuenta, correo ni PIN en logs.
+      }
+    }
+    return "accepted";
+  }
+
+  async verifyAccountRecovery(emailInput: string, pin: string): Promise<"verified" | "invalid_or_expired"> {
+    const email = normalizeEmail(emailInput);
+    if (!email || !/^\d{6}$/.test(pin)) return "invalid_or_expired";
+    const result = await this.store.verifyAccountRecovery?.(email, this.recoveryVerifier(email, pin));
+    return result ? "verified" : "invalid_or_expired";
+  }
+
   private async sendCode(email: string): Promise<void> {
     const pin = randomInt(0, 1_000_000).toString().padStart(6, "0");
     const challenge = await this.store.createVerification(email, this.verifier(email, pin));
@@ -114,6 +140,15 @@ export class EmailAuthService {
   private passwordResetVerifier(email: string, pin: string): string {
     return createHmac("sha256", this.pinPepper)
       .update("password-reset\0")
+      .update(email)
+      .update("\0")
+      .update(pin)
+      .digest("hex");
+  }
+
+  private recoveryVerifier(email: string, pin: string): string {
+    return createHmac("sha256", this.pinPepper)
+      .update("account-recovery\0")
       .update(email)
       .update("\0")
       .update(pin)

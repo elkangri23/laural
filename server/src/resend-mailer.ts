@@ -1,7 +1,7 @@
 import type { VerificationMailer } from "./email-auth.js";
 import type { SecurityEmailEvent, SecurityEmailSender } from "./security-email-outbox.js";
 
-export type ResendConfig = { apiKey: string; from: string };
+export type ResendConfig = { apiKey: string; from: string; recoveryAdminEmail?: string };
 
 export class ResendMailer implements VerificationMailer, SecurityEmailSender {
   constructor(private readonly config: ResendConfig) {}
@@ -50,6 +50,39 @@ export class ResendMailer implements VerificationMailer, SecurityEmailSender {
     });
     await response.body?.cancel();
     if (!response.ok) throw new Error("No se pudo entregar el correo de restablecimiento.");
+  }
+
+  async sendAccountRecoveryPin(input: { email: string; displayName: string; pin: string; challengeId: string }): Promise<void> {
+    const safeName = escapeHtml(input.displayName);
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${this.config.apiKey}`, "Content-Type": "application/json", "Idempotency-Key": `account-recovery-pin/${input.challengeId}` },
+      body: JSON.stringify({
+        from: this.config.from,
+        to: [input.email],
+        subject: "Verifica una solicitud de recuperación de Laural",
+        text: `Hola ${input.displayName}, tu PIN de seis dígitos es ${input.pin}. Caduca en 5 minutos. Solo confirma que tienes acceso a este correo; no inicia sesión, no restablece la contraseña y no elimina TOTP ni passkeys. Después, el administrador revisará el caso por separado. Si no lo solicitaste, ignora este mensaje.`,
+        html: `<p>Hola ${safeName},</p><p>Tu PIN de seis dígitos es <strong>${input.pin}</strong>. Caduca en 5 minutos.</p><p>Solo confirma que tienes acceso a este correo; no inicia sesión, no restablece la contraseña y no elimina TOTP ni passkeys. Después, el administrador revisará el caso por separado.</p><p>Si no lo solicitaste, ignora este mensaje.</p>`,
+      }), signal: AbortSignal.timeout(10_000), redirect: "error",
+    });
+    await response.body?.cancel();
+    if (!response.ok) throw new Error("No se pudo entregar el PIN de recuperación.");
+  }
+
+  async sendAccountRecoveryNotice(input: { caseId: string; accountEmail: string; notificationId: string }): Promise<void> {
+    if (!this.config.recoveryAdminEmail) throw new Error("No hay correo administrador configurado para recuperación.");
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${this.config.apiKey}`, "Content-Type": "application/json", "Idempotency-Key": `account-recovery-notice/${input.notificationId}` },
+      body: JSON.stringify({
+        from: this.config.from,
+        to: [this.config.recoveryAdminEmail],
+        subject: "Laural: solicitud de revisión de recuperación",
+        text: `Se verificó el buzón asociado a una solicitud de recuperación. Caso: ${input.caseId}. Cuenta: ${input.accountEmail}. La verificación del buzón no constituye prueba independiente y no se ha modificado ningún factor. Revisa el procedimiento administrativo aprobado.`,
+      }), signal: AbortSignal.timeout(10_000), redirect: "error",
+    });
+    await response.body?.cancel();
+    if (!response.ok) throw new Error("No se pudo entregar el aviso de recuperación al administrador.");
   }
 
   async sendSecurityNotice(input: { email: string; eventType: SecurityEmailEvent; notificationId: string }): Promise<void> {

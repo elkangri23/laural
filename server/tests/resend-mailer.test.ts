@@ -82,4 +82,40 @@ describe("envío transaccional mediante Resend", () => {
       email: "user@example.test", displayName: "User", pin: "123456", challengeId: "challenge-id",
     })).rejects.toThrow("No se pudo entregar el correo de verificación.");
   });
+
+  it("envía el PIN de recuperación solo a la cuenta y explica que no retira MFA", async () => {
+    const fetch = vi.fn(async () => new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetch);
+    const mailer = new ResendMailer({ apiKey: "server-only-key", from: "auth@example.test" });
+    await mailer.sendAccountRecoveryPin({ email: "user@example.test", displayName: "A <B>", pin: "012345", challengeId: "case-id" });
+
+    const [, options] = fetch.mock.calls[0] as unknown as [string, RequestInit];
+    expect(new Headers(options.headers).get("idempotency-key")).toBe("account-recovery-pin/case-id");
+    const payload = JSON.parse(String(options.body)) as { html: string; text: string; to: string[] };
+    expect(payload.to).toEqual(["user@example.test"]);
+    expect(payload.html).toContain("A &lt;B&gt;");
+    expect(payload.text).toContain("012345");
+    expect(payload.text).toContain("no elimina TOTP ni passkeys");
+  });
+
+  it("avisa al administrador sin incluir PIN ni material probatorio", async () => {
+    const fetch = vi.fn(async () => new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetch);
+    const mailer = new ResendMailer({ apiKey: "server-only-key", from: "auth@example.test", recoveryAdminEmail: "admin@example.test" });
+    await mailer.sendAccountRecoveryNotice({ caseId: "case-random-id", accountEmail: "user@example.test", notificationId: "notice-id" });
+
+    const [, options] = fetch.mock.calls[0] as unknown as [string, RequestInit];
+    expect(new Headers(options.headers).get("idempotency-key")).toBe("account-recovery-notice/notice-id");
+    const payload = JSON.parse(String(options.body)) as { to: string[]; text: string };
+    expect(payload.to).toEqual(["admin@example.test"]);
+    expect(payload.text).toContain("case-random-id");
+    expect(payload.text).toContain("no se ha modificado ningún factor");
+    expect(payload.text).not.toContain("PIN");
+  });
+
+  it("rechaza el aviso administrativo si no hay destinatario configurado", async () => {
+    const mailer = new ResendMailer({ apiKey: "server-only-key", from: "auth@example.test" });
+    await expect(mailer.sendAccountRecoveryNotice({ caseId: "case-id", accountEmail: "user@example.test", notificationId: "notice-id" }))
+      .rejects.toThrow("correo administrador");
+  });
 });

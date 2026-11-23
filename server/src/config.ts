@@ -11,6 +11,7 @@ export type EmailAuthConfig = {
   pinPepper: string;
   recoveryPepper: string;
   totpEncryptionKey: Buffer;
+  recoveryAdminEmail?: string;
 };
 
 export type PasskeyConfig = {
@@ -63,13 +64,18 @@ export function readConfig(environment: NodeJS.ProcessEnv): ServiceConfig {
 }
 
 export function readEmailAuthConfig(environment: NodeJS.ProcessEnv): EmailAuthConfig | null {
-  if (environment.EMAIL_AUTH_ENABLED?.trim().toLowerCase() !== "true") return null;
+  const recoveryEnabled = environment.ACCOUNT_RECOVERY_ENABLED?.trim().toLowerCase() === "true";
+  if (environment.EMAIL_AUTH_ENABLED?.trim().toLowerCase() !== "true") {
+    if (recoveryEnabled) throw new Error("ACCOUNT_RECOVERY_ENABLED requiere EMAIL_AUTH_ENABLED=true.");
+    return null;
+  }
 
   const resendApiKey = environment.RESEND_API_KEY?.trim();
   const resendFrom = environment.RESEND_FROM?.trim();
   const pinPepper = environment.AUTH_PIN_PEPPER?.trim();
   const recoveryPepper = environment.AUTH_RECOVERY_PEPPER?.trim();
   const totpEncryptionKeyText = environment.TOTP_ENCRYPTION_KEY?.trim();
+  const recoveryAdminEmail = environment.ACCOUNT_RECOVERY_ADMIN_EMAIL?.trim().toLowerCase();
   const totpEncryptionKey = totpEncryptionKeyText ? Buffer.from(totpEncryptionKeyText, "base64url") : Buffer.alloc(0);
   if (!resendApiKey || resendApiKey.length > 256) throw new Error("RESEND_API_KEY no es válido.");
   if (!resendFrom || resendFrom.length > 254 || /[\r\n]/.test(resendFrom)) throw new Error("RESEND_FROM no es válido.");
@@ -79,7 +85,11 @@ export function readEmailAuthConfig(environment: NodeJS.ProcessEnv): EmailAuthCo
     throw new Error("TOTP_ENCRYPTION_KEY debe ser una clave base64url de 32 bytes.");
   }
 
-  return { resendApiKey, resendFrom, pinPepper, recoveryPepper, totpEncryptionKey };
+  if (recoveryEnabled && (!recoveryAdminEmail || recoveryAdminEmail.length > 320 || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/u.test(recoveryAdminEmail))) {
+    throw new Error("ACCOUNT_RECOVERY_ENABLED requiere un ACCOUNT_RECOVERY_ADMIN_EMAIL válido.");
+  }
+
+  return { resendApiKey, resendFrom, pinPepper, recoveryPepper, totpEncryptionKey, ...(recoveryEnabled && recoveryAdminEmail ? { recoveryAdminEmail } : {}) };
 }
 
 export function readPasskeyConfig(environment: NodeJS.ProcessEnv, emailAuthEnabled: boolean): PasskeyConfig | null {

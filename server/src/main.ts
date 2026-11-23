@@ -15,6 +15,7 @@ import { cleanupExpiredRecords, RETENTION_INTERVAL_MS } from "./retention.js";
 import { ResendMailer } from "./resend-mailer.js";
 import { deliverSecurityEmailBatch } from "./security-email-outbox.js";
 import { GoogleOAuthService } from "./google-oauth.js";
+import { deliverAccountRecoveryNoticeBatch } from "./account-recovery-outbox.js";
 
 const config = readConfig(process.env);
 const emailAuthConfig = readEmailAuthConfig(process.env);
@@ -23,7 +24,7 @@ const googleOAuthConfig = readGoogleOAuthConfig(process.env, emailAuthConfig !==
 const pool = new pg.Pool({ connectionString: config.databaseUrl, max: 10, idleTimeoutMillis: 30_000 });
 const preferenceStore = new PostgresPreferenceStore(pool);
 const resendMailer = emailAuthConfig
-  ? new ResendMailer({ apiKey: emailAuthConfig.resendApiKey, from: emailAuthConfig.resendFrom })
+  ? new ResendMailer({ apiKey: emailAuthConfig.resendApiKey, from: emailAuthConfig.resendFrom, ...(emailAuthConfig.recoveryAdminEmail ? { recoveryAdminEmail: emailAuthConfig.recoveryAdminEmail } : {}) })
   : undefined;
 const emailAuth = emailAuthConfig && resendMailer
   ? new EmailAuthService(
@@ -54,6 +55,7 @@ const app = createApp({
   ...(accountMfa ? { accountMfa } : {}),
   ...(accountPasskeys ? { accountPasskeys } : {}),
   ...(googleOAuth ? { googleOAuth } : {}),
+  accountRecoveryEnabled: Boolean(emailAuthConfig?.recoveryAdminEmail),
   accountDeletion: new AccountDeletionService(pool),
 });
 
@@ -87,12 +89,29 @@ void runSecurityEmailDelivery();
 const securityEmailTimer = setInterval(() => { void runSecurityEmailDelivery(); }, 15_000);
 securityEmailTimer.unref();
 
+let deliveringRecoveryNotices = false;
+async function runRecoveryNoticeDelivery(): Promise<void> {
+  if (!resendMailer || !emailAuthConfig?.recoveryAdminEmail || deliveringRecoveryNotices) return;
+  deliveringRecoveryNotices = true;
+  try {
+    const result = await deliverAccountRecoveryNoticeBatch(pool, resendMailer);
+    if (result.deferred > 0) console.error("Uno o varios avisos de recuperación quedaron pendientes de reintento.");
+  } catch {
+    console.error("Falló el procesamiento de avisos administrativos de recuperación.");
+  } finally { deliveringRecoveryNotices = false; }
+}
+
+void runRecoveryNoticeDelivery();
+const recoveryNoticeTimer = setInterval(() => { void runRecoveryNoticeDelivery(); }, 15_000);
+recoveryNoticeTimer.unref();
+
 let closing = false;
 async function shutdown(): Promise<void> {
   if (closing) return;
   closing = true;
   clearInterval(retentionTimer);
   clearInterval(securityEmailTimer);
+  clearInterval(recoveryNoticeTimer);
   await app.close();
   await pool.end();
 }

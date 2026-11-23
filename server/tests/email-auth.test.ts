@@ -88,6 +88,33 @@ describe("registro y verificación por correo", () => {
     expect(await test.auth.verify(input.email, "12345")).toBe("invalid_or_expired");
   });
 
+  it("envía un PIN de recuperación y delega su verificación sin crear sesión", async () => {
+    const store = new MemoryEmailStore();
+    const pinSender = vi.fn(async () => undefined);
+    const mailer: VerificationMailer = {
+      sendVerification: vi.fn(async () => undefined),
+      sendPasswordReset: vi.fn(async () => undefined),
+      sendAccountRecoveryPin: pinSender,
+    };
+    let expectedVerifier = "";
+    store.createAccountRecovery = vi.fn(async (email, verifier) => {
+      expectedVerifier = verifier;
+      return email === "laura@example.test" ? { accountId: "account-1", displayName: "Laura", challengeId: "case-1" } : null;
+    });
+    store.verifyAccountRecovery = vi.fn(async (email, verifier) => email === "laura@example.test" && verifier === expectedVerifier
+      ? { challengeId: "case-1", email }
+      : null);
+    const auth = new EmailAuthService(store, mailer, "server-pepper-that-is-long-enough-for-tests");
+
+    expect(await auth.requestAccountRecovery(" LAURA@example.test ")).toBe("accepted");
+    expect(pinSender).toHaveBeenCalledOnce();
+    const sentPin = pinSender.mock.calls[0]?.[0].pin;
+    expect(sentPin).toMatch(/^\d{6}$/);
+    expect(expectedVerifier).not.toContain(sentPin);
+    expect(await auth.verifyAccountRecovery("laura@example.test", sentPin!)).toBe("verified");
+    expect(await auth.verifyAccountRecovery("laura@example.test", "bad")).toBe("invalid_or_expired");
+  });
+
   it("verifica el correo sin emitir una sesión y permite reintentar entrega fallida", async () => {
     const store = new MemoryEmailStore();
     const send = vi.fn(async () => { throw new Error("proveedor no disponible"); });

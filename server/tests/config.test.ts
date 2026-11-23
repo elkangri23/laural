@@ -26,6 +26,7 @@ describe("configuración del servicio", () => {
 
   it("mantiene apagada la autenticación por correo de forma predeterminada", () => {
     expect(readEmailAuthConfig({} as NodeJS.ProcessEnv)).toBeNull();
+    expect(() => readEmailAuthConfig({ ACCOUNT_RECOVERY_ENABLED: "true" } as NodeJS.ProcessEnv)).toThrow("EMAIL_AUTH_ENABLED");
   });
 
   it("mantiene passkeys desactivadas y exige origen HTTPS alineado con el RP", () => {
@@ -64,5 +65,16 @@ describe("configuración del servicio", () => {
     expect(() => readEmailAuthConfig({
       EMAIL_AUTH_ENABLED: "true", RESEND_API_KEY: "key", RESEND_FROM: "auth@example.test", AUTH_PIN_PEPPER: "short", AUTH_RECOVERY_PEPPER: "y".repeat(32), TOTP_ENCRYPTION_KEY: Buffer.alloc(32).toString("base64url"),
     } as NodeJS.ProcessEnv)).toThrow();
+  });
+
+  it("exige correo administrador válido antes de habilitar solicitudes de recuperación", () => {
+    const base = {
+      EMAIL_AUTH_ENABLED: "true", RESEND_API_KEY: "re_test", RESEND_FROM: "Laural <auth@example.test>",
+      AUTH_PIN_PEPPER: "x".repeat(32), AUTH_RECOVERY_PEPPER: "y".repeat(32), TOTP_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString("base64url"),
+    };
+    expect(() => readEmailAuthConfig({ ...base, ACCOUNT_RECOVERY_ENABLED: "true" } as NodeJS.ProcessEnv)).toThrow("ACCOUNT_RECOVERY_ADMIN_EMAIL");
+    expect(readEmailAuthConfig({ ...base, ACCOUNT_RECOVERY_ENABLED: "true", ACCOUNT_RECOVERY_ADMIN_EMAIL: "admin@example.test" } as NodeJS.ProcessEnv))
+      .toMatchObject({ recoveryAdminEmail: "admin@example.test" });
+    expect(() => readEmailAuthConfig({ ...base, ACCOUNT_RECOVERY_ENABLED: "true", ACCOUNT_RECOVERY_ADMIN_EMAIL: "not-an-email" } as NodeJS.ProcessEnv)).toThrow();
   });
 });
