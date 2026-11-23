@@ -51,8 +51,12 @@ function TerminalPane({ terminalId, shell, cwd, visible, active, copyRequest, cl
     let lastSentSize: TerminalSize | null = null;
     const subscriptions: (() => void)[] = [];
     const decoder = new TextDecoder();
-    const outputBatcher = createTerminalOutputBatcher((bytes) => terminal.write(bytes));
     const textBatcher = createTerminalTextBatcher((text) => onTextOutput(terminalId, text));
+    const outputBatcher = createTerminalOutputBatcher((bytes) => {
+      terminal.write(bytes);
+      textBatcher.push(decoder.decode(bytes, { stream: true }));
+      textBatcher.flush();
+    });
     const commandOsc = terminal.parser.registerOscHandler(133, (payload) => {
       const [mark, rawCode] = payload.split(";", 2);
       if (mark === "D") {
@@ -67,7 +71,6 @@ function TerminalPane({ terminalId, shell, cwd, visible, active, copyRequest, cl
         const bytes = decodeTerminalOutput(event.payload.dataBase64);
         if (!bytes) return;
         outputBatcher.push(bytes);
-        textBatcher.push(decoder.decode(bytes, { stream: true }));
       }
     };
     let commandLine: string | null = "";

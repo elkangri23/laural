@@ -128,6 +128,20 @@ test("reconstruye UTF-8 dividido entre eventos PTY codificados en Base64", async
   expect(output).toHaveBeenCalledWith("uno", "🌍");
 });
 
+test("una ráfaga de eventos PTY reduce escrituras xterm y decodificaciones de contexto", async () => {
+  await act(async () => root!.render(pane()));
+  const payload = { payload: { dataBase64: btoa("A".repeat(32 * 1024)) } };
+  const onOutput = handlers.get("terminal-output-uno")!;
+
+  for (let index = 0; index < 64; index += 1) onOutput(payload);
+
+  expect(write).toHaveBeenCalledTimes(8);
+  expect(output).toHaveBeenCalledTimes(8);
+  expect(write.mock.calls.reduce((total, [bytes]) => total + (bytes as Uint8Array).length, 0))
+    .toBe(64 * 32 * 1024);
+  expect(output.mock.calls.every(([, text]) => text.length === 24_000)).toBe(true);
+});
+
 test("limita el historial en memoria del terminal a 2.500 líneas", async () => {
   await act(async () => root!.render(pane()));
   expect(terminalOptions).toHaveBeenCalledWith(expect.objectContaining({ scrollback: 2_500 }));
