@@ -43,6 +43,7 @@ Estado al 23 de noviembre de 2026. «Implementado» describe código presente; �
 - El consumo del cuerpo SSE quedó aislado en una función compartida con el comando Tauri. Un servidor efímero en loopback comprueba petición autenticada, JSON del modelo/consulta, streaming de deltas UTF-8 y fin `[DONE]`; no requiere cuenta ni servicio de terceros.
 - La cancelación interrumpe el envío HTTP y la lectura de cuerpos de respuesta de chat y planes; el streaming también se puede detener mientras llegan fragmentos. Una regresión local cubre operaciones pendientes sin proveedor activo.
 - El chat detecta respuestas truncadas o vacías, errores de formato y eventos demasiado grandes. La consulta de modelos reintenta una vez los fallos de conexión y HTTP 502–504 sin Retry-After; una regresión local comprueba que respeta Retry-After y no duplica la petición. Falta comprobar errores de proveedor con servicios reales y los otros endpoints priorizados.
+- Los errores HTTP de modelos, chat, streaming y planificación ocultan la clave si el proveedor la refleja en su respuesta. Una prueba unitaria y otra HTTP en loopback verifican la redacción. Validación local: Rust 128 pasadas y 1 ignorada; UI 160/160 (79,18 % de líneas). El build de producción y `cargo fmt --check` pasan. `cargo llvm-cov` ejecutó los tests, pero Windows/MSVC no produjo datos de cobertura; el porcentaje Rust queda pendiente de CI. Ollama, LM Studio y endpoints remotos siguen pendientes de ensayo real.
 
 ## M3 — Agente (parcial)
 

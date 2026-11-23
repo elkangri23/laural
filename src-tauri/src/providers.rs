@@ -706,7 +706,7 @@ async fn get_models(base_url: &str, api_key: Option<&str>) -> Result<Vec<String>
     if !status.is_success() {
         return Err(format!(
             "El proveedor respondió HTTP {status}: {}",
-            short_body(&body)
+            short_body(&body, api_key)
         ));
     }
     parse_models(&body)
@@ -737,8 +737,15 @@ fn parse_models(body: &str) -> Result<Vec<String>, String> {
     Ok(models)
 }
 
-fn short_body(body: &str) -> String {
-    let compact = body.split_whitespace().collect::<Vec<_>>().join(" ");
+fn short_body(body: &str, api_key: Option<&str>) -> String {
+    let redacted = api_key
+        .map(str::trim)
+        .filter(|key| !key.is_empty())
+        .map_or_else(
+            || body.to_string(),
+            |key| body.replace(key, "[clave de API oculta]"),
+        );
+    let compact = redacted.split_whitespace().collect::<Vec<_>>().join(" ");
     compact.chars().take(240).collect()
 }
 
@@ -1440,7 +1447,7 @@ pub async fn send_chat(
     if !status.is_success() {
         return Err(format!(
             "El proveedor respondió HTTP {status}: {}",
-            short_body(&body)
+            short_body(&body, key.as_deref())
         ));
     }
     let value: Value = serde_json::from_str(&body)
@@ -1532,7 +1539,7 @@ pub async fn send_chat_stream(
             .await?;
             return Err(format!(
                 "El proveedor respondió HTTP {status}: {}",
-                short_body(&body)
+                short_body(&body, key.as_deref())
             ));
         }
         let mut emit = |text: &str| {
@@ -1657,7 +1664,7 @@ pub async fn plan_agent(
             "Planificación cancelada.",
         )
         .await?;
-        if !status.is_success() { return Err(format!("El proveedor respondió HTTP {status}: {}", short_body(&body))); }
+        if !status.is_success() { return Err(format!("El proveedor respondió HTTP {status}: {}", short_body(&body, key.as_deref()))); }
         let value: Value = serde_json::from_str(&body).map_err(|_| "El proveedor devolvió una respuesta que no es JSON válido.".to_string())?;
         let content = value.pointer("/choices/0/message/content").and_then(Value::as_str).ok_or_else(|| "El modelo no devolvió texto para el plan.".to_string())?;
         parse_agent_plan(content)
@@ -4309,6 +4316,17 @@ mod tests {
     }
 
     #[test]
+    fn oculta_la_clave_reflejada_y_limita_el_detalle_del_error() {
+        let key = "credencial-secreta-de-prueba";
+        let body = format!("token inválido: {key}\n{key}");
+        let message = short_body(&body, Some(key));
+
+        assert!(message.contains("[clave de API oculta]"));
+        assert!(!message.contains(key));
+        assert_eq!(short_body(&"x".repeat(300), None).len(), 240);
+    }
+
+    #[test]
     fn chat_normal_y_stream_comparten_endpoint_autenticacion_y_payload() {
         let http = client().unwrap();
         let messages = vec![json!({ "role": "user", "content": "consulta-fixture" })];
@@ -4538,6 +4556,48 @@ mod tests {
         assert!(
             !server.join().unwrap(),
             "Se repitió una consulta que incluía Retry-After."
+        );
+    }
+
+    #[tokio::test]
+    async fn no_muestra_la_clave_si_el_proveedor_la_refleja_en_un_error_http() {
+        use std::io::{BufRead, BufReader, Write};
+        use std::net::TcpListener;
+
+        let key = "credencial-secreta-de-prueba";
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let url = format!("http://{}/v1", listener.local_addr().unwrap());
+        let server_key = key.to_string();
+        let server = std::thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+            let reader = BufReader::new(&socket);
+            let mut lines = reader.lines().map(Result::unwrap);
+            assert_eq!(lines.next().unwrap(), "GET /v1/models HTTP/1.1");
+            let mut authenticated = false;
+            for line in lines {
+                if line.is_empty() {
+                    break;
+                }
+                authenticated |=
+                    line.eq_ignore_ascii_case(&format!("authorization: bearer {server_key}"));
+            }
+            let body = format!(r#"{{"error":"token rechazado: {server_key}"}}"#);
+            write!(
+                socket,
+                "HTTP/1.1 401 Unauthorized\r\nConnection: close\r\nContent-Length: {}\r\n\r\n{body}",
+                body.len()
+            )
+            .unwrap();
+            authenticated
+        });
+
+        let error = get_models(&url, Some(key)).await.unwrap_err();
+        assert!(error.contains("401"), "{error}");
+        assert!(error.contains("[clave de API oculta]"), "{error}");
+        assert!(!error.contains(key), "{error}");
+        assert!(
+            server.join().unwrap(),
+            "La petición no llevaba la clave esperada."
         );
     }
 

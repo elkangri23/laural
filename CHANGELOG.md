@@ -2,6 +2,7 @@
 
 ## Sin publicar
 
+- Los mensajes de error de proveedores ocultan la clave API si el servidor la devuelve en la respuesta, tanto al consultar modelos como en chat, streaming y planificación.
 - La tarjeta lateral deja de mostrar «Conecta tu modelo» cuando ya hay un proveedor activo; muestra el perfil y modelo seleccionados.
 - Validación manual de FreeLLMAPI desde la app: 311 modelos listados y respuesta de chat por streaming correctos. La clave guardada no se mostró ni modificó.
 - Las altas y bajas de passkeys ahora encolan un aviso en la misma transacción que modifica la credencial. Resend recibe mensajes genéricos sin nombres, identificadores ni datos del dispositivo; la migración 009 amplía los tipos permitidos del outbox existente.
