@@ -1927,16 +1927,23 @@ fn command_is_high_risk(shell: &str, command: &str) -> bool {
     ];
     let script_launchers = [
         "bash",
+        "bun",
+        "bunx",
         "busybox",
         "cmd",
         "command",
+        "corepack",
         "cscript",
+        "deno",
         "env",
         "exec",
         "mshta",
         "node",
         "nohup",
+        "npx",
         "perl",
+        "pipx",
+        "pnpm",
         "powershell",
         "pwsh",
         "py",
@@ -1948,8 +1955,10 @@ fn command_is_high_risk(shell: &str, command: &str) -> bool {
         "sh",
         "time",
         "timeout",
+        "uvx",
         "wscript",
         "wsl",
+        "yarn",
         "xargs",
     ];
     let shell_specific_risky = match shell {
@@ -3750,6 +3759,15 @@ mod tests {
             ("git-bash", "nohup python3 script.py"),
             ("wsl", "xargs rm -f archivo"),
             ("git-bash", "busybox rm archivo"),
+            ("powershell", "npx paquete --version"),
+            ("cmd", "pnpm run build"),
+            ("git-bash", "yarn test"),
+            ("wsl", "bunx herramienta"),
+            ("git-bash", "bun run script.ts"),
+            ("cmd", "corepack pnpm dlx herramienta"),
+            ("wsl", "uvx ruff check ."),
+            ("powershell", "pipx run herramienta"),
+            ("git-bash", "deno run script.ts"),
             ("wsl", "find . -type f -delete"),
             ("git-bash", "find . -exec rm -rf {} +"),
             ("wsl", "find -delete"),
@@ -4269,6 +4287,7 @@ mod tests {
                 "git config --global alias.audit status".into(),
                 "git -C proyecto config --local core.sshCommand 'powershell.exe'".into(),
                 "docker compose down --volumes".into(),
+                "npx paquete".into(),
             ],
             backup_retention: None,
         };
@@ -4299,6 +4318,7 @@ mod tests {
                 "git -C proyecto config --local core.sshCommand 'powershell.exe'",
             ),
             ("git-bash", "docker compose down --volumes"),
+            ("powershell", "npx paquete"),
         ] {
             let result = authorize_agent_command_with_settings(shell, command, &settings);
             assert!(

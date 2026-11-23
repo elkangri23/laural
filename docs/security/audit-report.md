@@ -181,6 +181,10 @@ Revisión Docker del agente (23-11-2026): `docker run`, `exec`, Compose y varias
 
 Verificación Docker: Rust 129 pasadas y 1 ignorada; interfaz 161/161, 79,18 % de líneas; ocho gates de cobertura y formato pasan. La generación de cobertura Rust falla en Windows/MSVC por falta de perfiles instrumentados.
 
+Revisión de ejecutores de paquetes (23-11-2026): varios comandos comunes (`npx`, `pnpm`, `yarn`, `bunx`, `corepack`, `deno`, `pipx`, `uvx`) no estaban en la lista de lanzadores, por lo que una regla exacta podía autorizar su ejecución sin revisión manual. Se añaden al control previo a reglas; incluye `bun` como runtime. Las pruebas recorren distintos shells y una regla exacta.
+
+Verificación de ejecutores: Rust 129 pasadas y 1 ignorada; UI 161/161, 79,18 % de líneas; ocho gates de cobertura y `cargo fmt --check` pasan. `cargo llvm-cov` ejecuta la suite, pero Windows/MSVC no genera datos para el informe.
+
 Verificación de la regresión: Rust 129 pasadas y 1 ignorada; UI 161/161, 79,18 % de líneas; los ocho gates de cobertura y `cargo fmt --check` pasan. En Windows/MSVC `cargo llvm-cov` ejecuta las pruebas, pero no genera el informe porque no hay datos de cobertura instrumentados.
 
 Cobertura local tras esta regresión: servicio 136 pruebas ejecutables, 9 PostgreSQL omitidas, 80,23 % de líneas y 76,07 % de ramas; interfaz 161/161 y 79,18 % de líneas; 8 gates de política pasan. Rust ejecuta 128 pruebas y 1 ignorada; `cargo llvm-cov` no genera perfiles válidos en Windows/MSVC, aunque el workflow Linux mide los gates. La primera pasada de cobertura UI tuvo un timeout de 5 s mientras backend y UI competían por CPU; la repetición de UI en solitario pasó.

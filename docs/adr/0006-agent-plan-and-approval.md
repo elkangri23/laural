@@ -40,3 +40,5 @@ Actualización M3: `taskkill` y `Stop-Computer` requieren aprobación manual en 
 Actualización M3: `git config` exige aprobación manual, tanto en llamada directa como con opciones globales como `-C` antes del subcomando. Incluye consultas de solo lectura por simplicidad; la clasificación evita que reglas persistentes agreguen aliases ejecutables o sustituyan comandos como `core.sshCommand`.
 
 Actualización M3: ejecutar código en contenedores (`docker run`, `exec`, Compose), construir imágenes, copiar archivos y cambiar recursos de Docker requiere aprobación manual. Las consultas conocidas de Compose (`ps`, `config`, `logs`, entre otras) conservan acceso sin revisión, salvo `config --output`, que escribe un archivo; las opciones antes de la operación son conservadoras y requieren aprobación.
+
+Actualización M3: los runtimes y ejecutores alternativos `npx`, `pnpm`, `yarn`, `bun`/`bunx`, `corepack`, `deno`, `pipx` y `uvx` requieren aprobación manual por tratarse de rutas de ejecución de código o herramientas. Se aplican antes de las reglas exactas.
