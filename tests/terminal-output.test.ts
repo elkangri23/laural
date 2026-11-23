@@ -126,6 +126,8 @@ test("solo solicita redimensionar cuando cambian filas o columnas válidas", () 
 
 test("decodifica los bytes del PTY en Base64 y rechaza datos malformados", () => {
   expect([...decodeTerminalOutput("AAEC/w==") ?? []]).toEqual([0, 1, 2, 255]);
+  expect(decodeTerminalOutput("AAEC/w==\n")).toBeNull();
+  expect(decodeTerminalOutput("AAEC/w")).toBeNull();
   expect(decodeTerminalOutput("%%%invalid%%%")).toBeNull();
   expect(decodeTerminalOutput("A".repeat(44_000))).toBeNull();
 });

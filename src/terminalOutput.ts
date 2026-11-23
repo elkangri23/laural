@@ -4,6 +4,7 @@ const TERMINAL_TEXT_BATCH_MS = 16;
 const TERMINAL_TEXT_BATCH_COMPACT_THRESHOLD = 256;
 const TERMINAL_OUTPUT_BYTE_LIMIT = 32 * 1024;
 const TERMINAL_OUTPUT_BASE64_LIMIT = Math.ceil(TERMINAL_OUTPUT_BYTE_LIMIT / 3) * 4;
+const TERMINAL_OUTPUT_BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 
 export type TerminalSize = { rows: number; cols: number };
 
@@ -12,7 +13,7 @@ export function terminalSizeChanged(previous: TerminalSize | null, next: Termina
 }
 
 export function decodeTerminalOutput(dataBase64: string): Uint8Array | null {
-  if (dataBase64.length > TERMINAL_OUTPUT_BASE64_LIMIT) return null;
+  if (dataBase64.length > TERMINAL_OUTPUT_BASE64_LIMIT || !TERMINAL_OUTPUT_BASE64_PATTERN.test(dataBase64)) return null;
   try {
     const binary = atob(dataBase64);
     if (binary.length > TERMINAL_OUTPUT_BYTE_LIMIT) return null;
