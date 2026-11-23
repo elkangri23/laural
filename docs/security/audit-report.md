@@ -177,6 +177,10 @@ Revisión Git del agente (23-11-2026): `git config` permitía cambios persistent
 
 Verificación: Rust 129 pasadas y 1 ignorada; interfaz 161/161, 79,18 % de líneas; ocho gates de cobertura y `cargo fmt --check` pasan. `cargo llvm-cov` ejecuta Rust pero no produce informe en Windows/MSVC por falta de perfiles instrumentados.
 
+Revisión Docker del agente (23-11-2026): `docker run`, `exec`, Compose y varias mutaciones de imágenes, redes y contenedores no exigían aprobación. Ahora requieren revisión, incluyendo opciones antes de la acción en Compose; consultas conocidas como `docker compose ps` y `config` mantienen su clasificación de lectura, salvo `config --output`. Añadidas regresiones para operaciones directas, anidadas, opciones y reglas exactas. Docker sigue ejecutándose con los permisos del usuario y no constituye aislamiento del host.
+
+Verificación Docker: Rust 129 pasadas y 1 ignorada; interfaz 161/161, 79,18 % de líneas; ocho gates de cobertura y formato pasan. La generación de cobertura Rust falla en Windows/MSVC por falta de perfiles instrumentados.
+
 Verificación de la regresión: Rust 129 pasadas y 1 ignorada; UI 161/161, 79,18 % de líneas; los ocho gates de cobertura y `cargo fmt --check` pasan. En Windows/MSVC `cargo llvm-cov` ejecuta las pruebas, pero no genera el informe porque no hay datos de cobertura instrumentados.
 
 Cobertura local tras esta regresión: servicio 136 pruebas ejecutables, 9 PostgreSQL omitidas, 80,23 % de líneas y 76,07 % de ramas; interfaz 161/161 y 79,18 % de líneas; 8 gates de política pasan. Rust ejecuta 128 pruebas y 1 ignorada; `cargo llvm-cov` no genera perfiles válidos en Windows/MSVC, aunque el workflow Linux mide los gates. La primera pasada de cobertura UI tuvo un timeout de 5 s mientras backend y UI competían por CPU; la repetición de UI en solitario pasó.

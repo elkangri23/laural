@@ -2134,6 +2134,9 @@ fn external_tool_is_high_risk(command: &str, executable: &str) -> bool {
     if executable == "diskpart" {
         return diskpart_command_is_high_risk(command);
     }
+    if executable == "docker" {
+        return docker_command_is_high_risk(command);
+    }
     let mut arguments = command.split_whitespace();
     arguments.next();
     let Some(subcommand) = arguments.next() else {
@@ -2181,16 +2184,6 @@ fn external_tool_is_high_risk(command: &str, executable: &str) -> bool {
                 | "run-script"
         ),
         "cargo" => matches!(subcommand, "publish" | "install"),
-        "docker" => matches!(
-            (subcommand, arguments.next()),
-            ("system", Some("prune"))
-                | ("image", Some("prune"))
-                | ("volume", Some("prune"))
-                | ("container", Some("prune"))
-                | ("container", Some("rm"))
-                | ("image", Some("rm"))
-                | ("volume", Some("rm"))
-        ),
         "kubectl" => matches!(subcommand, "delete" | "apply" | "replace" | "patch"),
         "terraform" => matches!(subcommand, "apply" | "destroy" | "import"),
         "find" => std::iter::once(subcommand)
@@ -2284,6 +2277,78 @@ fn external_tool_is_high_risk(command: &str, executable: &str) -> bool {
         "go" => matches!(subcommand, "install" | "get"),
         "gem" => matches!(subcommand, "install" | "uninstall" | "update"),
         "brew" => matches!(subcommand, "install" | "uninstall" | "upgrade"),
+        _ => false,
+    }
+}
+
+fn docker_command_is_high_risk(command: &str) -> bool {
+    let mut arguments = command.split_whitespace().skip(1);
+    let Some(subcommand) = arguments.next() else {
+        return false;
+    };
+    if subcommand.starts_with('-') {
+        return !matches!(subcommand, "--help" | "-h" | "--version" | "-v" | "-V")
+            || arguments.next().is_some();
+    }
+
+    if subcommand == "compose" {
+        let Some(operation) = arguments.next() else {
+            return true;
+        };
+        if operation == "config" {
+            return arguments.any(|argument| {
+                argument == "-o" || argument == "--output" || argument.starts_with("--output=")
+            });
+        }
+        return !matches!(
+            operation,
+            "--help"
+                | "-h"
+                | "help"
+                | "version"
+                | "ps"
+                | "ls"
+                | "config"
+                | "images"
+                | "logs"
+                | "top"
+                | "port"
+                | "events"
+        );
+    }
+
+    match subcommand {
+        "run" | "exec" | "attach" | "build" | "buildx" | "start" | "stop" | "restart" | "kill"
+        | "create" | "update" | "push" | "pull" | "load" | "import" | "cp" => true,
+        "system" => arguments.next() == Some("prune"),
+        "builder" => arguments.next() == Some("prune"),
+        "image" => matches!(
+            arguments.next(),
+            Some("prune" | "rm" | "build" | "pull" | "push" | "load" | "import" | "tag")
+        ),
+        "volume" => matches!(arguments.next(), Some("prune" | "rm" | "create")),
+        "container" => matches!(
+            arguments.next(),
+            Some(
+                "prune"
+                    | "rm"
+                    | "run"
+                    | "exec"
+                    | "attach"
+                    | "start"
+                    | "stop"
+                    | "restart"
+                    | "kill"
+                    | "create"
+                    | "update"
+                    | "rename"
+                    | "cp"
+            )
+        ),
+        "network" => matches!(
+            arguments.next(),
+            Some("create" | "rm" | "connect" | "disconnect")
+        ),
         _ => false,
     }
 }
@@ -3613,6 +3678,8 @@ mod tests {
             ("git-bash", "cargo --help"),
             ("git-bash", "docker --help"),
             ("git-bash", "docker ps"),
+            ("git-bash", "docker compose ps"),
+            ("git-bash", "docker compose config"),
             ("git-bash", "kubectl get pods"),
             ("git-bash", "terraform plan"),
         ] {
@@ -3633,11 +3700,45 @@ mod tests {
             ("npm ci", "npm"),
             ("cargo publish", "cargo"),
             ("docker system prune -af", "docker"),
+            ("docker run --rm imagen", "docker"),
+            ("docker exec contenedor powershell", "docker"),
+            ("docker attach contenedor", "docker"),
+            ("docker container exec contenedor sh", "docker"),
+            ("docker image build -t local .", "docker"),
+            ("docker image tag local:latest alias:latest", "docker"),
+            ("docker builder prune -af", "docker"),
+            ("docker network connect red contenedor", "docker"),
+            ("docker cp archivo contenedor:/tmp/archivo", "docker"),
+            ("docker compose down --volumes", "docker"),
+            ("docker compose --profile produccion up", "docker"),
+            ("docker compose -p produccion down", "docker"),
+            (
+                "docker compose config --output docker-resuelto.yml",
+                "docker",
+            ),
             ("kubectl delete pod x", "kubectl"),
             ("terraform destroy -auto-approve", "terraform"),
             ("reg delete HKCU\\Software\\Laural /f", "reg"),
         ] {
             assert!(external_tool_is_high_risk(command, executable), "{command}");
+        }
+
+        for command in [
+            "docker run --rm imagen",
+            "docker exec contenedor powershell",
+            "docker attach contenedor",
+            "docker container exec contenedor sh",
+            "docker image build -t local .",
+            "docker image tag local:latest alias:latest",
+            "docker builder prune -af",
+            "docker network connect red contenedor",
+            "docker cp archivo contenedor:/tmp/archivo",
+            "docker compose down --volumes",
+            "docker compose --profile produccion up",
+            "docker compose -p produccion down",
+            "docker compose config --output docker-resuelto.yml",
+        ] {
+            assert!(command_is_high_risk("git-bash", command), "{command}");
         }
     }
 
@@ -4167,6 +4268,7 @@ mod tests {
                 "Stop-Computer -Force".into(),
                 "git config --global alias.audit status".into(),
                 "git -C proyecto config --local core.sshCommand 'powershell.exe'".into(),
+                "docker compose down --volumes".into(),
             ],
             backup_retention: None,
         };
@@ -4196,6 +4298,7 @@ mod tests {
                 "wsl",
                 "git -C proyecto config --local core.sshCommand 'powershell.exe'",
             ),
+            ("git-bash", "docker compose down --volumes"),
         ] {
             let result = authorize_agent_command_with_settings(shell, command, &settings);
             assert!(

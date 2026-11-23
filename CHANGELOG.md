@@ -5,6 +5,8 @@
 - El agente exige aprobación antes de ejecutar `taskkill` o `Stop-Computer`, incluso si coinciden con una regla permitida; las consultas de procesos siguen disponibles sin revisión.
 - Verificación local: Rust 129 pasadas y 1 ignorada; UI 161/161 (79,18 % de líneas); 8 pruebas de política de cobertura y formato correctos. La generación de cobertura Rust continúa sin datos en Windows/MSVC.
 - `git config` requiere aprobación manual también cuando se antepone `-C` u otra opción global; las regresiones cubren alias persistentes y `core.sshCommand`.
+- Se exige aprobación para ejecutar y gestionar contenedores con Docker/Compose; se conservan consultas Compose reconocidas como solo lectura.
+- Regresiones de Docker/Compose: Rust 129 pasadas y 1 ignorada; UI 161/161 (79,18 % de líneas), gates de cobertura y formato correctos. Windows/MSVC no genera el informe LLVM de Rust.
 - La suite local pasa: Rust 129/129 ejecutables y UI 161/161 (79,18 % de líneas); los ocho gates de política y el formato Rust pasan. La generación local de cobertura Rust sigue limitada por Windows/MSVC.
 - El segundo factor TOTP y los códigos de recuperación comparten un límite de diez intentos por cuenta cada cinco minutos entre flujos e IP. La cuenta se obtiene del flujo ligado al primer factor y PostgreSQL conserva solo su HMAC.
 - CI `45192735950` pasó los tres jobs; el servicio ejecutó 144/144 pruebas con PostgreSQL real, incluida la regresión de límite MFA entre flujos.

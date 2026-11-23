@@ -38,3 +38,5 @@ Regresión M3: una orden `doskey` que define una macro de comando debe seguir pi
 Actualización M3: `taskkill` y `Stop-Computer` requieren aprobación manual en modos automático y por reglas porque pueden terminar procesos o apagar el equipo. `tasklist`, `Get-Process` y `Get-Command Stop-Computer` conservan su clasificación de lectura; las reglas no reducen la revisión requerida.
 
 Actualización M3: `git config` exige aprobación manual, tanto en llamada directa como con opciones globales como `-C` antes del subcomando. Incluye consultas de solo lectura por simplicidad; la clasificación evita que reglas persistentes agreguen aliases ejecutables o sustituyan comandos como `core.sshCommand`.
+
+Actualización M3: ejecutar código en contenedores (`docker run`, `exec`, Compose), construir imágenes, copiar archivos y cambiar recursos de Docker requiere aprobación manual. Las consultas conocidas de Compose (`ps`, `config`, `logs`, entre otras) conservan acceso sin revisión, salvo `config --output`, que escribe un archivo; las opciones antes de la operación son conservadoras y requieren aprobación.
