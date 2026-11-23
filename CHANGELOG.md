@@ -2,6 +2,8 @@
 
 ## Sin publicar
 
+- En Windows, las ediciones del agente ahora rechazan el reemplazo cuando otro editor mantiene el archivo abierto para escritura, conservando el contenido y sin crear una copia inconsistente.
+- Verificación local: Rust 131 pasadas y 1 ignorada; UI 161/161 (79,18 % de líneas), 8 gates de cobertura y formato correctos. `cargo llvm-cov` ejecuta Rust pero no genera informe instrumentado en Windows/MSVC.
 - El agente exige aprobación antes de ejecutar `taskkill` o `Stop-Computer`, incluso si coinciden con una regla permitida; las consultas de procesos siguen disponibles sin revisión.
 - Verificación local: Rust 129 pasadas y 1 ignorada; UI 161/161 (79,18 % de líneas); 8 pruebas de política de cobertura y formato correctos. La generación de cobertura Rust continúa sin datos en Windows/MSVC.
 - `git config` requiere aprobación manual también cuando se antepone `-C` u otra opción global; las regresiones cubren alias persistentes y `core.sshCommand`.

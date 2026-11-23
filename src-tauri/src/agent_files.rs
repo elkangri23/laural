@@ -159,12 +159,13 @@ fn open_target_for_rename(path: &Path) -> io::Result<File> {
     use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
     use windows_sys::Win32::Storage::FileSystem::{
         DELETE, FILE_ATTRIBUTE_REPARSE_POINT, FILE_FLAG_OPEN_REPARSE_POINT, FILE_READ_ATTRIBUTES,
-        FILE_SHARE_READ, FILE_SHARE_WRITE,
+        FILE_SHARE_READ,
     };
 
     let file = File::options()
         .access_mode(DELETE | FILE_READ_ATTRIBUTES)
-        .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
+        // Deny concurrent writers while this handle protects the destination.
+        .share_mode(FILE_SHARE_READ)
         .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
         .open(path)?;
     let metadata = file.metadata()?;
@@ -712,6 +713,33 @@ mod tests {
         assert!(save(root.path(), "doc.txt", b"nuevo", true).is_err());
         drop(held);
         assert_eq!(fs::read(target).unwrap(), b"original");
+        assert_eq!(root.path().join(BACKUPS).read_dir().unwrap().count(), 0);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn rechaza_escritura_mientras_un_editor_mantiene_el_archivo_abierto() {
+        use std::os::windows::fs::OpenOptionsExt;
+        use windows_sys::Win32::Storage::FileSystem::{
+            FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
+        };
+
+        let root = tempfile::tempdir().unwrap();
+        let target = root.path().join("doc.txt");
+        fs::write(&target, b"original").unwrap();
+        let mut editor = File::options()
+            .write(true)
+            .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
+            .open(&target)
+            .unwrap();
+        editor.set_len(0).unwrap();
+        editor.write_all(b"cambio externo").unwrap();
+        editor.flush().unwrap();
+
+        assert!(save(root.path(), "doc.txt", b"cambio de Laural", true).is_err());
+
+        drop(editor);
+        assert_eq!(fs::read(target).unwrap(), b"cambio externo");
         assert_eq!(root.path().join(BACKUPS).read_dir().unwrap().count(), 0);
     }
 
