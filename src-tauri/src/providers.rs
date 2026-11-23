@@ -2195,6 +2195,9 @@ fn external_tool_is_high_risk(command: &str, executable: &str) -> bool {
     if executable == "bcdboot" {
         return bcdboot_command_is_high_risk(command);
     }
+    if executable == "bootrec" {
+        return bootrec_command_is_high_risk(command);
+    }
     if executable == "manage-bde" {
         return manage_bde_command_is_high_risk(command);
     }
@@ -2634,6 +2637,18 @@ fn bcdboot_command_is_high_risk(command: &str) -> bool {
         .as_slice()
     {
         [] | ["/?"] | ["-?"] => false,
+        _ => true,
+    }
+}
+
+fn bootrec_command_is_high_risk(command: &str) -> bool {
+    match command
+        .split_whitespace()
+        .skip(1)
+        .collect::<Vec<_>>()
+        .as_slice()
+    {
+        [] | ["/?"] | ["-?"] | ["/scanos"] => false,
         _ => true,
     }
 }
@@ -4537,6 +4552,24 @@ mod tests {
     }
 
     #[test]
+    fn exige_revision_para_reparar_arranque_con_bootrec() {
+        for command in [
+            "bootrec /fixmbr",
+            "bootrec /fixboot",
+            "bootrec /rebuildbcd",
+            "bootrec /fixmbr /scanos",
+            "bootrec /operacion-desconocida",
+            "bootrec /? /fixboot",
+        ] {
+            assert!(command_is_high_risk("cmd", command), "{command}");
+        }
+
+        for command in ["bootrec", "bootrec /?", "bootrec -?", "bootrec /scanos"] {
+            assert!(!command_is_high_risk("cmd", command), "{command}");
+        }
+    }
+
+    #[test]
     fn exige_revision_para_modificar_credenciales_de_windows() {
         for (command, executable) in [
             (
@@ -4945,6 +4978,7 @@ mod tests {
                 "sfc /scannow".into(),
                 "reagentc /disable".into(),
                 "bcdboot C:\\Windows /s S: /f UEFI".into(),
+                "bootrec /fixmbr".into(),
                 "ssh servidor hostname".into(),
                 "Enter-PSSession servidor".into(),
                 "msiexec /i paquete.msi /quiet".into(),
@@ -5006,6 +5040,7 @@ mod tests {
             ("cmd", "sfc /scannow"),
             ("cmd", "reagentc /disable"),
             ("cmd", "bcdboot C:\\Windows /s S: /f UEFI"),
+            ("cmd", "bootrec /fixmbr"),
             ("git-bash", "ssh servidor hostname"),
             ("powershell", "Enter-PSSession servidor"),
             ("cmd", "msiexec /i paquete.msi /quiet"),
