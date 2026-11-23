@@ -2,6 +2,7 @@
 
 ## Sin publicar
 
+- El menú de opciones del perfil se despliega hacia el área principal para que sus elementos no queden fuera del borde izquierdo; añade desplazamiento cuando falta altura.
 - El agente solicita aprobación antes de abrir `diskpart` de forma interactiva o pasarle scripts y operaciones; solo deja pasar la ayuda explícita.
 - El agente requiere aprobación para comandos de BitLocker que cifran, descifran, bloquean o desbloquean unidades y que administran protectores; conserva ayuda y consultas de estado acotadas.
 

@@ -10,6 +10,7 @@ Estado al 23 de noviembre de 2026. «Implementado» describe código presente; �
 - Doce temas de color, modo claro/oscuro y preferencias locales.
 - Regresiones de la app principal verifican que tema y modo se recuperan/guardan y que se ofrecen doce temas; también cubren creación de pestañas y alternancia de panel dividido.
 - Configuración usa un diálogo modal nativo, enfoca su título al abrir y admite Escape; pruebas de interfaz cubren su apertura y cierre por teclado.
+- El menú del perfil se ancla al borde interior del lateral para evitar el recorte horizontal y limita su altura disponible con desplazamiento vertical; regresión de interfaz verifica el posicionamiento.
 - Cambiar de perfil limpia la clave del formulario en memoria; una regresión confirma que probar y guardar envían el ID del perfil seleccionado y no la clave escrita para el anterior.
 - Pruebas con un nuevo montaje verifican que tema/modo vuelven desde `localStorage` y que la app recupera el perfil activo al consultar el backend; falta verificar el reinicio del proceso instalado en Windows.
 - Planes de agente, modos revisar/reglas/automático y aprobación explícita para cambios de archivos.
