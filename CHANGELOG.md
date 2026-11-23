@@ -3,6 +3,7 @@
 ## Sin publicar
 
 - Endurecidos registro, verificación y recuperación de cuenta con límites compartidos por correo normalizado entre API y formulario nativo. La base de datos conserva solo huellas HMAC; los intentos fallidos reciben `429` y `Retry-After`.
+- La integración PostgreSQL comprueba los límites cruzados entre API y formulario desde IP distintas y verifica que los contadores solo guardan el HMAC del correo.
 
 ## 0.1.0-alpha.17
 

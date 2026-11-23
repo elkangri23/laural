@@ -1,4 +1,4 @@
-import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import pg, { type Pool } from "pg";
 import { createApp } from "../src/app.js";
@@ -551,16 +551,55 @@ describePostgres("integración real de PostgreSQL para rate limits", () => {
          SELECT id, $2, now() + interval '30 days' FROM accounts WHERE email = $1`,
         [email, createHash("sha256").update(activeToken).digest("hex")],
       );
-      const resetRequest = await app.inject({ method: "POST", url: "/v1/auth/password-reset/request", payload: { email } });
-      expect(resetRequest.statusCode).toBe(202);
-      expect(resetRequest.json()).toEqual({ status: "accepted" });
+      let resetRequest: Awaited<ReturnType<typeof app.inject>> | undefined;
+      for (const [index, value] of [email.toUpperCase(), ` ${email} `, email].entries()) {
+        const response = await app.inject({
+          method: "POST", url: "/v1/auth/password-reset/request", remoteAddress: `198.51.100.${41 + index}`,
+          payload: { email: value },
+        });
+        expect(response.statusCode).toBe(202);
+        if (index === 2) resetRequest = response;
+      }
+      expect(resetRequest?.json()).toEqual({ status: "accepted" });
       expect(deliveredResetPin).toMatch(/^\d{6}$/);
+
+      const nativeFlow = await app.inject({
+        method: "GET",
+        url: `/auth/native?${new URLSearchParams({
+          redirect_uri: "http://127.0.0.1:49152/callback",
+          state: randomBytes(32).toString("base64url"),
+          code_challenge: randomBytes(32).toString("base64url"),
+          code_challenge_method: "S256",
+        })}`,
+      });
+      const nativeCookie = String(nativeFlow.headers["set-cookie"]).split(";")[0] ?? "";
+      const nativeCsrf = /name="csrf" value="([^"]+)"/.exec(nativeFlow.body)?.[1] ?? "";
+      const sharedNativeLimit = await app.inject({
+        method: "POST", url: "/auth/native/password-reset/request", remoteAddress: "198.51.100.44",
+        headers: { cookie: nativeCookie, "content-type": "application/x-www-form-urlencoded" },
+        payload: new URLSearchParams({ csrf: nativeCsrf, email }).toString(),
+      });
+      expect(sharedNativeLimit.statusCode).toBe(429);
+      expect(sharedNativeLimit.headers["retry-after"]).toBe("900");
+
+      const accountLimitDigest = createHmac("sha256", "integracion-rate-limit-pepper-32-bytes-minimo")
+        .update("password-reset-request-email")
+        .update("\0")
+        .update(email)
+        .digest("hex");
+      const storedAccountLimit = await isolatedPool.query<{ key_digest: string; request_count: number }>(
+        "SELECT key_digest, request_count FROM request_rate_limits WHERE scope = $1",
+        ["password-reset-request-email"],
+      );
+      expect(storedAccountLimit.rows).toEqual([{ key_digest: accountLimitDigest, request_count: 4 }]);
+      expect(JSON.stringify(storedAccountLimit.rows)).not.toContain(email);
+
       const invalidReset = await app.inject({ method: "POST", url: "/v1/auth/password-reset/confirm", payload: { email, pin: "999999" === deliveredResetPin ? "000000" : "999999", password: "nueva contraseña integración 2026" } });
       expect(invalidReset.statusCode).toBe(202);
-      expect(invalidReset.json()).toEqual(resetRequest.json());
+      expect(invalidReset.json()).toEqual(resetRequest?.json());
       const reset = await app.inject({ method: "POST", url: "/v1/auth/password-reset/confirm", payload: { email, pin: deliveredResetPin, password: "nueva contraseña integración 2026" } });
       expect(reset.statusCode).toBe(202);
-      expect(reset.json()).toEqual(resetRequest.json());
+      expect(reset.json()).toEqual(resetRequest?.json());
       expect((await app.inject({ method: "GET", url: "/v1/preferences/current", headers: { authorization: `Bearer ${activeToken}` } })).statusCode).toBe(401);
       const passwordRecord = await isolatedPool.query<{ password_hash: string }>("SELECT password_hash FROM accounts WHERE email = $1", [email]);
       expect(passwordRecord.rows[0]?.password_hash).toMatch(/^\$argon2id\$/);
