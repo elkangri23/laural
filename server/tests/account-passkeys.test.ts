@@ -138,7 +138,8 @@ describe("gestión y login de passkeys", () => {
       if (sql.includes("SELECT id FROM accounts")) return { rows: [{ id: accountId }] };
       if (sql.includes("SELECT count(*)")) return { rows: [{ count: "0" }] };
       if (sql.includes("SELECT id, display_name")) return { rows: [{ id: "key-id", display_name: "Portátil", created_at: now, last_used_at: null }] };
-      if (sql.startsWith("DELETE FROM account_passkeys")) return { rows: [], rowCount: 1 };
+      if (sql.startsWith("DELETE FROM account_passkeys")) return { rows: [{ id: "key-id" }], rowCount: 1 };
+      if (sql.includes("INSERT INTO account_security_email_outbox")) return { rows: [], rowCount: 1 };
       return { rows: [] };
     });
     const service = new AccountPasskeyService(pool, config);
@@ -156,8 +157,11 @@ describe("gestión y login de passkeys", () => {
     expect(registered).toBe(true);
     expect(queries.some(({ sql }) => sql.includes("FOR UPDATE"))).toBe(true);
     expect(queries.some(({ sql }) => sql.includes("INSERT INTO account_passkeys"))).toBe(true);
+    expect(queries.find(({ sql }) => sql.includes("INSERT INTO account_security_email_outbox"))?.values).toEqual([accountId, "passkey_added"]);
     expect(list).toEqual([{ id: "key-id", name: "Portátil", createdAt: now.toISOString(), lastUsedAt: null }]);
     expect(removed).toBe(true);
+    expect(queries.find(({ sql, values }) => sql.includes("INSERT INTO account_security_email_outbox") && values?.[1] === "passkey_removed")?.values).toEqual([accountId, "passkey_removed"]);
+    expect(queries.at(-1)?.sql).toBe("COMMIT");
   });
 
   it("rechaza sesión/CSRF caducados, entradas inseguras y el límite de credenciales", async () => {
@@ -243,5 +247,20 @@ describe("gestión y login de passkeys", () => {
     await expect(new AccountPasskeyService(pool.pool, config).verifyRegistration(cookie, csrf, {
       id: "YQ", rawId: "YQ", type: "public-key", response: { attestationObject: "YQ", clientDataJSON: "YQ" },
     } as never)).resolves.toBe(false);
+  });
+
+  it("revierte la retirada si no puede registrar el aviso en la misma transacción", async () => {
+    const pool = createPool((sql) => {
+      if (sql.includes("SELECT account_id FROM passkey_management_sessions")) return { rows: [{ account_id: accountId }] };
+      if (sql.startsWith("DELETE FROM account_passkeys")) return { rows: [{ id: "key-id" }], rowCount: 1 };
+      if (sql.includes("INSERT INTO account_security_email_outbox")) return { rows: [], rowCount: 0 };
+      return { rows: [] };
+    });
+
+    await expect(new AccountPasskeyService(pool.pool, config).removeManagementPasskey(
+      cookie, csrf, "00000000-0000-4000-8000-000000000001",
+    )).rejects.toThrow("No se pudo registrar el aviso de seguridad.");
+    expect(pool.queries.at(-1)?.sql).toBe("ROLLBACK");
+    expect(pool.client.release).toHaveBeenCalledOnce();
   });
 });

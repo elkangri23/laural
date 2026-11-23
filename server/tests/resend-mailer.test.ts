@@ -55,6 +55,26 @@ describe("envío transaccional mediante Resend", () => {
     expect(payload.text).toContain("no reconoces este cambio");
   });
 
+  it("avisa del alta y retirada de passkeys sin revelar nombre ni dispositivo", async () => {
+    const fetch = vi.fn(async () => new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetch);
+    const mailer = new ResendMailer({ apiKey: "server-only-key", from: "auth@example.test" });
+    for (const [eventType, subject] of [
+      ["passkey_added", "Se añadió una passkey"],
+      ["passkey_removed", "Se eliminó una passkey"],
+    ] as const) {
+      await mailer.sendSecurityNotice({ email: "user@example.test", eventType, notificationId: `notice-${eventType}` });
+      const [, options] = fetch.mock.calls.at(-1) as unknown as [string, RequestInit];
+      const payload = JSON.parse(String(options.body)) as { subject: string; text: string; html: string };
+      expect(payload.subject).toContain(subject);
+      expect(payload.text).toContain("no reconoces este cambio");
+      expect(payload.text).not.toMatch(/portátil|dispositivo|credential-id/iu);
+      expect(payload.html).not.toMatch(/portátil|dispositivo|credential-id/iu);
+      expect(new Headers(options.headers).get("idempotency-key")).toBe(`security/notice-${eventType}`);
+    }
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
   it("convierte los errores del proveedor en un error genérico", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("private provider detail", { status: 401 })));
     const mailer = new ResendMailer({ apiKey: "server-only-key", from: "auth@example.test" });

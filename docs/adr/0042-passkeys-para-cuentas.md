@@ -1,6 +1,6 @@
 # ADR-0042: Passkeys para las cuentas de sincronización
 
-- Estado: aceptada; primera implementación local, pendiente de despliegue y validación en VPS/Windows.
+- Estado: aceptada; integración local y avisos en cola, pendiente de despliegue y validación en VPS/Windows.
 - Fecha: 2026-11-23.
 
 ## Contexto
@@ -23,7 +23,7 @@ El plan de sincronización contempla passkeys además de contraseña y TOTP. El 
 - Las passkeys dan acceso passwordless con verificación de usuario; TOTP activo conserva el segundo paso acordado.
 - Los navegadores y autenticadores deben soportar WebAuthn discoverable credentials y el dominio de producción debe coincidir con el RP ID.
 - La gestión depende de un inicio de sesión reciente; hay que volver a iniciar sesión antes de modificar passkeys si la sesión superó diez minutos.
-- Notificar por correo las altas y bajas de passkeys antes de habilitar cuentas públicas. También quedan pendientes Google OAuth, pruebas end-to-end en Windows/VPS, migración de producción y validación real de correo/operación.
+- Los avisos por correo de altas y bajas usan la cola transaccional decidida en [ADR-0043](0043-avisos-de-cambios-passkey.md). Quedan pendientes Google OAuth, pruebas end-to-end en Windows/VPS, migraciones de producción y validación real de correo/operación.
 
 ## Referencias
 

@@ -10,6 +10,7 @@ import {
   type WebAuthnCredential,
 } from "@simplewebauthn/server";
 import type { PasskeyConfig } from "./config.js";
+import type { SecurityEmailEvent } from "./security-email-outbox.js";
 
 const FLOW_TTL_SECONDS = 5 * 60;
 const CHALLENGE_TTL_SECONDS = 3 * 60;
@@ -280,6 +281,7 @@ export class AccountPasskeyService {
         [state.account_id, credential.id, Buffer.from(credential.publicKey), credential.counter,
           transports, state.display_name, credentialDeviceType, credentialBackedUp],
       );
+      await queuePasskeySecurityEmail(client, state.account_id, "passkey_added");
       await client.query("COMMIT");
       return true;
     } catch (error) {
@@ -314,13 +316,38 @@ export class AccountPasskeyService {
 
   async removeManagementPasskey(cookieToken: string, csrfToken: string, passkeyId: string): Promise<boolean> {
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(passkeyId)) return false;
-    const session = await this.getManagementSession(cookieToken, csrfToken);
-    if (!session) return false;
-    const result = await this.pool.query(
-      `DELETE FROM account_passkeys WHERE id = $1 AND account_id = $2`,
-      [passkeyId, session.accountId],
-    );
-    return result.rowCount === 1;
+    if (!isOpaqueToken(cookieToken) || !isOpaqueToken(csrfToken)) return false;
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const session = await client.query<{ account_id: string }>(
+        `SELECT account_id FROM passkey_management_sessions
+          WHERE cookie_digest = $1 AND csrf_digest = $2 AND expires_at > now()
+          FOR UPDATE`,
+        [digest(cookieToken), digest(csrfToken)],
+      );
+      const accountId = session.rows[0]?.account_id;
+      if (!accountId) {
+        await client.query("ROLLBACK");
+        return false;
+      }
+      const deleted = await client.query<{ id: string }>(
+        `DELETE FROM account_passkeys WHERE id = $1 AND account_id = $2 RETURNING id`,
+        [passkeyId, accountId],
+      );
+      if (!deleted.rows.length) {
+        await client.query("ROLLBACK");
+        return false;
+      }
+      await queuePasskeySecurityEmail(client, accountId, "passkey_removed");
+      await client.query("COMMIT");
+      return true;
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   private async getManagementSession(cookieToken: string, csrfToken: string): Promise<{ accountId: string } | null> {
@@ -346,6 +373,16 @@ export class AccountPasskeyService {
     );
     return result.rows[0] ?? null;
   }
+}
+
+async function queuePasskeySecurityEmail(client: PoolClient, accountId: string, eventType: Extract<SecurityEmailEvent, "passkey_added" | "passkey_removed">): Promise<void> {
+  const result = await client.query(
+    `INSERT INTO account_security_email_outbox (account_id, recipient_email, event_type)
+     SELECT id, email, $2 FROM accounts
+      WHERE id = $1 AND email_verified_at IS NOT NULL AND deleted_at IS NULL`,
+    [accountId, eventType],
+  );
+  if (result.rowCount !== 1) throw new Error("No se pudo registrar el aviso de seguridad.");
 }
 
 function toWebAuthnCredential(credential: StoredCredential): WebAuthnCredential {

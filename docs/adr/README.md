@@ -46,6 +46,7 @@ Los ADR registran por qué se eligió una opción y qué costes trae. Un ADR ace
 | [0040](0040-borrado-definitivo-de-cuenta.md) | Borrado definitivo en servidor con autenticación reciente | Aceptada; API/cliente iniciales, ensayo VPS pendiente |
 | [0041](0041-interrupcion-aislada-de-terminal-windows.md) | Señales de interrupción aisladas por sesión ConPTY | Aceptada; el prototipo seguro sigue pendiente |
 | [0042](0042-passkeys-para-cuentas.md) | Passkeys passwordless con TOTP adicional y gestión web acotada | Aceptada; primera implementación local, despliegue pendiente |
+| [0043](0043-avisos-de-cambios-passkey.md) | Alta/baja de passkey notificadas mediante outbox transaccional | Aceptada; integración local, entrega Resend pendiente |
 
 ## Crear un ADR
 

@@ -152,6 +152,34 @@ describePostgres("integración real de PostgreSQL para rate limits", () => {
     await expect(deliverSecurityEmailBatch(isolatedPool, failingSender)).resolves.toEqual({ delivered: 0, deferred: 0 });
   });
 
+  it("acepta y entrega notificaciones de alta y baja de passkeys por la cola común", async () => {
+    const accountId = randomUUID();
+    const email = `${accountId}@example.test`;
+    await isolatedPool.query(
+      "INSERT INTO accounts (id, email, display_name, email_verified_at) VALUES ($1, $2, 'Passkeys', now())",
+      [accountId, email],
+    );
+    await isolatedPool.query(
+      `INSERT INTO account_security_email_outbox (account_id, recipient_email, event_type)
+       VALUES ($1, $2, 'passkey_added'), ($1, $2, 'passkey_removed')`,
+      [accountId, email],
+    );
+    const events: string[] = [];
+    const sender = { sendSecurityNotice: async (input: { email: string; eventType: string }) => {
+      expect(input.email).toBe(email);
+      events.push(input.eventType);
+    } };
+
+    await expect(deliverSecurityEmailBatch(isolatedPool, sender)).resolves.toEqual({ delivered: 2, deferred: 0 });
+    expect(events.sort()).toEqual(["passkey_added", "passkey_removed"]);
+    const rows = await isolatedPool.query<{ event_type: string; delivered_at: Date | null }>(
+      "SELECT event_type, delivered_at FROM account_security_email_outbox WHERE account_id = $1 ORDER BY event_type",
+      [accountId],
+    );
+    expect(rows.rows).toHaveLength(2);
+    expect(rows.rows.every((row) => row.delivered_at instanceof Date)).toBe(true);
+  });
+
   it("exige login reciente y borra en cascada solo la cuenta confirmada", async () => {
     const accountId = randomUUID();
     const otherAccountId = randomUUID();

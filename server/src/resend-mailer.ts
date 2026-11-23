@@ -84,6 +84,10 @@ function securityNoticeMessage(eventType: SecurityEmailEvent): { subject: string
       return { subject: "Se renovaron los códigos de recuperación de Laural", body: "Se renovaron los códigos de recuperación de tu cuenta de Laural." };
     case "totp_disabled":
       return { subject: "Se desactivó la verificación en dos pasos de Laural", body: "Se desactivó la verificación TOTP en tu cuenta de Laural." };
+    case "passkey_added":
+      return { subject: "Se añadió una passkey a tu cuenta de Laural", body: "Se añadió una passkey para iniciar sesión en tu cuenta de Laural." };
+    case "passkey_removed":
+      return { subject: "Se eliminó una passkey de tu cuenta de Laural", body: "Se eliminó una passkey de tu cuenta de Laural." };
   }
 }
 

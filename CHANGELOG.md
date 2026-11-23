@@ -2,6 +2,7 @@
 
 ## Sin publicar
 
+- Las altas y bajas de passkeys ahora encolan un aviso en la misma transacción que modifica la credencial. Resend recibe mensajes genéricos sin nombres, identificadores ni datos del dispositivo; la migración 009 amplía los tipos permitidos del outbox existente.
 - Añadido login passwordless con passkeys WebAuthn, conservando TOTP como segundo factor cuando la cuenta lo tenga activo. Configuración permite abrir en el navegador la gestión segura para registrar y revocar hasta diez passkeys; requiere sesión reciente para cambios. Las passkeys están apagadas por defecto y requieren configurar dominio/RP ID y aplicar la migración 008. Pendientes avisos por correo de altas/bajas, validación Windows/VPS y Google OAuth.
 - El menú de opciones del perfil se despliega hacia el área principal para que sus elementos no queden fuera del borde izquierdo; añade desplazamiento cuando falta altura.
 - El agente solicita aprobación antes de abrir `diskpart` de forma interactiva o pasarle scripts y operaciones; solo deja pasar la ayuda explícita.
