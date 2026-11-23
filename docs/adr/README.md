@@ -50,6 +50,7 @@ Los ADR registran por qué se eligió una opción y qué costes trae. Un ADR ace
 | [0044](0044-limites-de-mfa-entre-flujos.md) | Limitar desafíos MFA entre flujos con cuenta vinculada y huella HMAC | Aceptada; CI con PostgreSQL en verde, despliegue VPS pendiente |
 | [0045](0045-historial-recuperable-de-preferencias-en-nube.md) | Historial recuperable, paginado y borrable de snapshots de preferencias | Aceptada; implementación local, validación PostgreSQL/VPS pendiente |
 | [0046](0046-estado-publico-por-componente.md) | Estado público manual para API, sincronización y correo | Aceptada; página y contrato local listos, despliegue VPS pendiente |
+| [0047](0047-login-con-google-oauth.md) | Login Google OIDC con state, nonce, PKCE y MFA preservado | Aceptada; integración local detrás de flag, credenciales y despliegue pendientes |
 
 ## Crear un ADR
 

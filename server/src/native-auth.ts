@@ -25,6 +25,7 @@ export type SessionGrant = { token: string; expiresAt: string };
 export interface NativeAuthStore {
   createFlow(input: NativeFlowParameters & { cookieDigest: string; csrfDigest: string }): Promise<void>;
   isFlowActive(cookieDigest: string, csrfDigest: string): Promise<boolean>;
+  rotateFlowCsrf?(cookieDigest: string, csrfDigest: string, nextCsrfDigest: string): Promise<boolean>;
   findLoginCandidate(cookieDigest: string, csrfDigest: string, email: string): Promise<NativeLoginCandidate | null>;
   findPasskeyLoginCandidate?(cookieDigest: string, csrfDigest: string, accountId: string): Promise<NativeLoginCandidate | null>;
   failLogin(cookieDigest: string, csrfDigest: string): Promise<void>;
@@ -43,6 +44,7 @@ export type NativeFlowCredentials = { cookieToken: string; csrfToken: string };
 export type NativeLoginInput = { cookieToken: string; csrfToken: string; email: string; password: string };
 export type NativeMfaLoginInput = { cookieToken: string; csrfToken: string; email: string; proof: string };
 export type LoginResult = { kind: "authorized"; redirectUri: string; state: string; code: string } | { kind: "mfa_required"; email?: string };
+export type FederatedLoginResult = { csrfToken: string; login: LoginResult };
 
 export interface MfaLoginVerifier {
   completeMfaLogin(input: { cookieDigest: string; csrfDigest: string; email: string; proof: string; codeDigest: string }): Promise<AuthorizationRedirect | null>;
@@ -150,6 +152,34 @@ export class NativeAuthService {
       codeDigest: sha256(code),
     });
     return redirect ? { kind: "authorized", ...redirect, code } : null;
+  }
+
+  async completeFederatedLogin(input: { cookieDigest: string; csrfDigest: string; accountId: string }): Promise<FederatedLoginResult | null> {
+    if (!/^[a-f0-9]{64}$/.test(input.cookieDigest) || !/^[a-f0-9]{64}$/.test(input.csrfDigest)
+      || !this.store.rotateFlowCsrf || !this.store.findPasskeyLoginCandidate) return null;
+    const csrfToken = randomBytes(32).toString("base64url");
+    const csrfDigest = sha256(csrfToken);
+    if (!await this.store.rotateFlowCsrf(input.cookieDigest, input.csrfDigest, csrfDigest)) return null;
+    const candidate = await this.store.findPasskeyLoginCandidate(input.cookieDigest, csrfDigest, input.accountId);
+    if (!candidate?.accountId) return null;
+    if (candidate.mfaEnabled) {
+      const accepted = await this.store.requireMfa({
+        flowId: candidate.flowId,
+        cookieDigest: input.cookieDigest,
+        csrfDigest,
+        accountId: candidate.accountId,
+      });
+      return accepted ? { csrfToken, login: { kind: "mfa_required", ...(candidate.email ? { email: candidate.email } : {}) } } : null;
+    }
+    const code = randomBytes(32).toString("base64url");
+    const redirect = await this.store.completeLogin({
+      flowId: candidate.flowId,
+      cookieDigest: input.cookieDigest,
+      csrfDigest,
+      accountId: candidate.accountId,
+      codeDigest: sha256(code),
+    });
+    return redirect ? { csrfToken, login: { kind: "authorized", ...redirect, code } } : null;
   }
 
   async failPasskeyLogin(cookieToken: string, csrfToken: string): Promise<void> {

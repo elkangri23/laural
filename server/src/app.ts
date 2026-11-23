@@ -8,8 +8,9 @@ import { normalizeEmail, type EmailAuthService } from "./email-auth.js";
 import type { AccountMfaService } from "./account-mfa.js";
 import type { AccountDeletionService } from "./account-deletion.js";
 import { AccountPasskeyService, type PasskeySummary } from "./account-passkeys.js";
-import { NativeAuthService, validateNativeFlowParameters, type LoginResult } from "./native-auth.js";
+import { NativeAuthService, sha256, validateNativeFlowParameters, type LoginResult } from "./native-auth.js";
 import type { RequestRateLimiter } from "./request-rate-limit.js";
+import type { GoogleOAuthService } from "./google-oauth.js";
 import snapshotSchema from "../../shared/preference-snapshot-v1.schema.json" with { type: "json" };
 
 const BODY_LIMIT = 256 * 1024;
@@ -29,6 +30,7 @@ export type AppDependencies = {
   accountMfa?: AccountMfaService;
   accountDeletion?: AccountDeletionService;
   accountPasskeys?: AccountPasskeyService;
+  googleOAuth?: GoogleOAuthService;
   requestRateLimiter: RequestRateLimiter;
 };
 
@@ -44,6 +46,7 @@ type NativePasswordResetBody = EmailBody & { csrf: string };
 type PasswordResetBody = EmailPinBody & { password: string };
 type NativePasswordResetConfirmBody = NativePinBody & { password: string };
 type NativeStartQuery = { redirect_uri: string; state: string; code_challenge: string; code_challenge_method: "S256" };
+type GoogleCallbackQuery = { state?: string; code?: string; error?: string };
 type NativeExchangeBody = { code: string; codeVerifier: string };
 type PasskeyLoginBody = { csrf: string; response?: unknown };
 type PasskeyRegistrationBody = { csrf: string; displayName: string };
@@ -81,6 +84,7 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
   const accountMfa = dependencies.accountMfa;
   const accountDeletion = dependencies.accountDeletion;
   const accountPasskeys = dependencies.accountPasskeys;
+  const googleOAuth = dependencies.googleOAuth;
 
   app.get("/v1/auth/passkeys/status", { preHandler: limited(rateLimit, "passkey-status", 30, 60) }, async (request, reply) => {
     if (!await dependencies.authenticate(request.headers.authorization)) return reply.code(401).send({ error: "unauthorized" });
@@ -168,8 +172,56 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
       }
       const credentials = await nativeAuth.startFlow({ redirectUri, state, codeChallenge });
       reply.header("Set-Cookie", flowCookie(credentials.cookieToken));
-      return reply.type("text/html; charset=utf-8").send(renderAuthPage(credentials.csrfToken, "", Boolean(accountPasskeys)));
+      return reply.type("text/html; charset=utf-8").send(renderAuthPage(credentials.csrfToken, "", Boolean(accountPasskeys), Boolean(googleOAuth)));
     });
+
+    if (googleOAuth) {
+      app.post<{ Body: { csrf: string } }>("/auth/native/google/start", {
+        preHandler: limited(rateLimit, "google-oauth-start", 10, 60),
+        schema: { body: { type: "object", additionalProperties: false, required: ["csrf"], properties: { csrf: { type: "string", pattern: "^[A-Za-z0-9_-]{43}$" } } } },
+      }, async (request, reply) => {
+        const cookie = readCookie(request.headers.cookie, FLOW_COOKIE);
+        if (!await nativeAuth.isBrowserFlowValid(cookie, request.body.csrf)) {
+          return reply.code(400).type("text/html; charset=utf-8").send(renderAuthPage("", "La sesión de autenticación caducó. Vuelve a iniciar el proceso en Laural."));
+        }
+        const url = await googleOAuth.start(sha256(cookie!), sha256(request.body.csrf));
+        return reply.redirect(url, 303);
+      });
+
+      app.get<{ Querystring: GoogleCallbackQuery }>("/auth/google/callback", {
+        preHandler: limited(rateLimit, "google-oauth-callback", 20, 60),
+        schema: { querystring: {
+          type: "object", additionalProperties: false,
+          properties: {
+            state: { type: "string", pattern: "^[A-Za-z0-9_-]{43}$" },
+            code: { type: "string", minLength: 1, maxLength: 2048 },
+            error: { type: "string", maxLength: 128 },
+          },
+        } },
+      }, async (request, reply) => {
+        const { state, code, error } = request.query;
+        if (!state) {
+          return reply.code(400).type("text/html; charset=utf-8").send(renderAuthPage("", "No se pudo completar el acceso con Google. Vuelve a iniciar el proceso en Laural."));
+        }
+        if (Boolean(code) === Boolean(error)) {
+          await googleOAuth.cancel(state);
+          return reply.code(400).type("text/html; charset=utf-8").send(renderAuthPage("", "No se pudo completar el acceso con Google. Vuelve a iniciar el proceso en Laural."));
+        }
+        if (error) await googleOAuth.cancel(state);
+        const flow = code ? await googleOAuth.finish(state, code) : null;
+        if (!flow) {
+          return reply.code(400).type("text/html; charset=utf-8").send(renderAuthPage("", "No se pudo completar el acceso con Google. Vuelve a iniciar el proceso en Laural."));
+        }
+        const result = await nativeAuth.completeFederatedLogin(flow);
+        if (!result) {
+          return reply.code(400).type("text/html; charset=utf-8").send(renderAuthPage("", "No se pudo completar el acceso con Google. Vuelve a iniciar el proceso en Laural."));
+        }
+        if (result.login.kind === "mfa_required") {
+          return reply.type("text/html; charset=utf-8").send(renderMfaPage(result.csrfToken, result.login.email ?? "", "Verifica tu segundo factor para continuar."));
+        }
+        return redirectNativeLogin(reply, result.login);
+      });
+    }
 
     app.get("/auth.css", async (_request, reply) => {
       const stylesheet = await readFile(new URL("../web/auth.css", import.meta.url), "utf8");
@@ -752,7 +804,7 @@ function formSchema(properties: Record<string, unknown>, required: string[]): Re
   return { type: "object", additionalProperties: false, required, properties };
 }
 
-function renderAuthPage(csrfToken: string, notice = "", passkeysEnabled = false): string {
+function renderAuthPage(csrfToken: string, notice = "", passkeysEnabled = false, googleEnabled = false): string {
   const csrf = escapeHtml(csrfToken);
   const safeNotice = escapeHtml(notice);
   return `<!doctype html>
@@ -761,6 +813,7 @@ function renderAuthPage(csrfToken: string, notice = "", passkeysEnabled = false)
 <body><div class="shell"><header class="brand"><div class="mark" aria-hidden="true">L</div><div><div class="brand-name">Laural</div><div class="brand-caption">Cuenta y sincronización</div></div></header>
 <main><h1>Inicia sesión en Laural</h1><p class="intro">Usa tu cuenta para continuar. La contraseña se introduce únicamente en esta página segura del navegador.</p>
 <p class="notice" role="status">${safeNotice}</p>
+${googleEnabled ? `<form action="/auth/native/google/start" method="post"><input type="hidden" name="csrf" value="${csrf}"><button type="submit">Continuar con Google</button></form>` : ""}
 ${passkeysEnabled ? `<p class="notice" role="status" data-passkey-notice></p><button type="button" data-passkey-login>Iniciar sesión con passkey</button>
 <form action="/auth/native/login/mfa" method="post" data-passkey-mfa hidden><input type="hidden" name="csrf" value="${csrf}">
 <label>Correo electrónico<input name="email" type="email" autocomplete="username" required maxlength="320"></label>

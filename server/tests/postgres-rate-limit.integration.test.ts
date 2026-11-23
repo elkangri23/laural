@@ -8,6 +8,8 @@ import { AccountMfaService } from "../src/account-mfa.js";
 import { EmailAuthService } from "../src/email-auth.js";
 import { applyMigrations, MIGRATION_FILES } from "../src/migration-runner.js";
 import { NativeAuthService } from "../src/native-auth.js";
+import { GoogleOAuthService } from "../src/google-oauth.js";
+import type { OAuth2Client } from "google-auth-library";
 import { PostgresEmailAuthStore } from "../src/postgres-email-auth-store.js";
 import { PostgresNativeAuthStore } from "../src/postgres-native-auth-store.js";
 import { PostgresPreferenceStore } from "../src/postgres-store.js";
@@ -70,6 +72,52 @@ describePostgres("integración real de PostgreSQL para rate limits", () => {
     expect(stored.rows).toHaveLength(2);
     expect(stored.rows.every(({ key_digest }) => /^[a-f0-9]{64}$/.test(key_digest))).toBe(true);
     expect(stored.rows.every(({ request_count }) => request_count >= 1)).toBe(true);
+  });
+
+  it("vincula Google por sub verificado y consume cada transacción una sola vez", async () => {
+    let nonce = "";
+    const oauthClient = {
+      generateCodeVerifierAsync: async () => ({ codeVerifier: "v".repeat(43), codeChallenge: "c".repeat(43) }),
+      generateAuthUrl: (options: { nonce: string; state: string }) => { nonce = options.nonce; return `https://accounts.google.com/auth?state=${options.state}`; },
+      getToken: async () => ({ tokens: { id_token: "signed-test-token" } }),
+      verifyIdToken: async () => ({ getPayload: () => ({
+        sub: "integration-google-sub", email: "google@example.test", email_verified: true, nonce,
+      }) }),
+    } as unknown as OAuth2Client;
+    const google = new GoogleOAuthService(isolatedPool, {
+      clientId: "client.apps.googleusercontent.com", clientSecret: "test-secret",
+      redirectUri: "https://sync.example.test/auth/google/callback",
+    }, oauthClient);
+    const createFlow = async (index: number) => {
+      const cookieDigest = createHash("sha256").update(`cookie-${index}`).digest("hex");
+      const csrfDigest = createHash("sha256").update(`csrf-${index}`).digest("hex");
+      const store = new PostgresNativeAuthStore(isolatedPool);
+      await store.createFlow({
+        cookieDigest, csrfDigest, redirectUri: "http://127.0.0.1:49152/callback",
+        state: "s".repeat(43), codeChallenge: "c".repeat(43),
+      });
+      return { cookieDigest, csrfDigest };
+    };
+    const firstFlow = await createFlow(1);
+    const firstUrl = await google.start(firstFlow.cookieDigest, firstFlow.csrfDigest);
+    const firstState = new URL(firstUrl).searchParams.get("state")!;
+    const firstLogin = await google.finish(firstState, "authorization-code");
+    expect(firstLogin).toMatchObject({ ...firstFlow });
+    expect(firstLogin?.accountId).toBeTruthy();
+    expect(await google.finish(firstState, "authorization-code")).toBeNull();
+
+    const secondFlow = await createFlow(2);
+    const secondUrl = await google.start(secondFlow.cookieDigest, secondFlow.csrfDigest);
+    const secondState = new URL(secondUrl).searchParams.get("state")!;
+    const secondLogin = await google.finish(secondState, "authorization-code");
+    expect(secondLogin?.accountId).toBe(firstLogin?.accountId);
+    const identityCount = await isolatedPool.query(
+      `SELECT count(*)::int AS count FROM account_identities WHERE provider = 'google' AND subject = $1`,
+      ["integration-google-sub"],
+    );
+    expect(identityCount.rows[0]?.count).toBe(1);
+    const temporaryCount = await isolatedPool.query("SELECT count(*)::int AS count FROM google_oauth_transactions");
+    expect(temporaryCount.rows[0]?.count).toBe(0);
   });
 
   it("purga como máximo 1.000 contadores expirados por lote", async () => {

@@ -16,6 +16,7 @@
 - Doce temas de color y modos claro/oscuro, con preferencias guardadas localmente.
 - Chat contextual con respuesta incremental y Markdown formateado (listas, tablas, enlaces y código), historial local borrable, vista previa del contexto, salida reciente de terminal, proyecto abierto y archivos elegidos.
 - Perfiles para Ollama, LM Studio, FreeLLMAPI y endpoints compatibles con OpenAI.
+- Cuenta opcional para sincronizar preferencias: email, passkeys y TOTP integrados; el servicio incorpora Google OIDC/PKCE detrás de flag. Las credenciales reales de Google y el VPS todavía requieren configuración y validación.
 - Agente que propone comandos y cambios de archivos para revisión. Las políticas permiten confirmar comandos, aplicar reglas o activar el modo automático; se puede cancelar la planificación, detener comandos en ejecución y las ediciones de archivos requieren aprobación explícita.
 - Icono y favicon propios; la compilación para Windows se puede generar desde GitHub Actions al publicar una etiqueta `v*`.
 - Actualizaciones Windows firmadas desde GitHub, con instalación manual o automática y versión visible en Configuración.

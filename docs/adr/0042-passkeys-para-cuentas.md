@@ -16,14 +16,14 @@ El plan de sincronización contempla passkeys además de contraseña y TOTP. El 
 - La gestión abre un enlace opaco de un solo uso con vencimiento de dos minutos, transmitido en el fragmento URL para que no aparezca en peticiones ni registros de servidor. Solo se emite si la sesión bearer tiene menos de diez minutos. El canje crea una sesión web de gestión de cinco minutos con cookie `HttpOnly`, `Secure`, `SameSite=Strict`, token CSRF separado, CSP estricta y límites de solicitudes.
 - Permitir añadir y revocar credenciales. Serializar la inserción por cuenta para mantener el límite de diez incluso con solicitudes concurrentes.
 - Mantener passkeys desactivadas por defecto y exigir `EMAIL_AUTH_ENABLED`, `PASSKEY_RP_ID` y `PASSKEY_ORIGIN` HTTPS exactos. No habilitar el VPS hasta aplicar migraciones y comprobar el dominio autenticador.
-- Google OAuth continúa pendiente y se implementará como ADR separado, con credenciales y callback propios.
+- Google OAuth se decidió después en [ADR-0047](0047-login-con-google-oauth.md); sus credenciales y callback HTTPS son independientes.
 
 ## Consecuencias
 
 - Las passkeys dan acceso passwordless con verificación de usuario; TOTP activo conserva el segundo paso acordado.
 - Los navegadores y autenticadores deben soportar WebAuthn discoverable credentials y el dominio de producción debe coincidir con el RP ID.
 - La gestión depende de un inicio de sesión reciente; hay que volver a iniciar sesión antes de modificar passkeys si la sesión superó diez minutos.
-- Los avisos por correo de altas y bajas usan la cola transaccional decidida en [ADR-0043](0043-avisos-de-cambios-passkey.md). Quedan pendientes Google OAuth, pruebas end-to-end en Windows/VPS, migraciones de producción y validación real de correo/operación.
+- Los avisos por correo de altas y bajas usan la cola transaccional decidida en [ADR-0043](0043-avisos-de-cambios-passkey.md). Quedan pendientes pruebas end-to-end de autenticadores/Google, validación Windows/VPS, migraciones de producción y correo/operación reales.
 
 ## Referencias
 

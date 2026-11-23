@@ -28,8 +28,9 @@ Los casos describen el comportamiento esperado del producto. Los estados disting
 | UC-25 | Restablecer contraseña mediante PIN de correo | Titular de cuenta | Implementado localmente; despliegue Resend/VPS pendiente |
 | UC-26 | Recibir avisos por cambios de MFA | Titular de cuenta | Outbox transaccional e integración Resend iniciales; entrega VPS pendiente |
 | UC-27 | Eliminar la cuenta de sincronización | Titular de cuenta | API y cliente iniciales; ensayo Windows/VPS pendiente |
+| UC-28 | Registrarse o iniciar sesión con Google | Usuario | Implementación local detrás de flag; credenciales y prueba real pendientes |
 
-Los casos UC-17 y UC-18 están disponibles en Configuración en su implementación inicial. UC-19 y UC-20 tienen un cliente inicial, pero requieren un servicio desplegado para su validación real. UC-21 permite usar códigos de recuperación TOTP; la revisión administrativa tras perder todos los factores sigue pendiente. UC-22 tiene una implementación local que requiere operación del VPS. UC-25 implementa restablecimiento de contraseña, independiente de recuperar factores. Los flujos de sincronización están detallados en [portabilidad y sincronización](sincronizacion-preferencias.md).
+Los casos UC-17 y UC-18 están disponibles en Configuración en su implementación inicial. UC-19 y UC-20 tienen un cliente inicial, pero requieren un servicio desplegado para su validación real. UC-21 permite usar códigos de recuperación TOTP; la revisión administrativa tras perder todos los factores sigue pendiente. UC-22 tiene una implementación local que requiere operación del VPS. UC-25 implementa restablecimiento de contraseña, independiente de recuperar factores. Los flujos de sincronización están detallados en [portabilidad y sincronización](sincronizacion-preferencias.md). El acceso Google se especifica en [UC-28](google-oauth.md).
 
 ## UC-01 — Abrir terminal
 

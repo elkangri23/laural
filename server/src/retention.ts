@@ -4,6 +4,7 @@ const RETENTION_POLICIES = [
   "DELETE FROM email_verification_codes WHERE created_at < now() - interval '15 minutes'",
   "DELETE FROM account_password_reset_codes WHERE created_at < now() - interval '15 minutes'",
   "DELETE FROM native_authorization_codes WHERE created_at < now() - interval '24 hours'",
+  "DELETE FROM google_oauth_transactions WHERE expires_at <= now() OR created_at < now() - interval '24 hours'",
   "DELETE FROM native_auth_flows WHERE created_at < now() - interval '24 hours'",
   "DELETE FROM passkey_management_tickets WHERE expires_at <= now() OR consumed_at IS NOT NULL",
   "DELETE FROM passkey_management_sessions WHERE expires_at <= now()",

@@ -29,6 +29,16 @@ export class PostgresNativeAuthStore implements NativeAuthStore {
     return result.rows.length > 0;
   }
 
+  async rotateFlowCsrf(cookieDigest: string, csrfDigest: string, nextCsrfDigest: string): Promise<boolean> {
+    const result = await this.pool.query(
+      `UPDATE native_auth_flows SET csrf_digest = $3
+        WHERE cookie_digest = $1 AND csrf_digest = $2
+          AND consumed_at IS NULL AND expires_at > now() AND attempts < 5`,
+      [cookieDigest, csrfDigest, nextCsrfDigest],
+    );
+    return result.rowCount === 1;
+  }
+
   async findLoginCandidate(cookieDigest: string, csrfDigest: string, email: string): Promise<NativeLoginCandidate | null> {
     const flowResult = await this.pool.query<{
       id: string;

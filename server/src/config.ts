@@ -19,6 +19,25 @@ export type PasskeyConfig = {
   origin: string;
 };
 
+export type GoogleOAuthConfig = { clientId: string; clientSecret: string; redirectUri: string };
+
+export function readGoogleOAuthConfig(environment: NodeJS.ProcessEnv, emailAuthEnabled: boolean): GoogleOAuthConfig | null {
+  if (environment.GOOGLE_OAUTH_ENABLED?.trim().toLowerCase() !== "true") return null;
+  if (!emailAuthEnabled) throw new Error("GOOGLE_OAUTH_ENABLED requiere EMAIL_AUTH_ENABLED=true.");
+  const clientId = environment.GOOGLE_OAUTH_CLIENT_ID?.trim();
+  const clientSecret = environment.GOOGLE_OAUTH_CLIENT_SECRET?.trim();
+  const redirectUri = environment.GOOGLE_OAUTH_REDIRECT_URI?.trim();
+  if (!clientId || clientId.length > 255 || !clientId.endsWith(".apps.googleusercontent.com")) throw new Error("GOOGLE_OAUTH_CLIENT_ID no es válido.");
+  if (!clientSecret || clientSecret.length > 512 || /[\r\n]/.test(clientSecret)) throw new Error("GOOGLE_OAUTH_CLIENT_SECRET no es válido.");
+  let redirect: URL;
+  try { redirect = new URL(redirectUri ?? ""); } catch { throw new Error("GOOGLE_OAUTH_REDIRECT_URI debe ser HTTPS."); }
+  if (redirect.protocol !== "https:" || redirect.pathname !== "/auth/google/callback"
+    || redirect.username || redirect.password || redirect.search || redirect.hash || redirect.href !== redirectUri) {
+    throw new Error("GOOGLE_OAUTH_REDIRECT_URI debe ser una URL HTTPS exacta terminada en /auth/google/callback.");
+  }
+  return { clientId, clientSecret, redirectUri: redirect.href };
+}
+
 export function readConfig(environment: NodeJS.ProcessEnv): ServiceConfig {
   const databaseUrl = environment.DATABASE_URL?.trim();
   const host = environment.HOST?.trim() || "127.0.0.1";

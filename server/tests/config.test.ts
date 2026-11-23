@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readConfig, readEmailAuthConfig, readPasskeyConfig } from "../src/config.js";
+import { readConfig, readEmailAuthConfig, readGoogleOAuthConfig, readPasskeyConfig } from "../src/config.js";
 
 describe("configuración del servicio", () => {
   it("usa localhost y el puerto predeterminado", () => {
@@ -36,6 +36,21 @@ describe("configuración del servicio", () => {
     expect(() => readPasskeyConfig(valid, false)).toThrow("EMAIL_AUTH_ENABLED");
     expect(() => readPasskeyConfig({ ...valid, PASSKEY_ORIGIN: "https://attacker.test" }, true)).toThrow("coincidir");
     expect(() => readPasskeyConfig({ ...valid, PASSKEY_ORIGIN: "http://sync.example.test" }, true)).toThrow("HTTPS");
+  });
+
+  it("mantiene Google OAuth apagado y valida flag, cuenta y callback HTTPS exacto", () => {
+    expect(readGoogleOAuthConfig({} as NodeJS.ProcessEnv, false)).toBeNull();
+    expect(() => readGoogleOAuthConfig({ GOOGLE_OAUTH_ENABLED: "true" } as NodeJS.ProcessEnv, false)).toThrow("EMAIL_AUTH_ENABLED");
+    const valid = {
+      GOOGLE_OAUTH_ENABLED: "true", GOOGLE_OAUTH_CLIENT_ID: "client.apps.googleusercontent.com",
+      GOOGLE_OAUTH_CLIENT_SECRET: "secret", GOOGLE_OAUTH_REDIRECT_URI: "https://sync.example.test/auth/google/callback",
+    } as NodeJS.ProcessEnv;
+    expect(readGoogleOAuthConfig(valid, true)).toEqual({
+      clientId: "client.apps.googleusercontent.com", clientSecret: "secret",
+      redirectUri: "https://sync.example.test/auth/google/callback",
+    });
+    expect(() => readGoogleOAuthConfig({ ...valid, GOOGLE_OAUTH_REDIRECT_URI: "http://sync.example.test/auth/google/callback" }, true)).toThrow("HTTPS");
+    expect(() => readGoogleOAuthConfig({ ...valid, GOOGLE_OAUTH_REDIRECT_URI: "https://attacker.test/auth/google/callback?next=x" }, true)).toThrow("exacta");
   });
 
   it("activa correo solo con claves, remitente sin controles y parámetros TOTP válidos", () => {

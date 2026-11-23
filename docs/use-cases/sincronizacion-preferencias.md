@@ -1,6 +1,6 @@
 # Casos de uso: portabilidad y sincronización
 
-- **Estado:** UC-17/18 están implementados localmente; login Tauri, revocación de sesiones y cliente manual/automático también. Pendientes pruebas de reconexión, Google OAuth y validación VPS; historial cloud paginado/restaurable/borrable implementado localmente. TOTP, challenge, códigos y cola transaccional de avisos están integrados localmente; UC-21 conserva pendiente la recuperación administrativa tras perder todos los factores. UC-22 tiene sitio/contrato local estático, pero no comprobaciones de salud por componente ni operación VPS. UC-25 implementa restablecimiento de contraseña con PIN, aún sin despliegue VPS/Resend.
+- **Estado:** UC-17/18 están implementados localmente; login Tauri, Google OIDC/PKCE detrás de flag, revocación de sesiones y cliente manual/automático también. Pendientes pruebas reales de reconexión, credenciales Google y validación VPS; historial cloud paginado/restaurable/borrable implementado localmente. TOTP, challenge, códigos y cola transaccional de avisos están integrados localmente; UC-21 conserva pendiente la recuperación administrativa tras perder todos los factores. UC-22 tiene sitio/contrato local estático, pero no comprobaciones de salud por componente ni operación VPS. UC-25 implementa restablecimiento de contraseña con PIN, aún sin despliegue VPS/Resend.
 - **Especificación:** [plan de sincronización](../plans/sincronizacion-preferencias.md).
 - **Diseño técnico:** [diseño formal](../designs/sincronizacion-preferencias-y-portabilidad.md).
 

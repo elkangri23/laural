@@ -13,6 +13,7 @@ export const MIGRATION_FILES = [
   "008_account_passkeys.sql",
   "009_passkey_security_notices.sql",
   "010_preference_snapshot_history.sql",
+  "011_google_oauth.sql",
 ] as const;
 
 export async function applyMigrations(client: PoolClient): Promise<void> {

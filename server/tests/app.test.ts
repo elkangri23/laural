@@ -9,6 +9,7 @@ import type { AccountMfaService } from "../src/account-mfa.js";
 import type { AccountDeletionService } from "../src/account-deletion.js";
 import type { AccountPasskeyService } from "../src/account-passkeys.js";
 import type { RequestRateLimiter } from "../src/request-rate-limit.js";
+import type { GoogleOAuthService } from "../src/google-oauth.js";
 
 const snapshot: PreferenceSnapshot = {
   schemaVersion: 1,
@@ -65,7 +66,7 @@ class MemoryStore implements PreferenceStore {
 }
 
 const instances: Array<ReturnType<typeof createApp>> = [];
-function createTestApp(options: { store?: PreferenceStore; checkReadiness?: () => Promise<void>; emailAuth?: EmailAuthService; nativeAuth?: NativeAuthService; accountMfa?: AccountMfaService; accountDeletion?: AccountDeletionService; accountPasskeys?: AccountPasskeyService; requestRateLimiter?: RequestRateLimiter; revokeSession?: (accountId: string, authorization: string | undefined) => Promise<boolean>; listAccountSessions?: (accountId: string, authorization: string | undefined) => Promise<{ id: string; createdAt: string; expiresAt: string; current: boolean }[]>; revokeAccountSession?: (accountId: string, authorization: string | undefined, sessionId: string) => Promise<boolean>; revokeOtherSessions?: (accountId: string, authorization: string | undefined) => Promise<number> } = {}): ReturnType<typeof createApp> {
+function createTestApp(options: { store?: PreferenceStore; checkReadiness?: () => Promise<void>; emailAuth?: EmailAuthService; nativeAuth?: NativeAuthService; accountMfa?: AccountMfaService; accountDeletion?: AccountDeletionService; accountPasskeys?: AccountPasskeyService; googleOAuth?: GoogleOAuthService; requestRateLimiter?: RequestRateLimiter; revokeSession?: (accountId: string, authorization: string | undefined) => Promise<boolean>; listAccountSessions?: (accountId: string, authorization: string | undefined) => Promise<{ id: string; createdAt: string; expiresAt: string; current: boolean }[]>; revokeAccountSession?: (accountId: string, authorization: string | undefined, sessionId: string) => Promise<boolean>; revokeOtherSessions?: (accountId: string, authorization: string | undefined) => Promise<number> } = {}): ReturnType<typeof createApp> {
   const store = options.store ?? new MemoryStore();
   const requestRateLimiter = options.requestRateLimiter ?? new TestRateLimiter();
   const app = createApp({
@@ -85,6 +86,7 @@ function createTestApp(options: { store?: PreferenceStore; checkReadiness?: () =
     ...(options.accountMfa ? { accountMfa: options.accountMfa } : {}),
     ...(options.accountDeletion ? { accountDeletion: options.accountDeletion } : {}),
     ...(options.accountPasskeys ? { accountPasskeys: options.accountPasskeys } : {}),
+    ...(options.googleOAuth ? { googleOAuth: options.googleOAuth } : {}),
   });
   instances.push(app);
   return app;
@@ -532,6 +534,61 @@ describe("API de snapshots de preferencias", () => {
     expect(malformedLogin.body).not.toContain("valid password 2026");
     const invalidExchange = await app.inject({ method: "POST", url: "/v1/auth/native/exchange", payload: { code: "x".repeat(43), codeVerifier: "v".repeat(43) } });
     expect(invalidExchange.statusCode).toBe(400);
+  });
+
+  it("inicia Google desde un flujo válido y entrega el callback al estado nativo existente", async () => {
+    const hash = (value: string) => createHash("sha256").update(value).digest("hex");
+    const redirectUri = "http://127.0.0.1:49152/callback";
+    let cookieDigest = "";
+    let csrfDigest = "";
+    const oauth = {
+      start: vi.fn(async () => "https://accounts.google.com/o/oauth2/v2/auth?state=opaque"),
+      finish: vi.fn(async () => ({ cookieDigest, csrfDigest, accountId: "account-google" })),
+      cancel: vi.fn(async () => undefined),
+    } as unknown as GoogleOAuthService;
+    const nativeStore: NativeAuthStore = {
+      createFlow: async () => undefined,
+      isFlowActive: async () => true,
+      findLoginCandidate: async () => null,
+      findPasskeyLoginCandidate: async (_cookie, _csrf, accountId) => ({
+        flowId: "flow-google", redirectUri, state: "n".repeat(43), codeChallenge: "c".repeat(43),
+        accountId, email: "person@example.test", passwordHash: null, emailVerified: true, mfaEnabled: false,
+      }),
+      rotateFlowCsrf: async (_cookie, _csrf, next) => { expect(next).toHaveLength(64); return true; },
+      failLogin: async () => undefined,
+      requireMfa: async () => true,
+      completeLogin: async () => ({ redirectUri, state: "n".repeat(43) }),
+      exchangeCode: async () => null,
+    };
+    const emailAuth = new EmailAuthService({
+      createUnverifiedAccount: async () => null, createVerification: async () => null,
+      verifyEmail: async () => false, createPasswordReset: async () => null,
+      checkPasswordReset: async () => false, resetPassword: async () => false,
+    }, { sendVerification: async () => undefined, sendPasswordReset: async () => undefined }, "browser-test-pepper-long-enough-32-bytes");
+    const app = createTestApp({ emailAuth, nativeAuth: new NativeAuthService(nativeStore), googleOAuth: oauth });
+    const startQuery = new URLSearchParams({ redirect_uri: redirectUri, state: "s".repeat(43), code_challenge: "c".repeat(43), code_challenge_method: "S256" });
+    const page = await app.inject({ method: "GET", url: `/auth/native?${startQuery}` });
+    expect(page.body).toContain("Continuar con Google");
+    const cookie = page.headers["set-cookie"]!.split(";")[0]!;
+    const cookieToken = cookie.split("=")[1]!;
+    const csrf = page.body.match(/name="csrf" value="([^"]+)"/)?.[1] ?? "";
+    cookieDigest = hash(cookieToken);
+    csrfDigest = hash(csrf);
+    const start = await app.inject({
+      method: "POST", url: "/auth/native/google/start", headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+      payload: new URLSearchParams({ csrf }).toString(),
+    });
+    expect(start.statusCode).toBe(303);
+    expect(start.headers.location).toBe("https://accounts.google.com/o/oauth2/v2/auth?state=opaque");
+    expect(oauth.start).toHaveBeenCalledWith(cookieDigest, csrfDigest);
+
+    const callback = await app.inject({ method: "GET", url: `/auth/google/callback?${new URLSearchParams({ state: "g".repeat(43), code: "google-code" })}` });
+    expect(callback.statusCode).toBe(303);
+    expect(callback.headers.location).toContain("127.0.0.1:49152/callback");
+    expect(callback.headers.location).toContain("state=" + "n".repeat(43));
+    expect(oauth.finish).toHaveBeenCalledWith("g".repeat(43), "google-code");
+    const invalidStart = await app.inject({ method: "POST", url: "/auth/native/google/start", payload: { csrf: "x".repeat(43) } });
+    expect(invalidStart.statusCode).toBe(400);
   });
 
   it("valida la cookie y el CSRF en registro, reenvío y confirmación del navegador", async () => {

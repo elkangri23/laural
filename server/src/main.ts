@@ -3,7 +3,7 @@ import { createApp } from "./app.js";
 import { createAccountSessionLister, createAccountSessionRevoker, createOtherSessionsRevoker, createSessionAuthenticator, createSessionRevoker } from "./auth.js";
 import { AccountMfaService } from "./account-mfa.js";
 import { AccountDeletionService } from "./account-deletion.js";
-import { readConfig, readEmailAuthConfig, readPasskeyConfig } from "./config.js";
+import { readConfig, readEmailAuthConfig, readGoogleOAuthConfig, readPasskeyConfig } from "./config.js";
 import { EmailAuthService } from "./email-auth.js";
 import { PostgresEmailAuthStore } from "./postgres-email-auth-store.js";
 import { NativeAuthService } from "./native-auth.js";
@@ -14,10 +14,12 @@ import { AccountPasskeyService } from "./account-passkeys.js";
 import { cleanupExpiredRecords, RETENTION_INTERVAL_MS } from "./retention.js";
 import { ResendMailer } from "./resend-mailer.js";
 import { deliverSecurityEmailBatch } from "./security-email-outbox.js";
+import { GoogleOAuthService } from "./google-oauth.js";
 
 const config = readConfig(process.env);
 const emailAuthConfig = readEmailAuthConfig(process.env);
 const passkeyConfig = readPasskeyConfig(process.env, emailAuthConfig !== null);
+const googleOAuthConfig = readGoogleOAuthConfig(process.env, emailAuthConfig !== null);
 const pool = new pg.Pool({ connectionString: config.databaseUrl, max: 10, idleTimeoutMillis: 30_000 });
 const preferenceStore = new PostgresPreferenceStore(pool);
 const resendMailer = emailAuthConfig
@@ -37,6 +39,7 @@ const nativeAuth = emailAuthConfig && accountMfa
   ? new NativeAuthService(new PostgresNativeAuthStore(pool), accountMfa)
   : undefined;
 const accountPasskeys = passkeyConfig ? new AccountPasskeyService(pool, passkeyConfig) : undefined;
+const googleOAuth = googleOAuthConfig ? new GoogleOAuthService(pool, googleOAuthConfig) : undefined;
 const app = createApp({
   store: preferenceStore,
   authenticate: createSessionAuthenticator(pool),
@@ -50,6 +53,7 @@ const app = createApp({
   ...(nativeAuth ? { nativeAuth } : {}),
   ...(accountMfa ? { accountMfa } : {}),
   ...(accountPasskeys ? { accountPasskeys } : {}),
+  ...(googleOAuth ? { googleOAuth } : {}),
   accountDeletion: new AccountDeletionService(pool),
 });
 

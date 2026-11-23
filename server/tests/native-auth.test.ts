@@ -147,6 +147,26 @@ describe("autenticación nativa con navegador y PKCE", () => {
     expect(store.requireMfa).toHaveBeenCalledWith(expect.objectContaining({ accountId: "account-1" }));
   });
 
+  it("rota el CSRF tras Google y conserva el challenge TOTP de la cuenta", async () => {
+    const candidate: NativeLoginCandidate = {
+      flowId: "flow-google-mfa", redirectUri: parameters.redirectUri, state: parameters.state,
+      codeChallenge: parameters.codeChallenge, accountId: "account-google", passwordHash: null,
+      emailVerified: true, mfaEnabled: true, email: "user@example.test",
+    };
+    const store = fakeStore();
+    store.rotateFlowCsrf = vi.fn(async () => true);
+    store.findPasskeyLoginCandidate = vi.fn(async () => candidate);
+    const service = new NativeAuthService(store);
+    const result = await service.completeFederatedLogin({
+      cookieDigest: "a".repeat(64), csrfDigest: "b".repeat(64), accountId: "account-google",
+    });
+    expect(result?.login).toEqual({ kind: "mfa_required", email: "user@example.test" });
+    expect(result?.csrfToken).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(store.rotateFlowCsrf).toHaveBeenCalledWith("a".repeat(64), "b".repeat(64), sha256(result!.csrfToken));
+    expect(store.requireMfa).toHaveBeenCalledWith(expect.objectContaining({ accountId: "account-google" }));
+    expect(store.completeLogin).not.toHaveBeenCalled();
+  });
+
   it("intercambia el código una sola vez usando el verificador PKCE y crea token de sesión opaco", async () => {
     const store = fakeStore();
     const service = new NativeAuthService(store);

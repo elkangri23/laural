@@ -22,7 +22,7 @@ El plan de sincronización exige TOTP y códigos de recuperación antes de habil
 
 - Se añadieron vectores RFC, ventana temporal, protección frente a repetición, URI, cifrado autenticado asociado a cuenta y generación/digest de códigos en `server/src/totp.ts`.
 - La migración, challenge después de contraseña, gestión de factores, enrolamiento y rotación de códigos están implementados localmente. Los códigos nuevos permanecen inactivos hasta confirmar su guardado; la rotación conserva los anteriores hasta ese punto. Las sesiones no recientes no pueden modificar factores y la transacción vuelve a validar la sesión actual antes de revocar otras sesiones.
-- MFA todavía no está lista para producción: TOTP y passkeys están integradas localmente y sus cambios se encolan para correo; falta validar entrega Resend y operación de la cola, Google OAuth, recuperación administrativa, validación Tauri y ensayo en VPS. Las cuentas siguen deshabilitadas por defecto.
+- MFA todavía no está lista para producción: TOTP y passkeys están integradas localmente y sus cambios se encolan para correo; falta validar entrega Resend y operación de la cola; Google OIDC está implementado localmente según ADR-0047, pendiente de credenciales/despliegue; sigue pendiente la recuperación administrativa, validación Tauri y ensayo en VPS. Las cuentas siguen deshabilitadas por defecto.
 - La llave AES y el pepper de recuperación requieren variables separadas, despliegue seguro, rotación/migración planificadas y nunca deben aparecer en logs o Git.
 - La recuperación por correo sigue permitiendo cambiar contraseña, pero el login posterior exige el factor inscrito.
 

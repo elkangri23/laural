@@ -2,6 +2,8 @@
 
 ## Sin publicar
 
+- Añadido acceso y registro opcional con Google OIDC para las cuentas de sincronización. Usa `state`, `nonce` y PKCE de un solo uso, exige correo verificado, vincula identidades por `sub`, conserva TOTP y no almacena tokens Google. La migración 011, ADR-0047, UC-28 y guías quedaron documentadas; el flag sigue apagado hasta configurar credenciales y validar el VPS.
+- Verificación local: TypeScript del servicio compila y 45 pruebas de configuración, flujo OAuth y rutas pasan. Suite de servicio: 157/157 con PostgreSQL 16 aislado, cobertura 89,47 % líneas / 79,68 % ramas, build correcto y `npm audit` sin vulnerabilidades. Pendientes credenciales reales de Google Cloud, ensayo end-to-end y migración/validación en VPS.
 - La página pública de estado ahora muestra API, sincronización y correo por separado, con estados allowlist publicados manualmente; indica que no son comprobaciones en vivo y conserva fallback seguro y renderizado sin HTML.
 - Verificación: build y validador del documento correctos; servidor 149/149 con PostgreSQL 16 aislado, 90,13 % de líneas; `public-status.ts` con 100 % de líneas. Pendiente validación visual y despliegue en VPS.
 - Añadido historial cloud de preferencias: consulta paginada, borrado por versión y restauración como revisión nueva con concurrencia e idempotencia. Se conserva la revisión reemplazada y la app crea una copia `.laural` antes de aplicar la restauración; las API keys siguen excluidas. Migración 010, ADR-0045 y documentación actualizados.
