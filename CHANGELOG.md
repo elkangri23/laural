@@ -2,6 +2,7 @@
 
 ## Sin publicar
 
+- El agente ahora exige revisión para comandos `netsh` interactivos o que modifiquen red/firewall, y para exportaciones que revelen claves Wi-Fi en texto claro; conserva ayuda y consultas de solo lectura.
 - El filtro del agente ahora requiere revisión para crear, modificar, renombrar o eliminar grupos/cuentas locales y para crear, retirar, reanudar o suspender servicios; las consultas `Get-*` siguen siendo de lectura.
 - El agente ahora exige revisión para cmdlets PowerShell que crean, limitan, borran o escriben en registros clásicos de eventos; las consultas de eventos siguen siendo de lectura.
 - La revisión del agente ahora cubre cmdlets y aliases de PowerShell que modifican propiedades de elementos, incluidos valores del Registro; las consultas de lectura siguen sin revisión adicional.

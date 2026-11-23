@@ -2109,6 +2109,9 @@ fn git_command_is_high_risk(command: &str) -> bool {
 }
 
 fn external_tool_is_high_risk(command: &str, executable: &str) -> bool {
+    if executable == "netsh" {
+        return netsh_command_is_high_risk(command);
+    }
     let mut arguments = command.split_whitespace();
     arguments.next();
     let Some(subcommand) = arguments.next() else {
@@ -2260,6 +2263,69 @@ fn external_tool_is_high_risk(command: &str, executable: &str) -> bool {
         "gem" => matches!(subcommand, "install" | "uninstall" | "update"),
         "brew" => matches!(subcommand, "install" | "uninstall" | "upgrade"),
         _ => false,
+    }
+}
+
+fn netsh_command_is_high_risk(command: &str) -> bool {
+    let arguments: Vec<_> = command.split_whitespace().skip(1).collect();
+    if arguments.is_empty() {
+        return true;
+    }
+    if arguments.len() == 1
+        && matches!(
+            arguments[0].to_ascii_lowercase().as_str(),
+            "?" | "/?" | "-?" | "help"
+        )
+    {
+        return false;
+    }
+    if arguments.iter().any(|argument| {
+        argument
+            .replace('"', "")
+            .replace('\'', "")
+            .eq_ignore_ascii_case("key=clear")
+    }) {
+        return true;
+    }
+
+    let mut operations = arguments.iter().filter(|argument| {
+        matches!(
+            argument.to_ascii_lowercase().as_str(),
+            "add"
+                | "clear"
+                | "connect"
+                | "delete"
+                | "disconnect"
+                | "disable"
+                | "enable"
+                | "exec"
+                | "export"
+                | "flush"
+                | "import"
+                | "install"
+                | "register"
+                | "release"
+                | "remove"
+                | "renew"
+                | "repair"
+                | "reset"
+                | "set"
+                | "start"
+                | "stop"
+                | "uninstall"
+                | "unregister"
+                | "show"
+                | "help"
+                | "dump"
+                | "?"
+        )
+    });
+    match (operations.next(), operations.next()) {
+        (Some(operation), None) => !matches!(
+            operation.to_ascii_lowercase().as_str(),
+            "show" | "help" | "dump" | "?"
+        ),
+        _ => true,
     }
 }
 
@@ -3608,6 +3674,45 @@ mod tests {
                 !external_tool_is_high_risk(command, executable),
                 "falso positivo: {command}"
             );
+        }
+    }
+
+    #[test]
+    fn exige_revision_para_configuracion_netshell_y_claves_wifi_en_claro() {
+        for (shell, command) in [
+            ("cmd", "netsh"),
+            (
+                "powershell",
+                "netsh advfirewall firewall set rule name=Laural new enable=yes",
+            ),
+            (
+                "cmd",
+                "netsh interface ipv4 set address name=Wi-Fi source=dhcp",
+            ),
+            ("powershell", "netsh wlan disconnect interface=Wi-Fi"),
+            ("cmd", "netsh wlan export profile name=Laural key=clear"),
+            (
+                "powershell",
+                "netsh wlan show profile name=Laural key=clear",
+            ),
+            (
+                "powershell",
+                "netsh wlan show profile name=Laural key=\"clear\"",
+            ),
+        ] {
+            assert!(command_is_high_risk(shell, command), "{shell}: {command}");
+        }
+
+        for (shell, command) in [
+            ("cmd", "netsh /?"),
+            ("powershell", "netsh help"),
+            ("cmd", "netsh wlan help"),
+            ("powershell", "netsh wlan show profiles"),
+            ("cmd", "netsh advfirewall show allprofiles"),
+            ("powershell", "netsh interface ipv4 show config"),
+            ("cmd", "netsh advfirewall dump"),
+        ] {
+            assert!(!command_is_high_risk(shell, command), "{shell}: {command}");
         }
     }
 

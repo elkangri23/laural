@@ -9,6 +9,7 @@
 
 | Severidad | Hallazgo | Corrección |
 | --- | --- | --- |
+| Media | El clasificador no revisaba `netsh`, que puede cambiar configuración de red/firewall o exportar claves Wi-Fi en claro | Se requiere revisión por defecto salvo ayuda, `show` y `dump`; `key=clear` siempre requiere revisión y el modo interactivo se bloquea para revisión. Referencias: [Network Shell](https://learn.microsoft.com/windows-server/administration/windows-commands/netsh), [netsh advfirewall](https://learn.microsoft.com/windows-server/administration/windows-commands/netsh-advfirewall), [netsh wlan y exportación de claves](https://learn.microsoft.com/windows-server/administration/windows-commands/netsh-wlan). Regresión local en `providers.rs`; cobertura CI pendiente. |
 | Alta | WebView sin CSP (`csp: null`), aumentando el impacto de contenido/script inyectado | CSP local: scripts propios; IPC de Tauri como única conexión; objetos, frames y formularios externos bloqueados; sin `unsafe-eval`. Se conserva `unsafe-inline` solo para estilos requeridos. |
 | Media | Respuestas HTTP no streaming se leían sin límite y podían consumir memoria | Lectura incremental con límite de 2 MB para respuestas de proveedor. Las respuestas streaming mantienen límites propios. |
 | Media | El descubrimiento de contexto de proyecto podía enumerar un árbol enorme antes de limitar los resultados | Recorrido acotado a 1.000 entradas y 200 archivos; contexto de contenido con límites de tamaño. |
