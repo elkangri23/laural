@@ -1038,7 +1038,10 @@ function App() {
         <div className="sidebar-bottom">
           <div className="plan-card">
             <div className="plan-icon"><SparkIcon /></div>
-            <div><strong>Conecta tu modelo</strong><p>Usa Ollama, LM Studio o tu endpoint.</p></div>
+            <div>
+              <strong>{provider ? provider.name : "Conecta tu modelo"}</strong>
+              <p>{provider ? `Modelo: ${provider.model || "automático"}` : "Usa Ollama, LM Studio o tu endpoint."}</p>
+            </div>
             <button className="plan-arrow" onClick={() => setProviderDialogOpen(true)} aria-label="Configurar proveedor"><ChevronIcon /></button>
           </div>
           <button className="appearance-entry" onClick={() => setSettingsOpen(true)}><PaletteIcon /><span>Configuración</span><span className="appearance-entry-meta">{appearance === "dark" ? "Oscuro" : "Claro"}</span></button>

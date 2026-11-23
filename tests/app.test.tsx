@@ -116,6 +116,22 @@ test("recupera y guarda el tema y el modo desde Configuración", async () => {
   expect(document.documentElement.dataset.mode).toBe("dark");
 });
 
+test("la tarjeta lateral refleja el proveedor activo", async () => {
+  const provider = { id: "freellm", providerKind: "freellmapi", name: "FreeLLMAPI", baseUrl: "http://127.0.0.1:31415/v1", model: "auto", hasApiKey: true, shareCustomEndpoint: false };
+  mocks.invoke.mockImplementation(async (command: string) => {
+    if (command === "get_provider") return provider;
+    if (command === "get_providers") return [provider];
+    if (command === "get_agent_settings") return { mode: "review", allowedPrefixes: ["git status", "git diff"], backupRetention: null };
+    return undefined;
+  });
+  await act(async () => root!.render(<App />));
+  await act(async () => { await Promise.resolve(); });
+
+  expect(host.querySelector(".plan-card strong")?.textContent).toBe("FreeLLMAPI");
+  expect(host.querySelector(".plan-card p")?.textContent).toBe("Modelo: auto");
+  expect(host.textContent).not.toContain("Conecta tu modelo");
+});
+
 test("fuerza el guardado del historial del chat antes de ocultar la ventana", async () => {
   const history = [{ role: "user", content: "mensaje pendiente" }];
   localStorage.setItem("laural.chat.v1", JSON.stringify(history));

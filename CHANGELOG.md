@@ -2,8 +2,10 @@
 
 ## Sin publicar
 
+- La tarjeta lateral deja de mostrar «Conecta tu modelo» cuando ya hay un proveedor activo; muestra el perfil y modelo seleccionados.
+- Validación manual de FreeLLMAPI desde la app: 311 modelos listados y respuesta de chat por streaming correctos. La clave guardada no se mostró ni modificó.
 - Las altas y bajas de passkeys ahora encolan un aviso en la misma transacción que modifica la credencial. Resend recibe mensajes genéricos sin nombres, identificadores ni datos del dispositivo; la migración 009 amplía los tipos permitidos del outbox existente.
-- Añadido login passwordless con passkeys WebAuthn, conservando TOTP como segundo factor cuando la cuenta lo tenga activo. Configuración permite abrir en el navegador la gestión segura para registrar y revocar hasta diez passkeys; requiere sesión reciente para cambios. Las passkeys están apagadas por defecto y requieren configurar dominio/RP ID y aplicar la migración 008. Pendientes avisos por correo de altas/bajas, validación Windows/VPS y Google OAuth.
+- Añadido login passwordless con passkeys WebAuthn, conservando TOTP como segundo factor cuando la cuenta lo tenga activo. Configuración permite abrir en el navegador la gestión segura para registrar y revocar hasta diez passkeys; requiere sesión reciente para cambios. Las passkeys están apagadas por defecto y requieren configurar dominio/RP ID y aplicar las migraciones. Pendientes pruebas con autenticadores reales, despliegue VPS y Google OAuth.
 - El menú de opciones del perfil se despliega hacia el área principal para que sus elementos no queden fuera del borde izquierdo; añade desplazamiento cuando falta altura.
 - El agente solicita aprobación antes de abrir `diskpart` de forma interactiva o pasarle scripts y operaciones; solo deja pasar la ayuda explícita.
 - El agente requiere aprobación para comandos de BitLocker que cifran, descifran, bloquean o desbloquean unidades y que administran protectores; conserva ayuda y consultas de estado acotadas.
