@@ -1,6 +1,6 @@
 [package]
 name = "laural"
-version = "0.1.0-alpha.15"
+version = "0.1.0-alpha.16"
 description = "Terminal de escritorio con IA local y agentes configurables"
 authors = ["Laural contributors"]
 license = "MIT"

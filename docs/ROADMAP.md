@@ -16,7 +16,7 @@ Estado al 23 de noviembre de 2026. «Implementado» describe código presente; �
 - Planes de agente, modos revisar/reglas/automático y aprobación explícita para cambios de archivos.
 - Icono y favicon propios; build de Windows automatizable desde GitHub Actions.
 - Código dividido para carga progresiva: build actual 23-11-2026: entrada JS de 301,81 KB (91,44 KB gzip), terminal en bloque de 336,25 KB (85,13 KB gzip), Markdown de 164,77 KB cargado al necesitarlo y paneles secundarios bajo demanda. No quedan bloques mayores de 500 KB. En el build release de Windows, una muestra de la instancia ya abierta registró 107,9 MiB de working set y 258 MiB de memoria privada sumando Laural y sus 8 procesos descendientes; cuatro mediciones durante 34 segundos no mostraron variación al MiB. Es una línea base de una sola máquina, no una garantía de consumo ni una medida de arranque frío. Falta medir el paquete instalado, arranque en frío y consumo durante uso sostenido.
-- La tarjeta del lateral refleja el proveedor y modelo activos en vez de seguir mostrando la invitación inicial; regresión de `app.test.tsx`. Suite UI: 160/160 pruebas, 79,18 % de líneas. Build de producción correcta y validación visual en la build Tauri de desarrollo en Windows (`FreeLLMAPI · auto`). Falta repetir la comprobación desde un paquete instalado.
+- La tarjeta del lateral refleja el proveedor y modelo activos en vez de seguir mostrando la invitación inicial; regresión de `app.test.tsx`. Suite UI: 160/160 pruebas, 79,18 % de líneas. La inspección de alpha.15 instalada (23-11-2026) muestra el chip `FreeLLMAPI · auto`, pero la tarjeta aún conserva el texto inicial: el instalador se creó antes del commit `3f9304e`. La versión corregida está en alpha.16, pendiente de publicación e instalación para repetir la comprobación.
 - README, arquitectura, requisitos, ADR, casos de uso y documentación de contribución.
 
 ## M1 — Estabilidad de terminal (parcial)
@@ -77,7 +77,8 @@ Estado al 23 de noviembre de 2026. «Implementado» describe código presente; �
 - Validar instalación limpia, actualización y desinstalación.
 - Publicación de alpha.14 validada en GitHub: instalador NSIS x64, firma `.sig` y `latest.json` firmados publicados; el manifiesto fue sincronizado a `main`.
 - Alpha.15 publicada en GitHub como pre-release NSIS x64: instalador firmado, `.sig`, `latest.json` firmado y `SHA256SUMS.txt`. Workflow `45134440452` completado en verde; el manifiesto se sincronizó a `main`. SHA-256 del instalador: `155A2CDFCF6878623B99F2FAF12C3953EBD903F8E9B5EB53C9DC30C4F67F14DE`.
-- Validar en Windows la actualización real de alpha.14 a alpha.15, instalación limpia, reinicio y desinstalación.
+- Preparada alpha.16 con los cambios acumulados desde alpha.15, incluida la tarjeta del proveedor, la redacción de claves reflejadas por proveedores y la actualización de `cookie` a 0.18.3. La publicación NSIS firmada se ejecutará con la etiqueta `v0.1.0-alpha.16`; después habrá que validar la actualización desde la alpha.15 instalada.
+- Validar en Windows la actualización real de alpha.15 a alpha.16, instalación limpia, reinicio y desinstalación; comprobar también la tarjeta del proveedor tras reiniciar.
 - Resolver incidencias críticas de validación manual antes de declarar estable.
 
 ## Auditoría de seguridad (primera revisión completada; validación manual pendiente)

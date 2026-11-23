@@ -1,6 +1,6 @@
 # Registro de cambios
 
-## Sin publicar
+## 0.1.0-alpha.16
 
 - Actualizado `cookie` de 0.18.2 a 0.18.3 para corregir el aviso RUSTSEC-2026-0594 publicado el 23-11-2026; la auditoría Rust vuelve a pasar salvo los avisos de crates sin mantenimiento ya documentados.
 - Los mensajes de error de proveedores ocultan la clave API si el servidor la devuelve en la respuesta, tanto al consultar modelos como en chat, streaming y planificación.
