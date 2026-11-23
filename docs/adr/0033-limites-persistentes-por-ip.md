@@ -16,7 +16,7 @@ El servicio expone endpoints de autenticación y snapshots que pueden consumir C
 - Rechazar el exceso con HTTP 429 y `Retry-After`; si no se puede consultar el contador persistente, no procesar la operación.
 - Aplicar límites distintos a login/inicio de flujo, alta y verificación de correo, lectura y escritura de snapshots. Los límites de correo y de intentos por cuenta siguen aplicándose además de estos.
 - Verificar en una regresión Fastify que un cliente directo no puede falsificar `X-Forwarded-For`, mientras una conexión loopback puede proporcionar la IP reenviada por el proxy.
-- CI ejecuta las cuatro migraciones y prueba concurrencia entre instancias en PostgreSQL real. El despliegue de cuentas permanece bloqueado hasta validar la IP reenviada y los umbrales detrás de Caddy en el VPS.
+- CI ejecuta las cuatro migraciones y prueba concurrencia entre instancias en PostgreSQL real. El test Fastify de confianza de proxy pasó en CI `45195027612`. El despliegue de cuentas permanece bloqueado hasta validar la IP reenviada y los umbrales detrás de Caddy en el VPS.
 
 ## Límites iniciales
 
