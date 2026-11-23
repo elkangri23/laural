@@ -768,16 +768,17 @@ mod terminal_tests {
     }
 
     #[test]
-    #[ignore = "prueba manual de carga con 16 procesos CMD y salida PTY concurrente"]
+    #[ignore = "prueba manual de carga de salida PTY con ventanas de créditos"]
     fn carga_concurrente_de_salida_en_el_limite_de_terminales() {
-        let session_count = MAX_TERMINAL_SESSIONS;
-        let line_count = 1_000;
+        let session_count = 4;
+        let line_count = 2_100;
         let started = Instant::now();
-        let (output_tx, output_rx) = mpsc::channel::<(usize, Vec<u8>)>();
+        let (output_tx, output_rx) = mpsc::channel::<(usize, Option<Vec<u8>>)>();
         let mut masters: Vec<Box<dyn MasterPty + Send>> = Vec::with_capacity(session_count);
         let mut writers: Vec<Box<dyn Write + Send>> = Vec::with_capacity(session_count);
         let mut children: Vec<TestChild> = Vec::with_capacity(session_count);
         let mut readers = Vec::with_capacity(session_count);
+        let mut output_flows = Vec::with_capacity(session_count);
 
         for session in 0..session_count {
             let pair = native_pty_system().openpty(PtySize::default()).unwrap();
@@ -790,22 +791,32 @@ mod terminal_tests {
             writers.push(pair.master.take_writer().unwrap());
 
             let output_tx = output_tx.clone();
+            let output_flow = Arc::new(TerminalOutputFlow::default());
+            let reader_flow = Arc::clone(&output_flow);
             readers.push(thread::spawn(move || {
                 let mut buffer = [0_u8; 32 * 1024];
                 loop {
                     match reader.read(&mut buffer) {
-                        Ok(0) | Err(_) => break,
+                        Ok(0) | Err(_) => {
+                            let _ = output_tx.send((session, None));
+                            break;
+                        }
                         Ok(length) => {
+                            if !reader_flow.reserve(length) {
+                                break;
+                            }
                             if output_tx
-                                .send((session, buffer[..length].to_vec()))
+                                .send((session, Some(buffer[..length].to_vec())))
                                 .is_err()
                             {
+                                let _ = reader_flow.acknowledge(length);
                                 break;
                             }
                         }
                     }
                 }
             }));
+            output_flows.push(output_flow);
             masters.push(pair.master);
             children.push(TestChild(child));
         }
@@ -820,6 +831,11 @@ mod terminal_tests {
             .collect();
         let mut outputs = vec![Vec::new(); session_count];
         let mut cursor_answered = vec![false; session_count];
+        let probes: Vec<_> = (0..session_count)
+            .map(|session| format!("LAURAL-PROBE-{session}").into_bytes())
+            .collect();
+        let mut probe_sent = vec![false; session_count];
+        let mut probe_ready = vec![false; session_count];
         let mut script_sent = vec![false; session_count];
         let mut marker_received = vec![false; session_count];
         let mut exit_sent = vec![false; session_count];
@@ -831,7 +847,20 @@ mod terminal_tests {
         while completed.iter().any(|done| !done) {
             let (session, bytes) = output_rx
                 .recv_timeout(Duration::from_secs(30))
-                .expect("las sesiones PTY no completaron la salida dentro del plazo");
+                .unwrap_or_else(|_| {
+                    panic!(
+                        "PTY inactivo: cursores={}, sondas={}, respuestas={}, scripts={}, marcas={}, bytes={:?}",
+                        cursor_answered.iter().filter(|value| **value).count(),
+                        probe_sent.iter().filter(|value| **value).count(),
+                        probe_ready.iter().filter(|value| **value).count(),
+                        script_sent.iter().filter(|value| **value).count(),
+                        marker_received.iter().filter(|value| **value).count(),
+                        outputs.iter().map(Vec::len).collect::<Vec<_>>(),
+                    )
+                });
+            let Some(bytes) = bytes else {
+                panic!("La sesión PTY {session} terminó antes de producir su marca final");
+            };
             total_bytes += bytes.len();
             outputs[session].extend_from_slice(&bytes);
 
@@ -844,17 +873,40 @@ mod terminal_tests {
                 writers[session].flush().unwrap();
                 cursor_answered[session] = true;
             }
-            if !script_sent[session] && outputs[session].windows(5).any(|window| window == b"133;A")
+            if !probe_sent[session] && outputs[session].windows(5).any(|window| window == b"133;B")
             {
+                thread::sleep(Duration::from_millis(50));
+                let probe = format!("echo LAURAL-PROBE-{session}");
+                writers[session].write_all(probe.as_bytes()).unwrap();
+                writers[session].write_all(b"\r").unwrap();
+                writers[session].flush().unwrap();
+                probe_sent[session] = true;
+            }
+            let probe_occurrences = outputs[session]
+                .windows(probes[session].len())
+                .filter(|window| *window == probes[session])
+                .count();
+            let prompt_after_probe = outputs[session]
+                .windows(probes[session].len())
+                .rposition(|window| window == probes[session])
+                .is_some_and(|position| {
+                    let after_probe = position + probes[session].len();
+                    outputs[session][after_probe..]
+                        .windows(5)
+                        .any(|window| window == b"133;B")
+                });
+            if !probe_ready[session] && probe_occurrences >= 2 && prompt_after_probe {
+                thread::sleep(Duration::from_millis(50));
+                let now = Instant::now();
+                first_script_sent_at.get_or_insert(now);
+                last_script_sent_at = Some(now);
                 let script = format!(
                     "for /L %i in (1,1,{line_count}) do @echo LAURAL-LOAD-{session}-%i-abcdefghijklmnopqrstuvwxyz"
                 );
                 writers[session].write_all(script.as_bytes()).unwrap();
                 writers[session].write_all(b"\r").unwrap();
                 writers[session].flush().unwrap();
-                let now = Instant::now();
-                first_script_sent_at.get_or_insert(now);
-                last_script_sent_at = Some(now);
+                probe_ready[session] = true;
                 script_sent[session] = true;
             }
             if script_sent[session]
@@ -871,6 +923,7 @@ mod terminal_tests {
                 writers[session].flush().unwrap();
                 exit_sent[session] = true;
             }
+            assert!(output_flows[session].acknowledge(bytes.len()));
             completed[session] = exit_sent[session];
         }
 
@@ -890,12 +943,24 @@ mod terminal_tests {
         let children_exited_at = Instant::now();
 
         drop(masters);
+        let mut readers_finished = 0;
+        while readers_finished < session_count {
+            let (session, bytes) = output_rx
+                .recv_timeout(Duration::from_secs(30))
+                .expect("los lectores PTY no terminaron tras cerrar las sesiones");
+            if let Some(bytes) = bytes {
+                total_bytes += bytes.len();
+                outputs[session].extend_from_slice(&bytes);
+                assert!(output_flows[session].acknowledge(bytes.len()));
+            } else {
+                readers_finished += 1;
+            }
+        }
         for reader in readers {
             reader.join().unwrap();
         }
-        for (session, bytes) in output_rx.try_iter() {
-            total_bytes += bytes.len();
-            outputs[session].extend_from_slice(&bytes);
+        for flow in output_flows {
+            flow.close();
         }
         for (session, output) in outputs.iter().enumerate() {
             let line_prefix = format!("LAURAL-LOAD-{session}-").into_bytes();

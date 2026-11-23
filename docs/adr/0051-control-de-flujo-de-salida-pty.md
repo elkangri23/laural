@@ -26,6 +26,7 @@ Agrupar salida PTY en lotes reduce escrituras y decodificaciones, pero no limita
 - Pruebas Rust comprueban que ACK libera al lector, que valores inválidos se rechazan y que el cierre despierta al hilo bloqueado.
 - Pruebas de componente verifican que la interfaz confirma bytes después del callback de xterm y que el total confirmado coincide con la salida agrupada.
 - `terminal_flow.rs` queda protegido por el gate de CI de 85 % de cobertura de líneas.
+- Ensayo manual Windows CMD/ConPTY con el controlador conectado al consumidor: 4 sesiones, 2.100 líneas por shell y 1.107.192 bytes recibidos; todas completaron sus marcadores y cerraron correctamente. Creación 0,20 s, primer prompt 0,32 s, despacho 0,15 s, hasta la última marca 124,70 s (8,7 KiB/s) y cierre 0,02 s. No mide xterm/WebView2 ni CPU/memoria; tampoco es comparable directamente con el ensayo previo sin créditos. `cargo test --lib`: 134 pasaron y 2 pruebas manuales quedaron ignoradas. `cargo llvm-cov --lib` ejecutó las pruebas, pero MSVC no generó datos de cobertura local.
 
 ## Referencias
 
