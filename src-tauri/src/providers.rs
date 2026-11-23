@@ -1949,6 +1949,7 @@ fn command_is_high_risk(shell: &str, command: &str) -> bool {
         "deno",
         "env",
         "exec",
+        "gsudo",
         "mshta",
         "msiexec",
         "node",
@@ -1969,6 +1970,7 @@ fn command_is_high_risk(shell: &str, command: &str) -> bool {
         "regsvr32",
         "rundll32",
         "ruby",
+        "runas",
         "scp",
         "sh",
         "ssh",
@@ -3832,6 +3834,10 @@ mod tests {
             ("cmd", "psexec \\servidor hostname"),
             ("wsl", "winrs -r:servidor hostname"),
             ("powershell", "pscp archivo servidor:/tmp/archivo"),
+            ("cmd", "runas /user:Administrador cmd.exe"),
+            ("powershell", "runas /user:Administrador powershell.exe"),
+            ("git-bash", "gsudo powershell.exe"),
+            ("wsl", "gsudo whoami"),
             ("cmd", "psftp servidor"),
             ("git-bash", "ssh-add ~/.ssh/id_ed25519"),
             ("powershell", "Enter-PSSession servidor"),
@@ -4408,6 +4414,8 @@ mod tests {
                 "ssh servidor hostname".into(),
                 "Enter-PSSession servidor".into(),
                 "msiexec /i paquete.msi /quiet".into(),
+                "runas /user:Administrador cmd.exe".into(),
+                "gsudo powershell.exe".into(),
             ],
             backup_retention: None,
         };
@@ -4444,6 +4452,8 @@ mod tests {
             ("git-bash", "ssh servidor hostname"),
             ("powershell", "Enter-PSSession servidor"),
             ("cmd", "msiexec /i paquete.msi /quiet"),
+            ("cmd", "runas /user:Administrador cmd.exe"),
+            ("powershell", "gsudo powershell.exe"),
         ] {
             let result = authorize_agent_command_with_settings(shell, command, &settings);
             assert!(
