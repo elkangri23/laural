@@ -11,7 +11,7 @@
 
 `typeperf` puede recolectar valores de contadores hasta que se interrumpa, muestrear un equipo remoto y escribir resultados en un archivo o base de datos. Incluso sus consultas de catálogo aceptan un destino de salida. Ahora toda invocación con argumentos exige aprobación, incluidas consultas, equipos remotos, archivos de configuración y opciones desconocidas; únicamente la invocación sin argumentos y la ayuda exacta quedan libres. Las regresiones verifican también que una regla exacta no omita la confirmación. Esto añade revisión humana, pero no limita privilegios ni aísla la ejecución aprobada.
 
-Verificación local: Rust 153 pasadas y 2 pruebas manuales ignoradas; UI 168/168 con 79,78 % de cobertura de líneas; `cargo check`, formato y diff correctos. Windows/MSVC ejecuta `cargo llvm-cov --lib`, pero no genera perfiles de cobertura locales. CI pendiente.
+Verificación local: Rust 153 pasadas y 2 pruebas manuales ignoradas; UI 168/168 con 79,78 % de cobertura de líneas; `cargo check`, formato y diff correctos. Windows/MSVC ejecuta `cargo llvm-cov --lib`, pero no genera perfiles de cobertura locales. CI del commit `7241b0e` pasó los tres jobs.
 
 Referencia: [typeperf de Microsoft Learn](https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/typeperf).
 
