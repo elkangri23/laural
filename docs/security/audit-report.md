@@ -7,6 +7,14 @@
 
 ## Hallazgos corregidos
 
+### Clasificación de administración de eventos (`wevtutil`) (24-11-2026)
+
+La regla previa de `wevtutil` solo exigía aprobación para borrar registros, borrar canales y cambiar la configuración. Dejaba sin control la exportación a archivo, la instalación/eliminación de manifiestos, las consultas que guardan marcadores y posibles destinos remotos. Ahora esas operaciones requieren aprobación; subcomandos desconocidos también. Se mantienen las lecturas locales reconocidas: listar registros/publicadores, consultar configuración/estado y consultar eventos sin guardar bookmark ni consultar un equipo remoto. Se cubren alias y precedencia sobre reglas exactas. La aprobación no aísla el comando ni limita sus permisos.
+
+Verificación local: Rust 154 pasadas y 2 pruebas manuales ignoradas; UI 168/168 con 79,78 % de cobertura de líneas; `cargo check`, formato y diff correctos. Windows/MSVC ejecuta `cargo llvm-cov --lib`, pero no genera perfiles locales. CI pendiente.
+
+Referencia: [wevtutil de Microsoft Learn](https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/wevtutil).
+
 ### Clasificación de procesamiento de trazas (`tracerpt`) (24-11-2026)
 
 `tracerpt` procesa archivos de traza ETW, sesiones de eventos en tiempo real y registros de rendimiento. Sus opciones crean volcados, informes, resúmenes y esquemas, y un archivo de configuración puede aportar parámetros. Ahora cualquier invocación con argumentos requiere aprobación; solo la invocación vacía y la ayuda exacta quedan libres. Las regresiones cubren fuentes de datos, salidas y precedencia ante reglas exactas. La aprobación no limita los permisos del proceso ni es aislamiento.

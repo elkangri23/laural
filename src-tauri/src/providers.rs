@@ -2165,6 +2165,9 @@ fn external_tool_is_high_risk(command: &str, executable: &str) -> bool {
     if executable == "netsh" {
         return netsh_command_is_high_risk(command);
     }
+    if executable == "wevtutil" {
+        return wevtutil_command_is_high_risk(command);
+    }
     if executable == "sc" {
         return sc_command_is_high_risk(command);
     }
@@ -2316,7 +2319,6 @@ fn external_tool_is_high_risk(command: &str, executable: &str) -> bool {
             })
         }
         "net" => net_command_is_high_risk(command),
-        "wevtutil" => matches!(subcommand, "cl" | "clear-log" | "dl" | "delete-log" | "sl"),
         "winget" => matches!(
             subcommand,
             "install"
@@ -2411,6 +2413,38 @@ fn sc_command_is_high_risk(command: &str) -> bool {
 
 fn regini_command_is_high_risk(command: &str) -> bool {
     command.split_whitespace().nth(1).is_some()
+}
+
+fn wevtutil_command_is_high_risk(command: &str) -> bool {
+    let mut arguments = command.split_whitespace().skip(1);
+    let Some(operation) = arguments.next() else {
+        return false;
+    };
+    let operation = operation.trim_matches(['\'', '\"']);
+    if matches!(operation, "/?" | "-?" | "help") {
+        return arguments.next().is_some();
+    }
+
+    let arguments: Vec<_> = arguments
+        .map(|argument| argument.trim_matches(['\'', '\"']))
+        .collect();
+    if arguments.iter().any(|argument| {
+        matches!(argument.as_ref(), "/r" | "/u" | "/p" | "/a")
+            || ["/r:", "/u:", "/p:", "/a:"]
+                .iter()
+                .any(|prefix| argument.starts_with(prefix))
+    }) {
+        return true;
+    }
+
+    match operation {
+        "el" | "enum-logs" | "ep" | "enum-publishers" | "gl" | "get-log" | "gp"
+        | "get-publisher" | "gli" | "get-loginfo" => false,
+        "qe" | "query-events" => arguments
+            .iter()
+            .any(|argument| matches!(argument.as_ref(), "/sbm") || argument.starts_with("/sbm:")),
+        _ => true,
+    }
 }
 
 fn logman_command_is_high_risk(command: &str) -> bool {
@@ -4525,6 +4559,38 @@ mod tests {
     }
 
     #[test]
+    fn exige_revision_para_cambios_exportaciones_y_destinos_remotos_de_wevtutil() {
+        for command in [
+            "wevtutil cl Security",
+            "wevtutil clear-log Application",
+            "wevtutil dl CustomLog",
+            "wevtutil sl System /e:false",
+            "wevtutil im proveedor.man",
+            "wevtutil um proveedor.man",
+            "wevtutil epl System C:\\backup\\system.evtx",
+            "wevtutil archive-log C:\\backup\\Application.evtx /locale:en-us",
+            "wevtutil qe System /q:* /sbm:C:\\backup\\bookmark.xml",
+            "wevtutil qe System /r:servidor",
+            "wevtutil operacion-desconocida",
+        ] {
+            assert!(command_is_high_risk("cmd", command), "{command}");
+        }
+
+        for command in [
+            "wevtutil",
+            "wevtutil /?",
+            "wevtutil el",
+            "wevtutil enum-logs",
+            "wevtutil gl System /f:xml",
+            "wevtutil gp Microsoft-Windows-Eventlog /ge:true",
+            "wevtutil gli Application",
+            "wevtutil qe System /q:*",
+        ] {
+            assert!(!command_is_high_risk("cmd", command), "{command}");
+        }
+    }
+
+    #[test]
     fn exige_revision_para_modificar_el_registro_con_regini() {
         for command in [
             "regini cambios.reg",
@@ -5423,6 +5489,7 @@ mod tests {
                 "reg delete HKCU\\Software\\Laural /f".into(),
                 "regini -m \\\\servidor cambios.reg".into(),
                 "logman stop sesion-prueba -s servidor".into(),
+                "wevtutil epl System backup.evtx".into(),
                 "PATH=/tmp rm -rf proyecto".into(),
                 "find . -type f -delete".into(),
                 "git -c color.ui=false status --short".into(),
@@ -5489,6 +5556,7 @@ mod tests {
             ("powershell", "reg delete HKCU\\Software\\Laural /f"),
             ("cmd", "regini -m \\\\servidor cambios.reg"),
             ("cmd", "logman stop sesion-prueba -s servidor"),
+            ("cmd", "wevtutil epl System backup.evtx"),
             ("cmd", "lodctr /r"),
             ("cmd", "unlodctr servicio"),
             ("cmd", "typeperf -q Processor -o contadores.txt"),
