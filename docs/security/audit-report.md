@@ -7,6 +7,14 @@
 
 ## Hallazgos corregidos
 
+### Clasificación de `logman` (24-11-2026)
+
+`logman` administra recopiladores de rendimiento y sesiones ETW; puede crear, iniciar/detener, modificar y borrar colecciones, y ejecutar esas operaciones en otro equipo. Ahora el agente exige aprobación para esas acciones, importación/exportación y verbos desconocidos. Las consultas documentadas (`query`), ayuda y uso sin argumentos se mantienen como lectura. Las acciones aprobadas siguen ejecutándose con los permisos del usuario y pueden escribir archivos de log o generar carga de seguimiento.
+
+Verificación local: Rust 152 pasadas y 2 pruebas manuales ignoradas; UI 168/168 con 79,78 % de cobertura de líneas; `cargo check`, formato y diff correctos. Windows/MSVC ejecuta `cargo llvm-cov --lib`, pero no emite perfiles de cobertura locales. CI pendiente.
+
+Referencia: [documentación de logman de Microsoft](https://learn.microsoft.com/es-es/windows-server/administration/windows-commands/logman).
+
 ### Clasificación de cambios del Registro mediante `regini.exe` (24-11-2026)
 
 `regini.exe` podía modificar o eliminar claves del Registro y reemplazar permisos desde archivos de texto, incluso en una máquina remota. El agente no tenía una regla específica para este ejecutable, por lo que una invocación podía pasar a modo automático o una regla exacta. Ahora toda invocación con argumentos exige aprobación; solo el comando vacío, que muestra sintaxis, queda libre. Las regresiones cubren scripts locales, máquina remota, hive alternativo y precedencia ante reglas. La confirmación no limita los permisos del proceso aprobado.

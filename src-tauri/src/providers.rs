@@ -2171,6 +2171,9 @@ fn external_tool_is_high_risk(command: &str, executable: &str) -> bool {
     if executable == "regini" {
         return regini_command_is_high_risk(command);
     }
+    if executable == "logman" {
+        return logman_command_is_high_risk(command);
+    }
     if executable == "pnputil" {
         return pnputil_command_is_high_risk(command);
     }
@@ -2402,6 +2405,19 @@ fn sc_command_is_high_risk(command: &str) -> bool {
 
 fn regini_command_is_high_risk(command: &str) -> bool {
     command.split_whitespace().nth(1).is_some()
+}
+
+fn logman_command_is_high_risk(command: &str) -> bool {
+    let arguments: Vec<_> = command.split_whitespace().skip(1).collect();
+    let Some(operation) = arguments.first() else {
+        return false;
+    };
+
+    if matches!(*operation, "/?" | "-?" | "help") {
+        return arguments.len() > 1;
+    }
+
+    *operation != "query"
 }
 
 fn docker_command_is_high_risk(command: &str) -> bool {
@@ -4513,6 +4529,34 @@ mod tests {
     }
 
     #[test]
+    fn exige_revision_para_cambiar_recopiladores_con_logman() {
+        for command in [
+            "logman create trace sesion-prueba",
+            "logman start sesion-prueba",
+            "logman stop sesion-prueba -s servidor",
+            "logman delete sesion-prueba",
+            "logman update counter sesion-prueba",
+            "logman import coleccion.xml",
+            "logman export coleccion.xml",
+            "logman comando-desconocido",
+            "logman /? start sesion-prueba",
+        ] {
+            assert!(command_is_high_risk("cmd", command), "{command}");
+        }
+
+        for command in [
+            "logman",
+            "logman /?",
+            "logman -?",
+            "logman query",
+            "logman query providers",
+            "logman query -s servidor",
+        ] {
+            assert!(!command_is_high_risk("cmd", command), "{command}");
+        }
+    }
+
+    #[test]
     fn exige_revision_para_modificar_o_exportar_la_politica_de_auditoria() {
         for command in [
             "auditpol /set /subcategory:* /success:enable",
@@ -5309,6 +5353,7 @@ mod tests {
             allowed_prefixes: vec![
                 "reg delete HKCU\\Software\\Laural /f".into(),
                 "regini -m \\\\servidor cambios.reg".into(),
+                "logman stop sesion-prueba -s servidor".into(),
                 "PATH=/tmp rm -rf proyecto".into(),
                 "find . -type f -delete".into(),
                 "git -c color.ui=false status --short".into(),
@@ -5374,6 +5419,7 @@ mod tests {
         for (shell, command) in [
             ("powershell", "reg delete HKCU\\Software\\Laural /f"),
             ("cmd", "regini -m \\\\servidor cambios.reg"),
+            ("cmd", "logman stop sesion-prueba -s servidor"),
             ("git-bash", "PATH=/tmp rm -rf proyecto"),
             ("wsl", "find . -type f -delete"),
             ("powershell", "git -c color.ui=false status --short"),
