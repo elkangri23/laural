@@ -2201,6 +2201,9 @@ fn external_tool_is_high_risk(command: &str, executable: &str) -> bool {
     if executable == "bootsect" {
         return bootsect_command_is_high_risk(command);
     }
+    if executable == "mbr2gpt" {
+        return mbr2gpt_command_is_high_risk(command);
+    }
     if executable == "manage-bde" {
         return manage_bde_command_is_high_risk(command);
     }
@@ -2666,6 +2669,26 @@ fn bootsect_command_is_high_risk(command: &str) -> bool {
         [] | ["/help"] | ["/?"] | ["-?"] => false,
         _ => true,
     }
+}
+
+fn mbr2gpt_command_is_high_risk(command: &str) -> bool {
+    let arguments: Vec<_> = command.split_whitespace().skip(1).collect();
+    if arguments.is_empty() || matches!(arguments.as_slice(), ["/?"] | ["-?"]) {
+        return false;
+    }
+
+    if arguments.iter().any(|argument| *argument == "/convert") {
+        return true;
+    }
+    if !arguments.iter().any(|argument| *argument == "/validate") {
+        return true;
+    }
+
+    !arguments.iter().all(|argument| {
+        matches!(*argument, "/validate" | "/allowfullos")
+            || argument.starts_with("/disk:")
+            || argument.starts_with("/map:")
+    })
 }
 
 fn is_unambiguous_net_user_name(value: &str) -> bool {
@@ -4603,6 +4626,32 @@ mod tests {
     }
 
     #[test]
+    fn exige_revision_para_convertir_particiones_mbr_con_mbr2gpt() {
+        for command in [
+            "mbr2gpt /convert",
+            "mbr2gpt /convert /disk:0 /allowFullOS",
+            "mbr2gpt /validate /convert /disk:0",
+            "mbr2gpt /validate /logs:C:\\Temp\\mbr2gpt",
+            "mbr2gpt /opcion-desconocida",
+            "mbr2gpt /? /convert",
+        ] {
+            assert!(command_is_high_risk("cmd", command), "{command}");
+        }
+
+        for command in [
+            "mbr2gpt",
+            "mbr2gpt /?",
+            "mbr2gpt -?",
+            "mbr2gpt /validate",
+            "mbr2gpt /validate /disk:0",
+            "mbr2gpt /validate /disk:0 /allowFullOS",
+            "mbr2gpt /validate /map:0x07=0x07",
+        ] {
+            assert!(!command_is_high_risk("cmd", command), "{command}");
+        }
+    }
+
+    #[test]
     fn exige_revision_para_modificar_credenciales_de_windows() {
         for (command, executable) in [
             (
@@ -5013,6 +5062,7 @@ mod tests {
                 "bcdboot C:\\Windows /s S: /f UEFI".into(),
                 "bootrec /fixmbr".into(),
                 "bootsect /nt60 SYS /mbr".into(),
+                "mbr2gpt /convert /disk:0".into(),
                 "ssh servidor hostname".into(),
                 "Enter-PSSession servidor".into(),
                 "msiexec /i paquete.msi /quiet".into(),
@@ -5076,6 +5126,7 @@ mod tests {
             ("cmd", "bcdboot C:\\Windows /s S: /f UEFI"),
             ("cmd", "bootrec /fixmbr"),
             ("cmd", "bootsect /nt60 SYS /mbr"),
+            ("cmd", "mbr2gpt /convert /disk:0"),
             ("git-bash", "ssh servidor hostname"),
             ("powershell", "Enter-PSSession servidor"),
             ("cmd", "msiexec /i paquete.msi /quiet"),
