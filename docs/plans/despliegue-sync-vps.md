@@ -145,6 +145,20 @@ Verificación en vivo el 2026-11-24:
   restablecer contraseña); tras cada envío el servidor reabre la
   sección que toca (crear cuenta → verificar PIN). Sin JavaScript,
   por la CSP. Verificado en navegador el 2026-11-24.
+- Páginas de acceso separadas (commits `3b91f6f`, `3932265`,
+  `821e568` y `3be1cf7`, desplegado 2026-11-24, verificado en vivo):
+  el acordeón se sustituye por una página por paso — iniciar sesión
+  (`/auth/native/login`), crear cuenta (`/auth/native/register`),
+  verificar correo (`/auth/native/verification`) y restablecer
+  contraseña (`/auth/native/password-reset`) —, cada una con su
+  formulario y enlaces entre ellas; los POST re-renderizan la página
+  que toca (registro → verificación; verificación y restablecer →
+  inicio de sesión). La recuperación tiene página propia
+  (`/auth/native/recovery`) pero apagada: la ruta no existe (404)
+  mientras el flag esté desactivado. El CSRF viaja en la URL de los
+  enlaces porque el servidor solo guarda su resumen (sha256); es de
+  un solo flujo, caduca a los 10 minutos y no sirve sin la cookie
+  HttpOnly del flujo.
 
 ## Pendiente tras el despliegue
 
