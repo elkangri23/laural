@@ -56,6 +56,7 @@ Los ADR registran por qué se eligió una opción y qué costes trae. Un ADR ace
 | [0050](0050-reenrolamiento-seguro-tras-recuperacion.md) | Enlace de un uso para enrolar un TOTP nuevo antes de retirar factores y sesiones | Aceptada; implementación local, despliegue/ensayo VPS pendiente |
 | [0051](0051-control-de-flujo-de-salida-pty.md) | Ventana de créditos por terminal confirmada tras el parser de xterm | Aceptada; implementada localmente |
 | [0052](0052-politica-cobertura-100-80-0.md) | Política de cobertura de pruebas 100/80/0 | Aceptada; gates CI aún pendientes de migración |
+| [0053](0053-agente-sin-proyecto-en-terminal-activa.md) | Agente sin proyecto sobre la terminal activa | Aceptada; comandos desde el shell, escritura estructurada requiere proyecto |
 
 ## Crear un ADR
 

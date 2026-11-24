@@ -89,11 +89,11 @@ Si la conexión se corta antes del final o el proveedor envía un evento inváli
 
 **Objetivo:** recibir pasos para cambiar el proyecto usando información contextual.
 
-**Precondiciones:** hay proveedor configurado y carpeta de proyecto abierta.
+**Precondiciones:** hay proveedor configurado y una terminal activa. La carpeta de proyecto es opcional.
 
-**Flujo principal:** describir la tarea, pedir plan, recibir resumen y lista acotada de comandos o cambios de archivo, revisar cada acción.
+**Flujo principal:** describir la tarea, pedir plan, recibir resumen y lista acotada de comandos o cambios de archivo, revisar cada acción. Si no hay proyecto seleccionado, el plan trabaja mediante comandos en la terminal activa y el shell usa su directorio actual; las acciones estructuradas de escritura de archivo requieren abrir un proyecto.
 
-**Criterios:** el backend valida JSON, número de acciones, longitud de comandos y rutas relativas; el texto del proyecto se trata como entrada no confiable.
+**Criterios:** el backend valida JSON, número de acciones, longitud de comandos y rutas relativas; el texto del proyecto se trata como entrada no confiable. Sin proyecto, el backend rechaza cualquier acción `write_file`.
 
 ## UC-06 — Autorizar comandos del agente
 

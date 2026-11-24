@@ -63,6 +63,8 @@ La restauración del agente requiere confirmación explícita y solo acepta vers
 La limpieza de copias requiere confirmación, fija cada directorio intermedio y solo elimina archivos regulares del archivo elegido bajo el almacén de copias. El archivo de trabajo actual se conserva; los enlaces y rutas fuera del almacén se ignoran.
 La autorización del agente considera metacaracteres de PowerShell, CMD, Bash y WSL para los modos automático y reglas. La confirmación humana permite expresamente comandos complejos. El shell, sus aliases y perfiles personalizados siguen fuera de una sandbox.
 
+El agente puede preparar comandos aunque no haya proyecto seleccionado; esos comandos se envían a la terminal activa, que conserva su directorio y permisos actuales. Sin proyecto, el backend impide las acciones estructuradas `write_file` para conservar el límite de ruta y los backups. Esto no confina comandos del shell: un comando explícito puede leer o modificar rutas fuera del directorio actual, y el filtro de riesgo es heurístico. La app sigue mostrando el comando y aplicando las reglas/aprobaciones configuradas.
+
 Las órdenes `taskkill` y `Stop-Computer` requieren aprobación manual antes de la ejecución automática o por reglas. La clasificación conserva como consultas de lectura `tasklist` y `Get-Process`; sigue siendo una heurística y no una sandbox.
 
 El subcomando `git config` también requiere aprobación aunque modifique configuración local, global o del sistema, o aparezca tras opciones como `git -C`. Esto reduce la persistencia de aliases que ejecutan comandos y sustituciones de herramientas; por simplicidad, también pide aprobación para consultas `git config`.
