@@ -7,6 +7,14 @@
 
 ## Hallazgos corregidos
 
+### Clasificación de riesgo de `fltmc` (24-11-2026)
+
+El agente solicita aprobación para cargar o descargar minifiltros y adjuntarlos o separarlos de volúmenes; comandos desconocidos también requieren revisión. La enumeración de filtros, instancias y volúmenes, y la ayuda explícita, se consideran consultas. Los minifiltros operan en el stack de E/S de archivos con privilegios de kernel, por lo que una modificación puede afectar lectura y escritura de archivos del sistema. Esta regla reduce ejecuciones accidentales, pero no aísla el comando aprobado.
+
+Verificación local: Rust 149 pasadas y 2 pruebas manuales ignoradas; UI 168/168 con 79,78 % de cobertura de líneas; `cargo check`, formato y diff correctos. Windows/MSVC ejecuta `cargo llvm-cov --lib`, pero no produce datos de cobertura instrumentados locales. CI pendiente.
+
+Referencia: [herramientas de minifiltros de Microsoft Learn](https://learn.microsoft.com/en-us/windows-hardware/drivers/ifs/development-and-testing-tools).
+
 ### Clasificación de riesgo de `fsutil` (24-11-2026)
 
 El agente solicita aprobación para todo subcomando de `fsutil`, incluidas operaciones de consulta. Solo se permiten sin aprobación el listado de subcomandos sin parámetros y la ayuda explícita. El criterio es conservador porque esta herramienta administrativa combina lecturas con cambios de configuración NTFS, volumen, enlaces y puntos de análisis; permitir consultas requiere aprobación adicional. Esto no constituye aislamiento y los comandos aprobados conservan los permisos del usuario.

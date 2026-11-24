@@ -2213,6 +2213,9 @@ fn external_tool_is_high_risk(command: &str, executable: &str) -> bool {
     if executable == "fsutil" {
         return fsutil_command_is_high_risk(command);
     }
+    if executable == "fltmc" {
+        return fltmc_command_is_high_risk(command);
+    }
     if executable == "manage-bde" {
         return manage_bde_command_is_high_risk(command);
     }
@@ -2746,6 +2749,27 @@ fn mountvol_command_is_high_risk(command: &str) -> bool {
 fn fsutil_command_is_high_risk(command: &str) -> bool {
     let arguments: Vec<_> = command.split_whitespace().skip(1).collect();
     !arguments.is_empty() && !matches!(arguments.as_slice(), ["/?"] | ["-?"])
+}
+
+fn fltmc_command_is_high_risk(command: &str) -> bool {
+    let arguments: Vec<_> = command.split_whitespace().skip(1).collect();
+    if arguments.is_empty() || matches!(arguments.as_slice(), ["/?"] | ["-?"] | ["help"]) {
+        return false;
+    }
+
+    if arguments.iter().any(|argument| {
+        matches!(
+            argument.to_ascii_lowercase().as_str(),
+            "load" | "unload" | "attach" | "detach"
+        )
+    }) {
+        return true;
+    }
+
+    !matches!(
+        arguments[0].to_ascii_lowercase().as_str(),
+        "filters" | "instances" | "volumes"
+    )
 }
 
 fn is_unambiguous_net_user_name(value: &str) -> bool {
@@ -4787,6 +4811,31 @@ mod tests {
     }
 
     #[test]
+    fn exige_revision_para_cargar_o_desmontar_filtros_de_archivos() {
+        for command in [
+            "fltmc load filtro-prueba",
+            "fltmc unload filtro-prueba",
+            "fltmc attach filtro-prueba C:",
+            "fltmc detach filtro-prueba C:",
+            "fltmc comando-desconocido",
+        ] {
+            assert!(command_is_high_risk("cmd", command), "{command}");
+        }
+
+        for command in [
+            "fltmc",
+            "fltmc /?",
+            "fltmc -?",
+            "fltmc help",
+            "fltmc filters",
+            "fltmc instances -v C:",
+            "fltmc volumes",
+        ] {
+            assert!(!command_is_high_risk("cmd", command), "{command}");
+        }
+    }
+
+    #[test]
     fn exige_revision_para_modificar_credenciales_de_windows() {
         for (command, executable) in [
             (
@@ -5201,6 +5250,7 @@ mod tests {
                 "chkdsk C: /f".into(),
                 "mountvol C:\\ /p".into(),
                 "fsutil volume dismount C:".into(),
+                "fltmc unload filtro-prueba".into(),
                 "ssh servidor hostname".into(),
                 "Enter-PSSession servidor".into(),
                 "msiexec /i paquete.msi /quiet".into(),
@@ -5268,6 +5318,7 @@ mod tests {
             ("cmd", "chkdsk C: /f"),
             ("cmd", "mountvol C:\\ /p"),
             ("cmd", "fsutil volume dismount C:"),
+            ("cmd", "fltmc unload filtro-prueba"),
             ("git-bash", "ssh servidor hostname"),
             ("powershell", "Enter-PSSession servidor"),
             ("cmd", "msiexec /i paquete.msi /quiet"),
