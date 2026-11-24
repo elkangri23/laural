@@ -2168,6 +2168,9 @@ fn external_tool_is_high_risk(command: &str, executable: &str) -> bool {
     if executable == "sc" {
         return sc_command_is_high_risk(command);
     }
+    if executable == "regini" {
+        return regini_command_is_high_risk(command);
+    }
     if executable == "pnputil" {
         return pnputil_command_is_high_risk(command);
     }
@@ -2395,6 +2398,10 @@ fn sc_command_is_high_risk(command: &str) -> bool {
             | "sdshow"
             | "showsid"
     )
+}
+
+fn regini_command_is_high_risk(command: &str) -> bool {
+    command.split_whitespace().nth(1).is_some()
 }
 
 fn docker_command_is_high_risk(command: &str) -> bool {
@@ -4491,6 +4498,21 @@ mod tests {
     }
 
     #[test]
+    fn exige_revision_para_modificar_el_registro_con_regini() {
+        for command in [
+            "regini cambios.reg",
+            "regini -m \\\\servidor cambios.reg",
+            "regini -h hive.dat HKEY_LOCAL_MACHINE cambios.reg",
+            "regini -o 120 cambios.reg",
+            "regini archivo-desconocido",
+        ] {
+            assert!(command_is_high_risk("cmd", command), "{command}");
+        }
+
+        assert!(!command_is_high_risk("cmd", "regini"));
+    }
+
+    #[test]
     fn exige_revision_para_modificar_o_exportar_la_politica_de_auditoria() {
         for command in [
             "auditpol /set /subcategory:* /success:enable",
@@ -5286,6 +5308,7 @@ mod tests {
             mode: "rules".into(),
             allowed_prefixes: vec![
                 "reg delete HKCU\\Software\\Laural /f".into(),
+                "regini -m \\\\servidor cambios.reg".into(),
                 "PATH=/tmp rm -rf proyecto".into(),
                 "find . -type f -delete".into(),
                 "git -c color.ui=false status --short".into(),
@@ -5350,6 +5373,7 @@ mod tests {
 
         for (shell, command) in [
             ("powershell", "reg delete HKCU\\Software\\Laural /f"),
+            ("cmd", "regini -m \\\\servidor cambios.reg"),
             ("git-bash", "PATH=/tmp rm -rf proyecto"),
             ("wsl", "find . -type f -delete"),
             ("powershell", "git -c color.ui=false status --short"),

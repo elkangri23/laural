@@ -7,6 +7,14 @@
 
 ## Hallazgos corregidos
 
+### Clasificación de cambios del Registro mediante `regini.exe` (24-11-2026)
+
+`regini.exe` podía modificar o eliminar claves del Registro y reemplazar permisos desde archivos de texto, incluso en una máquina remota. El agente no tenía una regla específica para este ejecutable, por lo que una invocación podía pasar a modo automático o una regla exacta. Ahora toda invocación con argumentos exige aprobación; solo el comando vacío, que muestra sintaxis, queda libre. Las regresiones cubren scripts locales, máquina remota, hive alternativo y precedencia ante reglas. La confirmación no limita los permisos del proceso aprobado.
+
+Verificación local: Rust 151 pasadas y 2 pruebas manuales ignoradas; UI 168/168 con 79,78 % de cobertura de líneas; `cargo check`, formato y diff correctos. Una primera ejecución simultánea de la UI agotó el timeout de una prueba; al repetirla sola pasó completa. Windows/MSVC ejecuta `cargo llvm-cov --lib`, pero no produce perfiles locales. CI pendiente.
+
+Referencia: [documentación de Regini de Microsoft](https://learn.microsoft.com/es-es/windows-server/administration/windows-commands/regini).
+
 ### Clasificación de comandos de servicio remotos (`sc.exe`) (24-11-2026)
 
 El formato oficial permite anteponer un nombre UNC de servidor antes del verbo. El clasificador solo leía el token inmediato al ejecutable, por lo que `sc \\servidor stop Servicio` podía escapar la aprobación; también faltaba cubrir varios verbos que alteran configuración o seguridad. Ahora se analiza la posición del verbo tras el servidor, se requiere aprobación para cambios, controles y verbos desconocidos, y se mantiene una lista explícita de consultas de solo lectura. Las regresiones cubren mutaciones locales/remotas, consultas y precedencia ante reglas exactas. Sigue siendo un filtro heurístico, no un sandbox.
