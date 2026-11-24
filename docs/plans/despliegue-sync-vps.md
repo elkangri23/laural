@@ -160,6 +160,21 @@ Verificación en vivo el 2026-11-24:
   un solo flujo, caduca a los 10 minutos y no sirve sin la cookie
   HttpOnly del flujo.
 
+- Chequeo automático del estado (commit `361adf5`, desplegado 2026-11-24):
+  `server/scripts/watch-status.mjs` (con tests en
+  `server/tests/watch-status.test.ts` y script `npm run status:watch`) se
+  ejecuta cada 5 minutos desde cron en el VPS: comprueba
+  `/health/live` y `/health/ready` por la URL pública (nginx + TLS +
+  API; esos endpoints no tienen límite de peticiones) y, solo si cambia
+  el estado derivado, republica `status.json`. Un resultado malo se
+  confirma con una segunda comprobación 20 s después, para no marcar
+  una caída por un reinicio breve. No toca el estado `maintenance`
+  (lo gestiona una persona) y conserva los avisos y el componente de
+  correo tal como están publicados. La página sigue pidiendo
+  `status.json` cada minuto, así que un cambio se ve en la web en
+  menos de un minuto. Registro de cada ejecución en
+  `/var/lib/laural/status-watchdog.log`.
+
 ## Pendiente tras el despliegue
 
 - Primer registro real de una cuenta (idealmente la de Antonio):
@@ -171,7 +186,9 @@ Verificación en vivo el 2026-11-24:
 - Ensayar el flujo completo contra el VPS: registro, verificación,
   login PKCE, snapshot, conflicto, revocación de sesiones y borrado
   de cuenta.
-- Monitorización e incidentes para el servicio y `/status`.
+- Monitorización básica hecha (chequeo cada 5 min, arriba); queda el
+  proceso de incidentes: quién recibe el aviso cuando el estado pasa a
+  degradado (de momento solo queda en el registro del chequeo).
 - Avisar del riesgo de pérdida total del VPS y de la ausencia de
   cifrado de extremo a extremo antes de habilitar sync, y de que sin
   recuperación administrativa perder TOTP y códigos es perder la
