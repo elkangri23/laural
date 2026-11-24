@@ -101,6 +101,9 @@ jobs:
         working-directory: server
       - run: npm run test:coverage
         working-directory: server
+      - name: Exigir 100 % en la primera tanda Crítica del servicio
+        run: node scripts/check-critical-coverage.mjs coverage/coverage-final.json
+        working-directory: server
       - uses: actions/upload-artifact@v6
         with:
           name: cobertura-servicio-sync

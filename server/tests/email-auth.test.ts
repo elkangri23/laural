@@ -72,6 +72,14 @@ describe("registro y verificación por correo", () => {
     expect(test.store.createUnverifiedAccount).not.toHaveBeenCalled();
   });
 
+  it("rechaza valores de registro que no son objetos o no tienen nombre/correo de texto", async () => {
+    const test = service();
+    expect(await test.auth.register(null as unknown as RegistrationInput)).toBe("invalid_request");
+    expect(await test.auth.register({ ...input, displayName: 42 as unknown as string })).toBe("invalid_request");
+    expect(await test.auth.register({ ...input, email: 42 as unknown as string })).toBe("invalid_request");
+    expect(test.store.createUnverifiedAccount).not.toHaveBeenCalled();
+  });
+
   it("responde igual para una cuenta ya existente y no revela si se envió un correo", async () => {
     const store = new MemoryEmailStore();
     store.account = { id: "existing", displayName: "Laura", email: "laura@example.test", passwordHash: "hash" };
@@ -82,6 +90,7 @@ describe("registro y verificación por correo", () => {
 
   it("usa respuestas genéricas al reenviar y al confirmar un PIN incorrecto", async () => {
     const test = service();
+    expect(await test.auth.resendVerification("not-an-email")).toBe("invalid_request");
     expect(await test.auth.resendVerification("unknown@example.test")).toBe("accepted");
     expect(test.send).not.toHaveBeenCalled();
     expect(await test.auth.verify("unknown@example.test", "000000")).toBe("invalid_or_expired");
@@ -115,6 +124,14 @@ describe("registro y verificación por correo", () => {
     expect(await auth.verifyAccountRecovery("laura@example.test", "bad")).toBe("invalid_or_expired");
   });
 
+  it("mantiene la recuperación genérica si faltan métodos opcionales del almacén o del correo", async () => {
+    const test = service();
+    expect(await test.auth.requestAccountRecovery("not-an-email")).toBe("invalid_request");
+    expect(await test.auth.requestAccountRecovery("laura@example.test")).toBe("accepted");
+    expect(await test.auth.verifyAccountRecovery("laura@example.test", "123456")).toBe("invalid_or_expired");
+    expect(await test.auth.verifyAccountRecovery("not-an-email", "123456")).toBe("invalid_or_expired");
+  });
+
   it("verifica el correo sin emitir una sesión y permite reintentar entrega fallida", async () => {
     const store = new MemoryEmailStore();
     const send = vi.fn(async () => { throw new Error("proveedor no disponible"); });
@@ -141,6 +158,20 @@ describe("registro y verificación por correo", () => {
     expect(await test.auth.confirmPasswordReset("laura@example.test", pin!, "nueva contraseña segura 2026")).toBe("reset");
     expect(store.account.passwordHash).toMatch(/^\$argon2id\$/);
     expect(await argon2.verify(store.account.passwordHash, "nueva contraseña segura 2026")).toBe(true);
+  });
+
+  it("responde de forma genérica ante correo inválido y si el almacén rechaza el restablecimiento", async () => {
+    const test = service();
+    expect(await test.auth.requestPasswordReset("not-an-email")).toBe("invalid_request");
+
+    const store = new MemoryEmailStore();
+    store.account = { id: "account-1", displayName: "Laura", email: "laura@example.test", passwordHash: "previous-hash" };
+    store.verified = true;
+    const reset = service(store);
+    expect(await reset.auth.requestPasswordReset("laura@example.test")).toBe("accepted");
+    const pin = reset.sendPasswordReset.mock.calls[0]?.[0].pin;
+    store.resetPassword.mockResolvedValue(false);
+    expect(await reset.auth.confirmPasswordReset("laura@example.test", pin!, "nueva contraseña segura 2026")).toBe("invalid_or_expired");
   });
 
   it("da respuesta genérica para cuenta inexistente y rechaza formato de PIN/contraseña inválido", async () => {

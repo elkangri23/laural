@@ -54,6 +54,7 @@ describe("autenticación de sesiones", () => {
       { id: "session-current", current: true }, { id: "session-other", current: false },
     ]);
     expect(JSON.stringify(sessions)).not.toContain(hash);
+    expect(await list("acct-1", "Basic invalid")).toEqual([]);
 
     const revoke = createAccountSessionRevoker({ query: vi.fn(async (_sql: string, values: string[]) => ({ rows: values[2] === "session-other" ? [{ id: values[2] }] : [] })) });
     expect(await revoke("acct-1", `Bearer ${token}`, "session-other")).toBe(true);

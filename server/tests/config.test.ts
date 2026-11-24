@@ -14,8 +14,12 @@ describe("configuración del servicio", () => {
   it("acepta TRUST_PROXY con CIDR y rechaza valores inválidos", () => {
     const base = { DATABASE_URL: "postgres://db/laural", RATE_LIMIT_PEPPER: "r".repeat(32) } as NodeJS.ProcessEnv;
     expect(readConfig({ ...base, TRUST_PROXY: "172.16.0.0/12, 127.0.0.1" }).trustProxy).toEqual(["172.16.0.0/12", "127.0.0.1"]);
+    expect(readConfig({ ...base, TRUST_PROXY: "::1/128" }).trustProxy).toEqual(["::1/128"]);
     expect(() => readConfig({ ...base, TRUST_PROXY: "no-es-una-ip" })).toThrow("TRUST_PROXY");
+    expect(() => readConfig({ ...base, TRUST_PROXY: "not-an-ip/12" })).toThrow("TRUST_PROXY");
+    expect(() => readConfig({ ...base, TRUST_PROXY: "127.0.0.1/not-a-prefix" })).toThrow("TRUST_PROXY");
     expect(() => readConfig({ ...base, TRUST_PROXY: "172.16.0.0/33" })).toThrow("TRUST_PROXY");
+    expect(() => readConfig({ ...base, TRUST_PROXY: "::1/129" })).toThrow("TRUST_PROXY");
   });
 
   it.each([
@@ -34,6 +38,24 @@ describe("configuración del servicio", () => {
   it("mantiene apagada la autenticación por correo de forma predeterminada", () => {
     expect(readEmailAuthConfig({} as NodeJS.ProcessEnv)).toBeNull();
     expect(() => readEmailAuthConfig({ ACCOUNT_RECOVERY_ENABLED: "true" } as NodeJS.ProcessEnv)).toThrow("EMAIL_AUTH_ENABLED");
+  });
+
+  it("valida límites de tamaño y sintaxis de la configuración de passkeys", () => {
+    const valid = { PASSKEYS_ENABLED: "true", PASSKEY_RP_ID: "sync.example.test", PASSKEY_RP_NAME: "Laural", PASSKEY_ORIGIN: "https://sync.example.test" } as NodeJS.ProcessEnv;
+    expect(() => readPasskeyConfig({ ...valid, PASSKEY_RP_ID: "" }, true)).toThrow("PASSKEY_RP_ID");
+    expect(() => readPasskeyConfig({ ...valid, PASSKEY_RP_ID: `${"a".repeat(64)}.${"b".repeat(64)}.${"c".repeat(64)}.${"d".repeat(64)}` }, true)).toThrow("PASSKEY_RP_ID");
+    expect(() => readPasskeyConfig({ ...valid, PASSKEY_RP_ID: "-invalid.example" }, true)).toThrow("PASSKEY_RP_ID");
+    expect(() => readPasskeyConfig({ ...valid, PASSKEY_RP_NAME: "n".repeat(65) }, true)).toThrow("PASSKEY_RP_NAME");
+    expect(() => readPasskeyConfig({ ...valid, PASSKEY_ORIGIN: "not a URL" }, true)).toThrow("origen HTTPS");
+    expect(() => readPasskeyConfig({ ...valid, PASSKEY_ORIGIN: undefined } as NodeJS.ProcessEnv, true)).toThrow("origen HTTPS");
+  });
+
+  it("permite HTTP solo para localhost y exige un origen único", () => {
+    expect(readPasskeyConfig({ PASSKEYS_ENABLED: "true", PASSKEY_RP_ID: "localhost", PASSKEY_ORIGIN: "http://localhost" } as NodeJS.ProcessEnv, true))
+      .toEqual({ rpId: "localhost", rpName: "Laural", origin: "http://localhost" });
+    const valid = { PASSKEYS_ENABLED: "true", PASSKEY_RP_ID: "sync.example.test", PASSKEY_ORIGIN: "https://sync.example.test/path" } as NodeJS.ProcessEnv;
+    expect(() => readPasskeyConfig(valid, true)).toThrow("coincidir exactamente");
+    expect(() => readPasskeyConfig({ ...valid, PASSKEY_RP_ID: "other.example.test" }, true)).toThrow("coincidir exactamente");
   });
 
   it("mantiene passkeys desactivadas y exige origen HTTPS alineado con el RP", () => {
@@ -61,6 +83,23 @@ describe("configuración del servicio", () => {
     expect(() => readGoogleOAuthConfig({ ...valid, GOOGLE_OAUTH_REDIRECT_URI: "https://attacker.test/auth/google/callback?next=x" }, true)).toThrow("exacta");
   });
 
+  it("rechaza credenciales OAuth ausentes, excesivas o con formato inseguro", () => {
+    const base = {
+      GOOGLE_OAUTH_ENABLED: "true", GOOGLE_OAUTH_CLIENT_ID: "client.apps.googleusercontent.com",
+      GOOGLE_OAUTH_CLIENT_SECRET: "secret", GOOGLE_OAUTH_REDIRECT_URI: "https://sync.example.test/auth/google/callback",
+    } as NodeJS.ProcessEnv;
+    expect(() => readGoogleOAuthConfig({ ...base, GOOGLE_OAUTH_CLIENT_ID: "" }, true)).toThrow("CLIENT_ID");
+    expect(() => readGoogleOAuthConfig({ ...base, GOOGLE_OAUTH_CLIENT_ID: `${"x".repeat(240)}.apps.googleusercontent.com` }, true)).toThrow("CLIENT_ID");
+    expect(() => readGoogleOAuthConfig({ ...base, GOOGLE_OAUTH_CLIENT_ID: "invalid-client" }, true)).toThrow("CLIENT_ID");
+    expect(() => readGoogleOAuthConfig({ ...base, GOOGLE_OAUTH_CLIENT_SECRET: "" }, true)).toThrow("CLIENT_SECRET");
+    expect(() => readGoogleOAuthConfig({ ...base, GOOGLE_OAUTH_CLIENT_SECRET: "s".repeat(513) }, true)).toThrow("CLIENT_SECRET");
+    expect(() => readGoogleOAuthConfig({ ...base, GOOGLE_OAUTH_CLIENT_SECRET: "secret\nvalue" }, true)).toThrow("CLIENT_SECRET");
+    expect(() => readGoogleOAuthConfig({ ...base, GOOGLE_OAUTH_REDIRECT_URI: "not a URL" }, true)).toThrow("debe ser HTTPS");
+    expect(() => readGoogleOAuthConfig({ ...base, GOOGLE_OAUTH_REDIRECT_URI: undefined } as NodeJS.ProcessEnv, true)).toThrow("debe ser HTTPS");
+    expect(() => readGoogleOAuthConfig({ ...base, GOOGLE_OAUTH_REDIRECT_URI: "https://user:pass@sync.example.test/auth/google/callback" }, true)).toThrow("exacta");
+    expect(() => readGoogleOAuthConfig({ ...base, GOOGLE_OAUTH_REDIRECT_URI: "https://sync.example.test/auth/google/callback#fragment" }, true)).toThrow("exacta");
+  });
+
   it("activa correo solo con claves, remitente sin controles y parámetros TOTP válidos", () => {
     expect(readEmailAuthConfig({
       EMAIL_AUTH_ENABLED: "true", RESEND_API_KEY: "re_test", RESEND_FROM: "Laural <auth@example.test>", AUTH_PIN_PEPPER: "x".repeat(32), AUTH_RECOVERY_PEPPER: "y".repeat(32), TOTP_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString("base64url"),
@@ -74,6 +113,17 @@ describe("configuración del servicio", () => {
     } as NodeJS.ProcessEnv)).toThrow();
   });
 
+  it("rechaza una clave TOTP ausente o que no represente exactamente 32 bytes", () => {
+    const base = {
+      EMAIL_AUTH_ENABLED: "true", RESEND_API_KEY: "re_test", RESEND_FROM: "auth@example.test",
+      AUTH_PIN_PEPPER: "x".repeat(32), AUTH_RECOVERY_PEPPER: "y".repeat(32),
+    } as NodeJS.ProcessEnv;
+    expect(() => readEmailAuthConfig(base)).toThrow("TOTP_ENCRYPTION_KEY");
+    expect(() => readEmailAuthConfig({ ...base, AUTH_RECOVERY_PEPPER: "" })).toThrow("AUTH_RECOVERY_PEPPER");
+    expect(() => readEmailAuthConfig({ ...base, TOTP_ENCRYPTION_KEY: Buffer.alloc(31).toString("base64url") })).toThrow("TOTP_ENCRYPTION_KEY");
+    expect(() => readEmailAuthConfig({ ...base, TOTP_ENCRYPTION_KEY: `${Buffer.alloc(32).toString("base64url")}=` })).toThrow("TOTP_ENCRYPTION_KEY");
+  });
+
   it("exige correo administrador válido antes de habilitar solicitudes de recuperación", () => {
     const base = {
       EMAIL_AUTH_ENABLED: "true", RESEND_API_KEY: "re_test", RESEND_FROM: "Laural <auth@example.test>",
@@ -83,6 +133,7 @@ describe("configuración del servicio", () => {
     expect(readEmailAuthConfig({ ...base, ACCOUNT_RECOVERY_ENABLED: "true", ACCOUNT_RECOVERY_ADMIN_EMAIL: "admin@example.test", ACCOUNT_RECOVERY_BASE_URL: "https://sync.example.test/auth/recovery" } as NodeJS.ProcessEnv))
       .toMatchObject({ recoveryAdminEmail: "admin@example.test", recoveryBaseUrl: "https://sync.example.test/auth/recovery" });
     expect(() => readEmailAuthConfig({ ...base, ACCOUNT_RECOVERY_ENABLED: "true", ACCOUNT_RECOVERY_ADMIN_EMAIL: "not-an-email" } as NodeJS.ProcessEnv)).toThrow();
+    expect(() => readEmailAuthConfig({ ...base, ACCOUNT_RECOVERY_ENABLED: "true", ACCOUNT_RECOVERY_ADMIN_EMAIL: "admin@example.test" } as NodeJS.ProcessEnv)).toThrow("ACCOUNT_RECOVERY_BASE_URL");
     expect(() => readEmailAuthConfig({ ...base, ACCOUNT_RECOVERY_ENABLED: "true", ACCOUNT_RECOVERY_ADMIN_EMAIL: "admin@example.test", ACCOUNT_RECOVERY_BASE_URL: "http://sync.example.test/auth/recovery" } as NodeJS.ProcessEnv)).toThrow("HTTPS exacta");
   });
 });
