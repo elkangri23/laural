@@ -186,7 +186,7 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
     // URL y muestran la página que toca. Sin flujo válido, vuelven a la
     // página de inicio de sesión con el aviso de sesión caducada.
     type AuthSubPage = "login" | "register" | "verification" | "password-reset" | "recovery";
-    const renderNativeSubPage = async (request: { headers: { cookie?: string }; query: { csrf: string } }, reply: FastifyReply, page: AuthSubPage): Promise<FastifyReply> => {
+    const renderNativeSubPage = async (request: import("fastify").FastifyRequest<{ Querystring: { csrf: string } }>, reply: FastifyReply, page: AuthSubPage): Promise<FastifyReply> => {
       const cookie = readCookie(request.headers.cookie, FLOW_COOKIE);
       const csrf = request.query.csrf;
       if (!await nativeAuth.isBrowserFlowValid(cookie, csrf)) {
