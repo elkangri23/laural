@@ -131,6 +131,21 @@ Verificación en vivo el 2026-11-24:
   cada cliente tiene su propio cubo, `TRUST_PROXY` funciona.
 - `GET /status` y `/status.json`: 200 por HTTPS.
 
+## Cambios tras el despliegue (2026-11-24)
+
+- La raíz `/` redirige a `/status` (commit `33a574d`): la API no
+  tiene ruta raíz y devolvía 404.
+- El CSP de `/status` necesitaba `connect-src 'self'` porque
+  `status.js` hace `fetch("/status.json")` desde el navegador; sin
+  él la página se quedaba en «Estado sin confirmar» (commit
+  `76ffed9`, también en el Caddyfile de referencia).
+- Página de acceso `/auth/native` en acordeón (commits `0b64c82` y
+  `a700aca`): cada paso es una sección numerada y solo se ve una
+  abierta a la vez (entrar, crear cuenta, verificar PIN,
+  restablecer contraseña); tras cada envío el servidor reabre la
+  sección que toca (crear cuenta → verificar PIN). Sin JavaScript,
+  por la CSP. Verificado en navegador el 2026-11-24.
+
 ## Pendiente tras el despliegue
 
 - Primer registro real de una cuenta (idealmente la de Antonio):
