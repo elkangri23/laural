@@ -289,13 +289,13 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
       schema: { body: nativeRegisterSchema },
     }, async (request, reply) => {
       if (!await nativeAuth.isBrowserFlowValid(readCookie(request.headers.cookie, FLOW_COOKIE), request.body.csrf)) {
-        return reply.code(400).type("text/html; charset=utf-8").send(renderAuthPage("", "La sesión de autenticación caducó. Vuelve a iniciar el proceso en Laural."));
+        return reply.code(400).type("text/html; charset=utf-8").send(renderAuthPage("", "La sesión de autenticación caducó. Vuelve a iniciar el proceso en Laural.", false, false, false, "register"));
       }
       if (await emailLimitExceeded(rateLimit, "auth-register-email", request.body.email, 3, 900, reply)) {
-        return reply.type("text/html; charset=utf-8").send(renderAuthPage(request.body.csrf, "Demasiadas solicitudes para este correo. Espera antes de volver a intentarlo."));
+        return reply.type("text/html; charset=utf-8").send(renderAuthPage(request.body.csrf, "Demasiadas solicitudes para este correo. Espera antes de volver a intentarlo.", false, false, false, "register"));
       }
       await emailAuth.register(request.body);
-      return reply.type("text/html; charset=utf-8").send(renderAuthPage(request.body.csrf, "Si los datos son válidos, enviaremos un PIN de verificación al correo indicado."));
+      return reply.type("text/html; charset=utf-8").send(renderAuthPage(request.body.csrf, "Si los datos son válidos, enviaremos un PIN de verificación al correo indicado.", false, false, false, "verify"));
     });
 
     app.post<{ Body: NativeEmailBody }>("/auth/native/verification/resend", {
@@ -303,13 +303,13 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
       schema: { body: nativeEmailSchema },
     }, async (request, reply) => {
       if (!await nativeAuth.isBrowserFlowValid(readCookie(request.headers.cookie, FLOW_COOKIE), request.body.csrf)) {
-        return reply.code(400).type("text/html; charset=utf-8").send(renderAuthPage("", "La sesión de autenticación caducó. Vuelve a iniciar el proceso en Laural."));
+        return reply.code(400).type("text/html; charset=utf-8").send(renderAuthPage("", "La sesión de autenticación caducó. Vuelve a iniciar el proceso en Laural.", false, false, false, "verify"));
       }
       if (await emailLimitExceeded(rateLimit, "auth-resend-email", request.body.email, 3, 900, reply)) {
-        return reply.type("text/html; charset=utf-8").send(renderAuthPage(request.body.csrf, "Demasiadas solicitudes para este correo. Espera antes de volver a intentarlo."));
+        return reply.type("text/html; charset=utf-8").send(renderAuthPage(request.body.csrf, "Demasiadas solicitudes para este correo. Espera antes de volver a intentarlo.", false, false, false, "verify"));
       }
       await emailAuth.resendVerification(request.body.email);
-      return reply.type("text/html; charset=utf-8").send(renderAuthPage(request.body.csrf, "Si la cuenta necesita verificación, enviaremos un nuevo PIN."));
+      return reply.type("text/html; charset=utf-8").send(renderAuthPage(request.body.csrf, "Si la cuenta necesita verificación, enviaremos un nuevo PIN.", false, false, false, "verify"));
     });
 
     app.post<{ Body: NativePinBody }>("/auth/native/verification/confirm", {
@@ -317,13 +317,13 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
       schema: { body: nativePinSchema },
     }, async (request, reply) => {
       if (!await nativeAuth.isBrowserFlowValid(readCookie(request.headers.cookie, FLOW_COOKIE), request.body.csrf)) {
-        return reply.code(400).type("text/html; charset=utf-8").send(renderAuthPage("", "La sesión de autenticación caducó. Vuelve a iniciar el proceso en Laural."));
+        return reply.code(400).type("text/html; charset=utf-8").send(renderAuthPage("", "La sesión de autenticación caducó. Vuelve a iniciar el proceso en Laural.", false, false, false, "verify"));
       }
       if (await emailLimitExceeded(rateLimit, "auth-verify-email", request.body.email, 10, 300, reply)) {
-        return reply.type("text/html; charset=utf-8").send(renderAuthPage(request.body.csrf, "Demasiados intentos para este correo. Espera antes de volver a intentarlo."));
+        return reply.type("text/html; charset=utf-8").send(renderAuthPage(request.body.csrf, "Demasiados intentos para este correo. Espera antes de volver a intentarlo.", false, false, false, "verify"));
       }
       await emailAuth.verify(request.body.email, request.body.pin);
-      return reply.type("text/html; charset=utf-8").send(renderAuthPage(request.body.csrf, "Solicitud procesada. Si el PIN era correcto, ya puedes probar a iniciar sesión."));
+      return reply.type("text/html; charset=utf-8").send(renderAuthPage(request.body.csrf, "Solicitud procesada. Si el PIN era correcto, ya puedes probar a iniciar sesión.", false, false, false, "login"));
     });
 
     app.post<{ Body: NativePasswordResetBody }>("/auth/native/password-reset/request", {
@@ -331,13 +331,13 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
       schema: { body: nativeEmailSchema },
     }, async (request, reply) => {
       if (!await nativeAuth.isBrowserFlowValid(readCookie(request.headers.cookie, FLOW_COOKIE), request.body.csrf)) {
-        return reply.code(400).type("text/html; charset=utf-8").send(renderAuthPage("", "La sesión de autenticación caducó. Vuelve a iniciar el proceso en Laural."));
+        return reply.code(400).type("text/html; charset=utf-8").send(renderAuthPage("", "La sesión de autenticación caducó. Vuelve a iniciar el proceso en Laural.", false, false, false, "reset"));
       }
       if (await emailLimitExceeded(rateLimit, "password-reset-request-email", request.body.email, 3, 900, reply)) {
-        return reply.type("text/html; charset=utf-8").send(renderAuthPage(request.body.csrf, "Demasiadas solicitudes para este correo. Espera antes de volver a intentarlo."));
+        return reply.type("text/html; charset=utf-8").send(renderAuthPage(request.body.csrf, "Demasiadas solicitudes para este correo. Espera antes de volver a intentarlo.", false, false, false, "reset"));
       }
       await emailAuth.requestPasswordReset(request.body.email);
-      return reply.type("text/html; charset=utf-8").send(renderAuthPage(request.body.csrf, "Si la cuenta puede recuperarse, enviaremos un PIN al correo indicado."));
+      return reply.type("text/html; charset=utf-8").send(renderAuthPage(request.body.csrf, "Si la cuenta puede recuperarse, enviaremos un PIN al correo indicado.", false, false, false, "reset"));
     });
 
     app.post<{ Body: NativePasswordResetConfirmBody }>("/auth/native/password-reset/confirm", {
@@ -345,14 +345,14 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
       schema: { body: nativePasswordResetSchema },
     }, async (request, reply) => {
       if (!await nativeAuth.isBrowserFlowValid(readCookie(request.headers.cookie, FLOW_COOKIE), request.body.csrf)) {
-        return reply.code(400).type("text/html; charset=utf-8").send(renderAuthPage("", "La sesión de autenticación caducó. Vuelve a iniciar el proceso en Laural."));
+        return reply.code(400).type("text/html; charset=utf-8").send(renderAuthPage("", "La sesión de autenticación caducó. Vuelve a iniciar el proceso en Laural.", false, false, false, "reset"));
       }
       if (await emailLimitExceeded(rateLimit, "password-reset-confirm-email", request.body.email, 10, 300, reply)) {
-        return reply.type("text/html; charset=utf-8").send(renderAuthPage(request.body.csrf, "Demasiados intentos para este correo. Espera antes de volver a intentarlo."));
+        return reply.type("text/html; charset=utf-8").send(renderAuthPage(request.body.csrf, "Demasiados intentos para este correo. Espera antes de volver a intentarlo.", false, false, false, "reset"));
       }
       const result = await emailAuth.confirmPasswordReset(request.body.email, request.body.pin, request.body.password);
-      if (result === "invalid_request") return reply.code(400).type("text/html; charset=utf-8").send(renderAuthPage(request.body.csrf, "Revisa el formato de los datos e inténtalo de nuevo."));
-      return reply.type("text/html; charset=utf-8").send(renderAuthPage(request.body.csrf, "Solicitud procesada. Si el PIN era correcto, la contraseña se cambió; vuelve a iniciar sesión. El PIN no inicia sesión ni elimina factores de seguridad."));
+      if (result === "invalid_request") return reply.code(400).type("text/html; charset=utf-8").send(renderAuthPage(request.body.csrf, "Revisa el formato de los datos e inténtalo de nuevo.", false, false, false, "reset"));
+      return reply.type("text/html; charset=utf-8").send(renderAuthPage(request.body.csrf, "Solicitud procesada. Si el PIN era correcto, la contraseña se cambió; vuelve a iniciar sesión. El PIN no inicia sesión ni elimina factores de seguridad.", false, false, false, "login"));
     });
 
     if (accountRecoveryEnabled) {
@@ -361,13 +361,13 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
         schema: { body: nativeEmailSchema },
       }, async (request, reply) => {
         if (!await nativeAuth.isBrowserFlowValid(readCookie(request.headers.cookie, FLOW_COOKIE), request.body.csrf)) {
-          return reply.code(400).type("text/html; charset=utf-8").send(renderAuthPage("", "La sesión de autenticación caducó. Vuelve a iniciar el proceso en Laural."));
+          return reply.code(400).type("text/html; charset=utf-8").send(renderAuthPage("", "La sesión de autenticación caducó. Vuelve a iniciar el proceso en Laural.", false, false, false, "recovery"));
         }
         if (await emailLimitExceeded(rateLimit, "account-recovery-request-email", request.body.email, 3, 900, reply)) {
-          return reply.type("text/html; charset=utf-8").send(renderAuthPage(request.body.csrf, "Demasiadas solicitudes para este correo. Espera antes de volver a intentarlo."));
+          return reply.type("text/html; charset=utf-8").send(renderAuthPage(request.body.csrf, "Demasiadas solicitudes para este correo. Espera antes de volver a intentarlo.", false, false, false, "recovery"));
         }
         await emailAuth.requestAccountRecovery(request.body.email);
-        return reply.type("text/html; charset=utf-8").send(renderAuthPage(request.body.csrf, "Si la cuenta puede iniciar una solicitud, enviaremos un PIN de seis dígitos al correo indicado."));
+        return reply.type("text/html; charset=utf-8").send(renderAuthPage(request.body.csrf, "Si la cuenta puede iniciar una solicitud, enviaremos un PIN de seis dígitos al correo indicado.", false, false, false, "recovery"));
       });
 
       app.post<{ Body: NativePinBody }>("/auth/native/recovery/confirm", {
@@ -375,13 +375,13 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
         schema: { body: nativePinSchema },
       }, async (request, reply) => {
         if (!await nativeAuth.isBrowserFlowValid(readCookie(request.headers.cookie, FLOW_COOKIE), request.body.csrf)) {
-          return reply.code(400).type("text/html; charset=utf-8").send(renderAuthPage("", "La sesión de autenticación caducó. Vuelve a iniciar el proceso en Laural."));
+          return reply.code(400).type("text/html; charset=utf-8").send(renderAuthPage("", "La sesión de autenticación caducó. Vuelve a iniciar el proceso en Laural.", false, false, false, "recovery"));
         }
         if (await emailLimitExceeded(rateLimit, "account-recovery-confirm-email", request.body.email, 10, 300, reply)) {
-          return reply.type("text/html; charset=utf-8").send(renderAuthPage(request.body.csrf, "Demasiados intentos para este correo. Espera antes de volver a intentarlo."));
+          return reply.type("text/html; charset=utf-8").send(renderAuthPage(request.body.csrf, "Demasiados intentos para este correo. Espera antes de volver a intentarlo.", false, false, false, "recovery"));
         }
         await emailAuth.verifyAccountRecovery(request.body.email, request.body.pin);
-        return reply.type("text/html; charset=utf-8").send(renderAuthPage(request.body.csrf, "Solicitud procesada. Si el PIN era correcto, el administrador revisará el caso. Verificar el buzón no crea una sesión ni elimina factores."));
+        return reply.type("text/html; charset=utf-8").send(renderAuthPage(request.body.csrf, "Solicitud procesada. Si el PIN era correcto, el administrador revisará el caso. Verificar el buzón no crea una sesión ni elimina factores.", false, false, false, "recovery"));
       });
     }
 
@@ -875,25 +875,48 @@ function formSchema(properties: Record<string, unknown>, required: string[]): Re
   return { type: "object", additionalProperties: false, required, properties };
 }
 
-function renderAuthPage(csrfToken: string, notice = "", passkeysEnabled = false, googleEnabled = false, accountRecoveryEnabled = false): string {
+type AuthSection = "login" | "register" | "verify" | "reset" | "recovery";
+
+function renderAuthPage(csrfToken: string, notice = "", passkeysEnabled = false, googleEnabled = false, accountRecoveryEnabled = false, openSection: AuthSection = "login"): string {
   const csrf = escapeHtml(csrfToken);
   const safeNotice = escapeHtml(notice);
+  // Acordeón exclusivo: todas las secciones comparten name="auth-section",
+  // así el navegador solo deja una abierta a la vez y cada paso (entrar,
+  // crear cuenta, verificar correo, restablecer contraseña) se ve por
+  // separado, sin JavaScript (la CSP de la página no permite scripts
+  // en línea). Tras cada envío, el servidor reabre la sección que toca.
+  const open = (section: AuthSection): string => (openSection === section ? " open" : "");
   return `<!doctype html>
 <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Acceso a Laural</title><link rel="stylesheet" href="/auth.css"></head>
 <body><div class="shell"><header class="brand"><div class="mark" aria-hidden="true">L</div><div><div class="brand-name">Laural</div><div class="brand-caption">Cuenta y sincronización</div></div></header>
-<main><h1>Inicia sesión en Laural</h1><p class="intro">Usa tu cuenta para continuar. La contraseña se introduce únicamente en esta página segura del navegador.</p>
+<main><h1>Acceso a Laural</h1><p class="intro">Inicia sesión o crea tu cuenta para continuar. La contraseña se introduce únicamente en esta página segura del navegador.</p>
 <p class="notice" role="status">${safeNotice}</p>
 ${googleEnabled ? `<form action="/auth/native/google/start" method="post"><input type="hidden" name="csrf" value="${csrf}"><button type="submit">Continuar con Google</button></form>` : ""}
 ${passkeysEnabled ? `<p class="notice" role="status" data-passkey-notice></p><button type="button" data-passkey-login>Iniciar sesión con passkey</button>
 <form action="/auth/native/login/mfa" method="post" data-passkey-mfa hidden><input type="hidden" name="csrf" value="${csrf}">
 <label>Correo electrónico<input name="email" type="email" autocomplete="username" required maxlength="320"></label>
 <label>Código TOTP o de recuperación<input name="proof" autocomplete="one-time-code" required maxlength="19"></label><button type="submit">Verificar y continuar</button></form>` : ""}
+<details name="auth-section"${open("login")}><summary>Iniciar sesión</summary>
 <form action="/auth/native/login" method="post"><input type="hidden" name="csrf" value="${csrf}">
 <label>Correo electrónico<input name="email" type="email" autocomplete="username" required maxlength="320"></label>
 <label>Contraseña<input name="password" type="password" autocomplete="current-password" required minlength="12" maxlength="128"></label>
-<button type="submit">Iniciar sesión</button></form>
-<details><summary>Restablecer contraseña</summary><p>El PIN permite cambiar la contraseña, pero no inicia sesión ni elimina passkeys o MFA. Después tendrás que iniciar sesión normalmente.</p>
+<button type="submit">Iniciar sesión</button></form></details>
+<details name="auth-section"${open("register")}><summary>Crear una cuenta</summary><p>Te enviaremos un PIN de verificación al correo indicado. Después tendrás que verificarlo en el paso siguiente.</p>
+<form action="/auth/native/register" method="post"><input type="hidden" name="csrf" value="${csrf}">
+<label>Nombre<input name="displayName" autocomplete="name" required minlength="1" maxlength="80"></label>
+<label>Correo electrónico<input name="email" type="email" autocomplete="email" required maxlength="320"></label>
+<label>Contraseña (mínimo 12 caracteres)<input name="password" type="password" autocomplete="new-password" required minlength="12" maxlength="128"></label>
+<button type="submit">Crear cuenta y enviar PIN</button></form></details>
+<details name="auth-section"${open("verify")}><summary>Verificar correo o reenviar PIN</summary>
+<form action="/auth/native/verification/confirm" method="post"><input type="hidden" name="csrf" value="${csrf}">
+<label>Correo electrónico<input name="email" type="email" autocomplete="email" required maxlength="320"></label>
+<label>PIN de seis dígitos<input name="pin" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" required></label>
+<button type="submit">Verificar correo</button></form>
+<form action="/auth/native/verification/resend" method="post"><input type="hidden" name="csrf" value="${csrf}">
+<label>Correo electrónico<input name="email" type="email" autocomplete="email" required maxlength="320"></label>
+<button type="submit">Reenviar PIN</button></form></details>
+<details name="auth-section"${open("reset")}><summary>Restablecer contraseña</summary><p>El PIN permite cambiar la contraseña, pero no inicia sesión ni elimina passkeys o MFA. Después tendrás que iniciar sesión normalmente.</p>
 <form action="/auth/native/password-reset/request" method="post"><input type="hidden" name="csrf" value="${csrf}">
 <label>Correo electrónico<input name="email" type="email" autocomplete="email" required maxlength="320"></label><button type="submit">Enviar PIN de recuperación</button></form>
 <form action="/auth/native/password-reset/confirm" method="post"><input type="hidden" name="csrf" value="${csrf}">
@@ -901,21 +924,9 @@ ${passkeysEnabled ? `<p class="notice" role="status" data-passkey-notice></p><bu
 <label>PIN de seis dígitos<input name="pin" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" required></label>
 <label>Nueva contraseña<input name="password" type="password" autocomplete="new-password" required minlength="12" maxlength="128"></label>
 <button type="submit">Cambiar contraseña</button></form></details>
-${accountRecoveryEnabled ? `<details><summary>He perdido mis factores de seguridad</summary><p>El PIN solo confirma el acceso al buzón. No inicia sesión, no cambia la contraseña y no elimina TOTP ni passkeys. Tras verificarlo, el administrador revisará el caso y podrá pedir una prueba independiente.</p>
+${accountRecoveryEnabled ? `<details name="auth-section"${open("recovery")}><summary>He perdido mis factores de seguridad</summary><p>El PIN solo confirma el acceso al buzón. No inicia sesión, no cambia la contraseña y no elimina TOTP ni passkeys. Tras verificarlo, el administrador revisará el caso y podrá pedir una prueba independiente.</p>
 <form action="/auth/native/recovery/request" method="post"><input type="hidden" name="csrf" value="${csrf}"><label>Correo de la cuenta<input name="email" type="email" autocomplete="email" required maxlength="320"></label><button type="submit">Solicitar revisión</button></form>
 <form action="/auth/native/recovery/confirm" method="post"><input type="hidden" name="csrf" value="${csrf}"><label>Correo de la cuenta<input name="email" type="email" autocomplete="email" required maxlength="320"></label><label>PIN recibido<input name="pin" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" required></label><button type="submit">Verificar buzón y enviar al administrador</button></form></details>` : ""}
-<details><summary>Crear una cuenta</summary><form action="/auth/native/register" method="post"><input type="hidden" name="csrf" value="${csrf}">
-<label>Nombre<input name="displayName" autocomplete="name" required minlength="1" maxlength="80"></label>
-<label>Correo electrónico<input name="email" type="email" autocomplete="email" required maxlength="320"></label>
-<label>Contraseña (mínimo 12 caracteres)<input name="password" type="password" autocomplete="new-password" required minlength="12" maxlength="128"></label>
-<button type="submit">Crear cuenta y enviar PIN</button></form></details>
-<details><summary>Verificar correo o reenviar PIN</summary><form action="/auth/native/verification/confirm" method="post"><input type="hidden" name="csrf" value="${csrf}">
-<label>Correo electrónico<input name="email" type="email" autocomplete="email" required maxlength="320"></label>
-<label>PIN de seis dígitos<input name="pin" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" required></label>
-<button type="submit">Verificar correo</button></form>
-<form action="/auth/native/verification/resend" method="post"><input type="hidden" name="csrf" value="${csrf}">
-<label>Correo electrónico<input name="email" type="email" autocomplete="email" required maxlength="320"></label>
-<button type="submit">Reenviar PIN</button></form></details>
 <p class="privacy">El PIN solo verifica el correo o permite cambiar la contraseña. No inicia sesión ni elimina passkeys o MFA. Las claves de tus proveedores no forman parte de esta cuenta.</p>
 </main><footer>Laural · Acceso seguro desde navegador externo</footer>${passkeysEnabled ? '<script type="module" src="/auth/passkeys.js"></script>' : ""}</div></body></html>`;
 }
