@@ -7,6 +7,14 @@
 
 ## Hallazgos corregidos
 
+### Clasificación de riesgo de `mountvol` (24-11-2026)
+
+El agente solicita aprobación para crear/quitar puntos de montaje, desmontar o poner volúmenes offline, cambiar el montaje automático, montar la partición EFI y para opciones desconocidas. El listado de volúmenes, la ayuda y `/l` se mantienen como lecturas reconocidas. La prueba cubre además que una regla exacta no pueda autorizar las mutaciones. Esto reduce ejecución accidental, pero no aísla comandos aprobados, que conservan los permisos del usuario.
+
+Verificación local: Rust 147 pasadas y 2 pruebas manuales ignoradas; UI 168/168, 79,78 % de líneas; `cargo check` y formato correctos. Windows/MSVC ejecuta la suite de `cargo llvm-cov`, pero no produce el perfil instrumentado local. CI pendiente.
+
+Referencia: [documentación de Microsoft Learn](https://learn.microsoft.com/es-es/windows-server/administration/windows-commands/mountvol).
+
 ### Clasificación de riesgo de `chkdsk` (24-11-2026)
 
 El agente ahora pide aprobación para los modos que reparan o desmontan volúmenes, modifican el registro, alteran cadenas huérfanas, marcan el volumen como limpio, así como para opciones no reconocidas. `/scan` con opciones de diagnóstico conocidas y la ayuda explícita se consideran consultas. Las pruebas de regresión verifican mutaciones, consultas y que una regla coincidente no evite la aprobación. Esta clasificación reduce ejecuciones accidentales, pero no constituye aislamiento: los comandos aprobados conservan los permisos del usuario.

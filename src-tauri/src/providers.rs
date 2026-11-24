@@ -2207,6 +2207,9 @@ fn external_tool_is_high_risk(command: &str, executable: &str) -> bool {
     if executable == "chkdsk" {
         return chkdsk_command_is_high_risk(command);
     }
+    if executable == "mountvol" {
+        return mountvol_command_is_high_risk(command);
+    }
     if executable == "manage-bde" {
         return manage_bde_command_is_high_risk(command);
     }
@@ -2716,6 +2719,25 @@ fn chkdsk_command_is_high_risk(command: &str) -> bool {
         ) || ((argument.starts_with('/') || argument.starts_with('-'))
             && !matches!(*argument, "/scan" | "/perf" | "/i" | "/c" | "/v"))
     })
+}
+
+fn mountvol_command_is_high_risk(command: &str) -> bool {
+    let arguments: Vec<_> = command.split_whitespace().skip(1).collect();
+    if arguments.is_empty() || matches!(arguments.as_slice(), ["/?"] | ["-?"]) {
+        return false;
+    }
+
+    if matches!(arguments.as_slice(), ["/l"] | ["-l"]) {
+        return false;
+    }
+
+    if let [path, option] = arguments.as_slice() {
+        if !path.starts_with('/') && !path.starts_with('-') && option.eq_ignore_ascii_case("/l") {
+            return false;
+        }
+    }
+
+    true
 }
 
 fn is_unambiguous_net_user_name(value: &str) -> bool {
@@ -4712,6 +4734,32 @@ mod tests {
     }
 
     #[test]
+    fn exige_revision_para_cambiar_puntos_de_montaje_de_volumenes() {
+        for command in [
+            "mountvol C:\\ /d",
+            "mountvol C:\\ /p",
+            "mountvol /r",
+            "mountvol /n",
+            "mountvol /e",
+            "mountvol S: /s",
+            "mountvol C:\\ \\\\?\\Volume{12345678-1234-1234-1234-123456789012}\\",
+            "mountvol /opcion-desconocida",
+        ] {
+            assert!(command_is_high_risk("cmd", command), "{command}");
+        }
+
+        for command in [
+            "mountvol",
+            "mountvol /?",
+            "mountvol -?",
+            "mountvol /l",
+            "mountvol C:\\ /l",
+        ] {
+            assert!(!command_is_high_risk("cmd", command), "{command}");
+        }
+    }
+
+    #[test]
     fn exige_revision_para_modificar_credenciales_de_windows() {
         for (command, executable) in [
             (
@@ -5124,6 +5172,7 @@ mod tests {
                 "bootsect /nt60 SYS /mbr".into(),
                 "mbr2gpt /convert /disk:0".into(),
                 "chkdsk C: /f".into(),
+                "mountvol C:\\ /p".into(),
                 "ssh servidor hostname".into(),
                 "Enter-PSSession servidor".into(),
                 "msiexec /i paquete.msi /quiet".into(),
@@ -5189,6 +5238,7 @@ mod tests {
             ("cmd", "bootsect /nt60 SYS /mbr"),
             ("cmd", "mbr2gpt /convert /disk:0"),
             ("cmd", "chkdsk C: /f"),
+            ("cmd", "mountvol C:\\ /p"),
             ("git-bash", "ssh servidor hostname"),
             ("powershell", "Enter-PSSession servidor"),
             ("cmd", "msiexec /i paquete.msi /quiet"),
