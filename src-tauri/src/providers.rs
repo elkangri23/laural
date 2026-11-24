@@ -2210,6 +2210,9 @@ fn external_tool_is_high_risk(command: &str, executable: &str) -> bool {
     if executable == "mountvol" {
         return mountvol_command_is_high_risk(command);
     }
+    if executable == "fsutil" {
+        return fsutil_command_is_high_risk(command);
+    }
     if executable == "manage-bde" {
         return manage_bde_command_is_high_risk(command);
     }
@@ -2738,6 +2741,11 @@ fn mountvol_command_is_high_risk(command: &str) -> bool {
     }
 
     true
+}
+
+fn fsutil_command_is_high_risk(command: &str) -> bool {
+    let arguments: Vec<_> = command.split_whitespace().skip(1).collect();
+    !arguments.is_empty() && !matches!(arguments.as_slice(), ["/?"] | ["-?"])
 }
 
 fn is_unambiguous_net_user_name(value: &str) -> bool {
@@ -4760,6 +4768,25 @@ mod tests {
     }
 
     #[test]
+    fn exige_revision_para_fsutil_salvo_ayuda_y_listado_de_comandos() {
+        for command in [
+            "fsutil volume dismount C:",
+            "fsutil behavior set disable8dot3 1",
+            "fsutil reparsepoint delete C:\\enlace",
+            "fsutil hardlink create C:\\nuevo C:\\origen",
+            "fsutil fsinfo drives",
+            "fsutil volume diskfree C:",
+            "fsutil comando-desconocido",
+        ] {
+            assert!(command_is_high_risk("cmd", command), "{command}");
+        }
+
+        for command in ["fsutil", "fsutil /?", "fsutil -?"] {
+            assert!(!command_is_high_risk("cmd", command), "{command}");
+        }
+    }
+
+    #[test]
     fn exige_revision_para_modificar_credenciales_de_windows() {
         for (command, executable) in [
             (
@@ -5173,6 +5200,7 @@ mod tests {
                 "mbr2gpt /convert /disk:0".into(),
                 "chkdsk C: /f".into(),
                 "mountvol C:\\ /p".into(),
+                "fsutil volume dismount C:".into(),
                 "ssh servidor hostname".into(),
                 "Enter-PSSession servidor".into(),
                 "msiexec /i paquete.msi /quiet".into(),
@@ -5239,6 +5267,7 @@ mod tests {
             ("cmd", "mbr2gpt /convert /disk:0"),
             ("cmd", "chkdsk C: /f"),
             ("cmd", "mountvol C:\\ /p"),
+            ("cmd", "fsutil volume dismount C:"),
             ("git-bash", "ssh servidor hostname"),
             ("powershell", "Enter-PSSession servidor"),
             ("cmd", "msiexec /i paquete.msi /quiet"),

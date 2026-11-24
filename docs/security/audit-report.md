@@ -7,6 +7,14 @@
 
 ## Hallazgos corregidos
 
+### Clasificación de riesgo de `fsutil` (24-11-2026)
+
+El agente solicita aprobación para todo subcomando de `fsutil`, incluidas operaciones de consulta. Solo se permiten sin aprobación el listado de subcomandos sin parámetros y la ayuda explícita. El criterio es conservador porque esta herramienta administrativa combina lecturas con cambios de configuración NTFS, volumen, enlaces y puntos de análisis; permitir consultas requiere aprobación adicional. Esto no constituye aislamiento y los comandos aprobados conservan los permisos del usuario.
+
+Verificación local: Rust 148 pasadas y 2 pruebas manuales ignoradas; UI 168/168 con 79,78 % de líneas; `cargo check`, formato y `git diff --check` correctos. Windows/MSVC ejecuta las pruebas, pero no genera los datos de cobertura instrumentados localmente. CI pendiente.
+
+Referencia: [documentación de Microsoft Learn](https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/fsutil).
+
 ### Clasificación de riesgo de `mountvol` (24-11-2026)
 
 El agente solicita aprobación para crear/quitar puntos de montaje, desmontar o poner volúmenes offline, cambiar el montaje automático, montar la partición EFI y para opciones desconocidas. El listado de volúmenes, la ayuda y `/l` se mantienen como lecturas reconocidas. La prueba cubre además que una regla exacta no pueda autorizar las mutaciones. Esto reduce ejecución accidental, pero no aísla comandos aprobados, que conservan los permisos del usuario.
