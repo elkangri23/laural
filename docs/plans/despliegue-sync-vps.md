@@ -1,7 +1,9 @@
 # Despliegue del servicio de sincronización en el VPS
 
-- **Estado:** decisiones aprobadas el 2026-11-23 por Antonio Moles.
-  El servicio **no está desplegado todavía**.
+- **Estado:** DESPLEGADO el 2026-11-24 en el VPS y verificado en vivo
+  en `https://sync.laurafernandezenfermeria.com` (commit
+  `f74dff8`, que incluye el ajuste de `TRUST_PROXY` y los ficheros
+  de despliegue). Decisiones aprobadas el 2026-11-23 por Antonio Moles.
 - **Servicio:** backend TypeScript + Fastify + PostgreSQL en `server/`,
   en `https://sync.laurafernandezenfermeria.com`.
 - **Alcance:** solo sincronización opcional de preferencias y perfiles
@@ -20,9 +22,8 @@
 El servicio se despliega con Docker Compose, como el resto del VPS
 (retaton y Meridiano-cero).
 
-Consecuencia: hay que crear el `Dockerfile` y el `compose.yaml` del
-servicio, que hoy no existen en el repo aunque el diseño los mencione
-como pendientes de crear.
+Consecuencia: el `Dockerfile` y el `compose.yaml` del servicio están
+en `server/` (creados en el despliegue del 2026-11-24).
 
 ### 2. Proxy: nginx existente
 
@@ -30,20 +31,28 @@ El proxy en producción es el nginx que ya sirve los otros subdominios
 del VPS, no Caddy.
 
 Consecuencia: hay que traducir `server/deploy/Caddyfile` a nginx:
-proxy a Fastify en `127.0.0.1:8080` y `/status` (más `/status.json`,
+proxy a Fastify en `127.0.0.1:18080` y `/status` (más `/status.json`,
 `/status.css` y `/status.js`) servido como estático aparte, fuera del
 proceso API, para que siga disponible si cae la API o PostgreSQL.
 El Caddyfile queda como referencia de ese comportamiento, no como
 proxy en producción en este VPS. Dos proxies no pueden escuchar a la
 vez en 80/443.
 
+En el despliegue (2026-11-24) el puerto es el 18080, no el 8080:
+el 8080 de loopback ya lo usa retaton/Reverb. TLS con el certificado
+comodín Sectigo `*.laurafernandezenfermeria.com`, el mismo que el
+resto de subdominios (válido hasta 2027-04-30). La configuración
+está en `server/deploy/nginx-sync.laurafernandezenfermeria.com.conf`.
+
 ### 3. PostgreSQL: dedicado + copia local nocturna
 
 PostgreSQL dedicado para Laural, en su propio contenedor dentro del
-mismo Compose. Las 7 migraciones de `server/migrations/` son solo
-suyas y no tocan a retaton ni a Meridiano-cero.
+mismo Compose. Las 14 migraciones de `server/migrations/` (001–014)
+son solo suyas y no tocan a retaton ni a Meridiano-cero.
 
-Además, copia local nocturna (`pg_dump`) guardada en el propio VPS.
+Además, copia local nocturna (`pg_dump`) guardada en el propio VPS:
+cron del host a las 04:00 (`docker-compose -f server/compose.yaml
+run --rm backup`), retención de 7 días.
 
 Aclaración: esa copia **no** es copia de desastre y **no** protege
 ante la pérdida total del VPS. Se mantiene la decisión aprobada de
@@ -69,6 +78,10 @@ Desviación del diseño aprobado: el diseño exigía los cuatro métodos
 hacerlo por fases. Esta decisión lo cambia: se lanza por fases y el
 diseño debe actualizarse en consecuencia.
 
+Nota (2026-11-24): el código de Google, passkeys y recuperación
+administrativa ya existe en `server/` (migraciones 008–014), pero
+sigue apagado por flags al abrir, según esta decisión y la 7.
+
 ### 6. Correo: `noreply@laurafernandezenfermeria.com` (Resend)
 
 Remitente para verificación de cuenta, PIN de restablecimiento y
@@ -89,29 +102,48 @@ de recuperación queda pendiente de implementar el mecanismo, pero
 no bloquea la apertura. Hay que avisar de esto antes de habilitar
 sync y de activar TOTP.
 
-## Qué falta para que sea montable
+## Despliegue realizado (2026-11-24)
 
-Esto no es todavía un manual de despliegue en producción. Falta:
+- Repo en el VPS: `/opt/laural` (rama `main`, commit `f74dff8`).
+- DNS: registro A `sync` → `51.75.143.107` creado en IONOS (TTL 3600).
+- `server/Dockerfile` y `server/compose.yaml` (API + PostgreSQL 17
+  dedicado), secretos solo en `server/.env` del VPS (permiso 600).
+- `server/.env.example` con los nombres de variables y placeholders.
+- nginx: `server/deploy/nginx-sync.laurafernandezenfermeria.com.conf`
+  instalado en `sites-available`/`sites-enabled`, TLS Sectigo.
+- `TRUST_PROXY` configurable (`server/src/config.ts`): la API confía
+  en `172.16.0.0/12` para `X-Forwarded-For`, de modo que el rate
+  limit distingue la IP real de cada cliente detrás de nginx + Docker.
+- Copia local nocturna: cron del host a las 04:00, retención 7 días.
+- `/status` y `/status.json` publicados (`state: operational`).
 
-- Crear `server/Dockerfile` y `server/compose.yaml` (API + PostgreSQL
-  dedicado), con los secretos fuera del repositorio.
-- Crear la configuración de nginx para `sync.laurafernandezenfermeria.com`
-  según el punto 2, con TLS.
-- Crear `server/.env.example` con los nombres de variables y
-  placeholders vacíos (sin valores reales).
-- Definir la copia local nocturna de PostgreSQL: ruta, retención y
-  ensayo de restauración, dejando claro que no es copia de desastre.
-- Verificar que el remitente de Resend entrega correo real desde el VPS.
-- Validar los rate limits detrás de nginx y la IP real tras el proxy.
+Verificación en vivo el 2026-11-24:
+
+- Tests de `server/tests/config.test.ts`: 16 pasados (incluidos los
+  nuevos casos de `TRUST_PROXY`).
+- Migraciones aplicadas: 27 tablas en PostgreSQL.
+- `GET /health/live` y `/health/ready`: 200.
+- `GET /v1/preferences/current` sin auth: 401; `POST /v1/auth/register`
+  vacío: 400.
+- Rate limit: 31 peticiones directas desde el host a
+  `/v1/auth/passkeys/status` dieron 30× 401 y 1× 429 (límite 30/60 s);
+  la siguiente petición por nginx desde otra IP dio 401, no 429:
+  cada cliente tiene su propio cubo, `TRUST_PROXY` funciona.
+- `GET /status` y `/status.json`: 200 por HTTPS.
+
+## Pendiente tras el despliegue
+
+- Primer registro real de una cuenta (idealmente la de Antonio):
+  es lo que demostrará la entrega real de correo con Resend de
+  extremo a extremo (PIN de verificación). La clave de Resend es la
+  misma que ya usa retaton en producción.
+- Ensayar la restauración desde la copia nocturna (`pg_dump`) en una
+  base de pruebas, sin tocar producción.
 - Ensayar el flujo completo contra el VPS: registro, verificación,
   login PKCE, snapshot, conflicto, revocación de sesiones y borrado
   de cuenta.
-
-## Antes de abrir el registro
-
-Como el registro será público desde el principio (punto 4), antes de
-abrirlo hay que haber completado: validación del proxy y la carga con
-PostgreSQL en el VPS, entrega real de correo con Resend, rate limits
-detrás de nginx, aviso de riesgo de pérdida total del VPS y de
-ausencia de cifrado de extremo a extremo antes de habilitar sync,
-y monitorización e incidentes para el servicio y `/status`.
+- Monitorización e incidentes para el servicio y `/status`.
+- Avisar del riesgo de pérdida total del VPS y de la ausencia de
+  cifrado de extremo a extremo antes de habilitar sync, y de que sin
+  recuperación administrativa perder TOTP y códigos es perder la
+  cuenta (punto 7).
