@@ -35,6 +35,7 @@ export type AppDependencies = {
   accountRecoveryEnabled?: boolean;
   accountRecovery?: AccountRecoveryService;
   requestRateLimiter: RequestRateLimiter;
+  trustProxy?: string[];
 };
 
 type RegistrationBody = { displayName: string; email: string; password: string };
@@ -61,7 +62,7 @@ const PASSKEY_CSRF_COOKIE = "__Host-laural-passkey-csrf";
 const RECOVERY_COOKIE = "__Host-laural-recovery-flow";
 
 export function createApp(dependencies: AppDependencies): FastifyInstance {
-  const app = Fastify({ logger: false, bodyLimit: BODY_LIMIT, trustProxy: ["127.0.0.1", "::1"] });
+  const app = Fastify({ logger: false, bodyLimit: BODY_LIMIT, trustProxy: dependencies.trustProxy ?? ["127.0.0.1", "::1"] });
   const rateLimit = dependencies.requestRateLimiter;
 
   app.addHook("onSend", async (_request, reply, payload) => {

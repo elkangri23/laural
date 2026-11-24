@@ -1,14 +1,12 @@
-# BORRADOR — server/Dockerfile — SOLO PARA REVISIÓN, NO DESPLEGAR
-#
-# Base: main 6f8598ada42123bf57b93064be0728a51c0a9660 (2026-11-24).
-# Decisiones: docs/plans/despliegue-sync-vps.md (2026-11-23, commit 7bbf150)
+# Dockerfile del servicio sync de Laural.
+# Decisiones: docs/plans/despliegue-sync-vps.md (2026-11-23)
 #   1. Docker Compose, como el resto del VPS.
 #   2. nginx existente en el host (este Dockerfile no incluye proxy).
 #   3. PostgreSQL dedicado (ver compose.yaml).
 #
 # Contexto de build: LA RAÍZ DEL REPO, no server/.
 #   docker build -f server/Dockerfile .
-#   docker compose -f server/compose.yaml build
+#   docker-compose -f server/compose.yaml build
 # Motivo: server/tsconfig.json tiene rootDir ".." e incluye
 # ../shared/**, y server/scripts/copy-assets.mjs copia
 # ../shared/preference-snapshot-v1.schema.json, server/migrations y
@@ -32,16 +30,11 @@
 # env_file de Compose (ver compose.yaml). --env-file-if-exists no
 # hace nada si no existe, y no es un error.
 #
-# PENDIENTE DE VALIDAR EN REVISIÓN (no resuelto en este borrador):
-# - argon2 es dependencia nativa. En la etapa de build se instalan
-#   python3/make/g++ por si hace falta compilarla; en runtime se
-#   reutilizan los node_modules ya construidos en la etapa de build
-#   (misma imagen base, glibc), para no reinstalar sin herramientas.
-#   Si el build real falla por argon2, habrá que ajustar esto.
-# - No se ha ejecutado `docker build` en este borrador: solo revisión
-#   de sintaxis y de rutas contra el código real del repo.
-
-# ---------- Etapa de build ----------
+# argon2 es dependencia nativa. En la etapa de build se instalan
+# python3/make/g++ por si hace falta compilarla; en runtime se
+# reutilizan los node_modules ya construidos en la etapa de build
+# (misma imagen base, glibc), para no reinstalar sin herramientas.
+#
 FROM node:22-bookworm-slim AS build
 
 # Herramientas por si alguna dependencia nativa (argon2) necesita

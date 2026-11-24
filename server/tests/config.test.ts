@@ -4,11 +4,18 @@ import { readConfig, readEmailAuthConfig, readGoogleOAuthConfig, readPasskeyConf
 describe("configuración del servicio", () => {
   it("usa localhost y el puerto predeterminado", () => {
     expect(readConfig({ DATABASE_URL: "postgresql://user:pass@localhost/db", RATE_LIMIT_PEPPER: "r".repeat(32) } as NodeJS.ProcessEnv))
-      .toEqual({ databaseUrl: "postgresql://user:pass@localhost/db", host: "127.0.0.1", port: 8080, rateLimitPepper: "r".repeat(32) });
+      .toEqual({ databaseUrl: "postgresql://user:pass@localhost/db", host: "127.0.0.1", port: 8080, rateLimitPepper: "r".repeat(32), trustProxy: ["127.0.0.1", "::1"] });
   });
 
   it("acepta una configuración explícita válida", () => {
     expect(readConfig({ DATABASE_URL: "postgres://db/laural", HOST: "0.0.0.0", PORT: "9090", RATE_LIMIT_PEPPER: "r".repeat(32) } as NodeJS.ProcessEnv).port).toBe(9090);
+  });
+
+  it("acepta TRUST_PROXY con CIDR y rechaza valores inválidos", () => {
+    const base = { DATABASE_URL: "postgres://db/laural", RATE_LIMIT_PEPPER: "r".repeat(32) } as NodeJS.ProcessEnv;
+    expect(readConfig({ ...base, TRUST_PROXY: "172.16.0.0/12, 127.0.0.1" }).trustProxy).toEqual(["172.16.0.0/12", "127.0.0.1"]);
+    expect(() => readConfig({ ...base, TRUST_PROXY: "no-es-una-ip" })).toThrow("TRUST_PROXY");
+    expect(() => readConfig({ ...base, TRUST_PROXY: "172.16.0.0/33" })).toThrow("TRUST_PROXY");
   });
 
   it.each([

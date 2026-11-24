@@ -57,6 +57,7 @@ const app = createApp({
   revokeOtherSessions: createOtherSessionsRevoker(pool),
   checkReadiness: async () => { await pool.query("SELECT 1"); },
   requestRateLimiter: new PostgresRequestRateLimiter(pool, config.rateLimitPepper),
+  trustProxy: config.trustProxy,
   ...(emailAuth ? { emailAuth } : {}),
   ...(nativeAuth ? { nativeAuth } : {}),
   ...(accountMfa ? { accountMfa } : {}),

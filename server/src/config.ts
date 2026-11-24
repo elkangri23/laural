@@ -1,9 +1,22 @@
+import { isIP } from "node:net";
+
 export type ServiceConfig = {
   databaseUrl: string;
   host: string;
   port: number;
   rateLimitPepper: string;
+  trustProxy: string[];
 };
+
+function isValidTrustProxyEntry(entry: string): boolean {
+  const slash = entry.indexOf("/");
+  if (slash === -1) return isIP(entry) !== 0;
+  const address = entry.slice(0, slash);
+  const prefix = entry.slice(slash + 1);
+  if (isIP(address) === 0 || !/^\d+$/.test(prefix)) return false;
+  const bits = Number(prefix);
+  return isIP(address) === 4 ? bits >= 0 && bits <= 32 : bits >= 0 && bits <= 128;
+}
 
 export type EmailAuthConfig = {
   resendApiKey: string;
@@ -61,7 +74,19 @@ export function readConfig(environment: NodeJS.ProcessEnv): ServiceConfig {
     throw new Error("RATE_LIMIT_PEPPER debe tener entre 32 y 256 bytes.");
   }
 
-  return { databaseUrl, host, port, rateLimitPepper };
+  // Por defecto solo se confía en loopback. Detrás de nginx + Docker
+  // el peer que ve Fastify es la puerta de enlace Docker (172.x), así
+  // que hay que añadir la red Docker (p. ej. 172.16.0.0/12) para que
+  // X-Forwarded-For se tenga en cuenta y el rate limit distinga IPs.
+  const trustProxyText = environment.TRUST_PROXY?.trim();
+  const trustProxy = trustProxyText
+    ? trustProxyText.split(",").map((entry) => entry.trim()).filter((entry) => entry.length > 0)
+    : ["127.0.0.1", "::1"];
+  if (trustProxy.length === 0 || trustProxy.some((entry) => !isValidTrustProxyEntry(entry))) {
+    throw new Error("TRUST_PROXY debe ser una lista de IP o CIDR válidos, separados por comas.");
+  }
+
+  return { databaseUrl, host, port, rateLimitPepper, trustProxy };
 }
 
 export function readEmailAuthConfig(environment: NodeJS.ProcessEnv): EmailAuthConfig | null {

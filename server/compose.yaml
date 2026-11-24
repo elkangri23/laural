@@ -1,39 +1,33 @@
-# BORRADOR — server/compose.yaml — SOLO PARA REVISIÓN, NO DESPLEGAR
+# Despliegue del sync de Laural en el VPS (ver docs/plans/despliegue-sync-vps.md).
+# Decisiones 2026-11-23: Docker Compose, nginx existente en el host,
+# PostgreSQL dedicado + copia local nocturna (NO es copia de desastre),
+# registro público, email+TOTP al abrir, Google/passkeys después,
+# remitente Resend noreply@laurafernandezenfermeria.com, sin recuperación
+# administrativa al abrir.
 #
-# Base: main 6f8598ada42123bf57b93064be0728a51c0a9660 (2026-11-24).
-# Decisiones: docs/plans/despliegue-sync-vps.md (2026-11-23, commit 7bbf150)
-#   1. Docker Compose, como el resto del VPS.
-#   2. nginx existente en el host (ver nginx-*.conf en este borrador).
-#   3. PostgreSQL dedicado + copia local nocturna (NO es copia de desastre).
-#   4. Registro público desde el principio: validar ANTES de abrirlo.
-#   5. Email + TOTP al abrir; Google y passkeys después (flags apagados).
-#   6. Remitente Resend: noreply@laurafernandezenfermeria.com.
-#   7. Sin recuperación administrativa al abrir (flags apagados).
-#
-# Cómo se usaría (cuando se decida desplegar, que NO es ahora):
+# Uso:
 #   cd <raíz del repo>
 #   cp server/.env.example server/.env   # y rellenarlo, nunca en Git
-#   docker compose -f server/compose.yaml run --rm migrate
-#   docker compose -f server/compose.yaml run --rm web-assets
-#   docker compose -f server/compose.yaml up -d
+#   docker-compose -f server/compose.yaml run --rm migrate
+#   docker-compose -f server/compose.yaml run --rm web-assets
+#   docker-compose -f server/compose.yaml up -d
 # El directorio de proyecto de Compose es server/ (directorio del
 # primer fichero compose), por eso `build.context: ..` es la raíz
 # del repo y `env_file: .env` es server/.env.
+# En este VPS se usa `docker-compose` (binario), no `docker compose`
+# (el plugin no está instalado).
 #
-# PENDIENTE DE VALIDAR EN REVISIÓN (no resuelto en este borrador):
-# - Fastify confía en X-Forwarded-For solo si el peer es 127.0.0.1
-#   o ::1 (server/src/app.ts: trustProxy: ["127.0.0.1", "::1"]).
-#   Con nginx en el host y la API en red bridge de Docker, el peer
-#   que ve Fastify es la puerta de enlace Docker (172.x), no
-#   loopback: el rate limit vería una sola IP para todos los
-#   clientes hasta validar/ajustar esto. NO abrir el registro
-#   público hasta resolverlo. Ver NOTAS-REVISION.md.
-# - Versión de PostgreSQL: el repo solo exige >= 13
-#   (server/README.md). En este borrador se usa postgres:17,
-#   a confirmar en revisión.
-# - Retención de copias: 7 días, propuesta en este borrador,
-#   a confirmar en revisión.
-
+# Puertos del host: la API escucha en 127.0.0.1:18080 (el 8080 de
+# loopback ya lo usa retaton/Reverb y el 5432 meridiano-db). La base
+# de datos NO se publica en el host: la API llega por el nombre de
+# servicio `db` dentro de la red.
+#
+# TRUST_PROXY: Fastify solo confía en X-Forwarded-For si el peer es
+# de confianza (server/src/config.ts). Con nginx en el host y la API
+# en red bridge, el peer es la puerta de enlace Docker (172.x): se
+# confía en 172.16.0.0/12 para que el rate limit distinga IPs reales.
+# Retención de copias: 7 días. Copia nocturna: cron del host
+# (04:00, `docker-compose -f <ruta>/server/compose.yaml run --rm backup`).
 name: laural-sync
 
 services:
@@ -46,10 +40,8 @@ services:
       # falla antes de arrancar nada.
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Falta POSTGRES_PASSWORD en server/.env}
       POSTGRES_DB: ${POSTGRES_DB:-laural}
-    # Solo loopback del host, para depuración. La API no lo necesita:
-    # se conecta por el nombre de servicio `db` dentro de la red.
-    ports:
-      - "127.0.0.1:5432:5432"
+    # Sin puerto publicado en el host: solo la API llega a la base
+    # de datos, por el nombre de servicio `db` dentro de la red.
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -63,7 +55,7 @@ services:
     build:
       context: ..
       dockerfile: server/Dockerfile
-    image: laural-sync-api:borrador
+    image: laural-sync-api:latest
     # server/.env (nunca en Git, ver .gitignore: .env, .env.*).
     # Ahí van DATABASE_URL, peppers, Resend, etc. Ver .env.example.
     env_file:
@@ -79,10 +71,12 @@ services:
       # En Docker, el host de la base de datos es el servicio `db`,
       # no 127.0.0.1. Esto sobrescribe el DATABASE_URL del .env.
       DATABASE_URL: postgres://${POSTGRES_USER:-laural}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-laural}
+      # Red Docker de confianza para X-Forwarded-For (ver cabecera).
+      TRUST_PROXY: "172.16.0.0/12,127.0.0.1,::1"
     # Solo loopback del host: solo nginx (en el host) debe llegar
-    # a la API. Nada de exponer 8080 a toda la red.
+    # a la API. Nada de exponer el puerto a toda la red.
     ports:
-      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:18080:8080"
     depends_on:
       db:
         condition: service_healthy
@@ -98,7 +92,7 @@ services:
     build:
       context: ..
       dockerfile: server/Dockerfile
-    image: laural-sync-api:borrador
+    image: laural-sync-api:latest
     env_file:
       - .env
     environment:
@@ -114,9 +108,7 @@ services:
   # NO protege ante la pérdida total del VPS (decisión 3).
   # Solo ayuda ante un borrado accidental o una migración mala.
   # Se ejecuta una sola vez con `run --rm backup`; el programado
-  # nocturno (cron del host o systemd timer) NO está definido en
-  # este borrador y hay que decidirlo en revisión.
-  # Retención propuesta: 7 días (find -mtime +7). A confirmar.
+  # nocturno es un cron del host a las 04:00. Retención: 7 días.
   backup:
     profiles:
       - tools
@@ -137,7 +129,7 @@ services:
 
   # Copia de los activos estáticos de /status a un directorio del
   # host, para que nginx (en el host) pueda servirlos sin depender
-  # del proceso API. Ver nginx-*.conf en este borrador.
+  # del proceso API. Ver nginx-*.conf en este despliegue.
   # nginx NO puede leer dentro del contenedor de la API: por eso
   # hace falta este paso en cada despliegue, ANTES de arrancar nginx
   # con la nueva versión. Se ejecuta una sola vez:
@@ -151,7 +143,7 @@ services:
     build:
       context: ..
       dockerfile: server/Dockerfile
-    image: laural-sync-api:borrador
+    image: laural-sync-api:latest
     user: "0:0"
     volumes:
       - /var/lib/laural/status-web:/status-web
