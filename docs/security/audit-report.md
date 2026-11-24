@@ -7,6 +7,12 @@
 
 ## Hallazgos corregidos
 
+### Clasificación de riesgo de `chkdsk` (24-11-2026)
+
+El agente ahora pide aprobación para los modos que reparan o desmontan volúmenes, modifican el registro, alteran cadenas huérfanas, marcan el volumen como limpio, así como para opciones no reconocidas. `/scan` con opciones de diagnóstico conocidas y la ayuda explícita se consideran consultas. Las pruebas de regresión verifican mutaciones, consultas y que una regla coincidente no evite la aprobación. Esta clasificación reduce ejecuciones accidentales, pero no constituye aislamiento: los comandos aprobados conservan los permisos del usuario.
+
+Verificación local: Rust 146 pasadas y 2 pruebas manuales ignoradas; UI 168/168 y 79,78 % de cobertura de líneas; `cargo check` y formato correctos. Windows/MSVC ejecuta `cargo llvm-cov --lib`, pero no produce datos de cobertura instrumentados. Referencia: [documentación de chkdsk](https://learn.microsoft.com/windows-server/administration/windows-commands/chkdsk).
+
 ### Revisión de passkeys (23-11-2026)
 
 - Se añadió WebAuthn passwordless, con verificación de usuario y comprobación exacta de origen/RP ID. Los retos se consumen en base de datos y el login conserva TOTP si la cuenta lo tiene activo.

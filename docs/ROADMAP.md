@@ -1,6 +1,6 @@
 # Hoja de ruta
 
-Estado al 23 de noviembre de 2026. «Implementado» describe código presente; «validación pendiente» señala que hace falta ejecutar y comprobar el flujo en Windows.
+Estado al 24 de noviembre de 2026. «Implementado» describe código presente; «validación pendiente» señala que hace falta ejecutar y comprobar el flujo en Windows.
 
 ## M0 — Esqueleto de producto (implementado; validación de uso pendiente)
 
@@ -47,6 +47,8 @@ Estado al 23 de noviembre de 2026. «Implementado» describe código presente; �
 - Los errores HTTP de modelos, chat, streaming y planificación ocultan la clave si el proveedor la refleja en su respuesta. Prueba unitaria y servidor 401 en loopback cubren la redacción. Validación local: Rust 128 pasadas y 1 ignorada; UI 160/160 (79,18 % de líneas); build y formato pasan. CI del commit `9eb92ae` terminó en verde: 79,18 % de líneas UI, 66,91 % Rust y 70,93 % en `providers.rs`; los gates críticos de líneas y ramas también pasan. `cargo llvm-cov` local no genera perfiles en Windows/MSVC. En este equipo no están instalados Ollama ni LM Studio y sus puertos 11434/1234 no están escuchando; queda pendiente probarlos cuando haya servidores disponibles y ensayar un endpoint OpenAI-compatible remoto.
 
 ## M3 — Agente (parcial)
+
+- Política del agente para `chkdsk`: exige aprobación antes de reparar volúmenes, desmontarlos, alterar el registro o ejecutar opciones desconocidas; deja `/scan` y consultas de ayuda como operaciones de lectura. La prueba Rust cubre ambas clases y la precedencia frente a reglas exactas. Rust: 146 pasadas, 2 pruebas manuales ignoradas; UI: 168/168 y 79,78 % de cobertura de líneas; `cargo check` y formato correctos. Windows/MSVC ejecuta las pruebas con `cargo llvm-cov`, pero no produce los datos de cobertura instrumentados localmente. Referencia: [chkdsk de Microsoft Learn](https://learn.microsoft.com/windows-server/administration/windows-commands/chkdsk). La clasificación es una defensa de aprobación, no un sandbox.
 
 - `diskpart` exige revisión para el modo interactivo, scripts, operaciones y opciones desconocidas; solo ayuda explícita queda sin revisión. CI del commit `16404f7` en verde: Rust 125 pasadas y 1 ignorada; UI 157/157 con 79,13 % de líneas; cobertura Rust 66,91 % total y 71,71 % en `providers.rs`; umbrales críticos de líneas y ramas aprobados.
 - `manage-bde` requiere revisión para cambiar cifrado/protección o manejar claves y protectores; solo ayuda y consultas `-status` con opciones permitidas siguen como lectura. Regresión CI del commit `d2b04b1`: Rust 124 pasadas y 1 ignorada, UI 157/157 con 79,13 % de líneas; cobertura Rust 66,76 % total y 71,46 % en `providers.rs`; umbrales críticos de líneas y ramas aprobados.

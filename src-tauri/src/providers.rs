@@ -2204,6 +2204,9 @@ fn external_tool_is_high_risk(command: &str, executable: &str) -> bool {
     if executable == "mbr2gpt" {
         return mbr2gpt_command_is_high_risk(command);
     }
+    if executable == "chkdsk" {
+        return chkdsk_command_is_high_risk(command);
+    }
     if executable == "manage-bde" {
         return manage_bde_command_is_high_risk(command);
     }
@@ -2688,6 +2691,30 @@ fn mbr2gpt_command_is_high_risk(command: &str) -> bool {
         matches!(*argument, "/validate" | "/allowfullos")
             || argument.starts_with("/disk:")
             || argument.starts_with("/map:")
+    })
+}
+
+fn chkdsk_command_is_high_risk(command: &str) -> bool {
+    let arguments: Vec<_> = command.split_whitespace().skip(1).collect();
+    if arguments.is_empty() || matches!(arguments.as_slice(), ["/?"] | ["-?"]) {
+        return false;
+    }
+
+    arguments.iter().any(|argument| {
+        matches!(
+            *argument,
+            "/f" | "/r"
+                | "/x"
+                | "/b"
+                | "/l"
+                | "/spotfix"
+                | "/sdcleanup"
+                | "/offlinescanandfix"
+                | "/forceofflinefix"
+                | "/freeorphanedchains"
+                | "/markclean"
+        ) || ((argument.starts_with('/') || argument.starts_with('-'))
+            && !matches!(*argument, "/scan" | "/perf" | "/i" | "/c" | "/v"))
     })
 }
 
@@ -4652,6 +4679,39 @@ mod tests {
     }
 
     #[test]
+    fn exige_revision_para_reparar_volumenes_con_chkdsk() {
+        for command in [
+            "chkdsk C: /f",
+            "chkdsk D: /r",
+            "chkdsk C: /x",
+            "chkdsk C: /b",
+            "chkdsk C: /spotfix",
+            "chkdsk C: /sdcleanup",
+            "chkdsk C: /offlinescanandfix",
+            "chkdsk C: /scan /forceofflinefix",
+            "chkdsk C: /freeorphanedchains",
+            "chkdsk C: /markclean",
+            "chkdsk C: /l:4096",
+            "chkdsk C: /opcion-desconocida",
+            "chkdsk C: /scan /? /f",
+        ] {
+            assert!(command_is_high_risk("cmd", command), "{command}");
+        }
+
+        for command in [
+            "chkdsk",
+            "chkdsk /?",
+            "chkdsk -?",
+            "chkdsk C:",
+            "chkdsk C: /scan",
+            "chkdsk C: /scan /perf",
+            "chkdsk C: /scan /i /c /v",
+        ] {
+            assert!(!command_is_high_risk("cmd", command), "{command}");
+        }
+    }
+
+    #[test]
     fn exige_revision_para_modificar_credenciales_de_windows() {
         for (command, executable) in [
             (
@@ -5063,6 +5123,7 @@ mod tests {
                 "bootrec /fixmbr".into(),
                 "bootsect /nt60 SYS /mbr".into(),
                 "mbr2gpt /convert /disk:0".into(),
+                "chkdsk C: /f".into(),
                 "ssh servidor hostname".into(),
                 "Enter-PSSession servidor".into(),
                 "msiexec /i paquete.msi /quiet".into(),
@@ -5127,6 +5188,7 @@ mod tests {
             ("cmd", "bootrec /fixmbr"),
             ("cmd", "bootsect /nt60 SYS /mbr"),
             ("cmd", "mbr2gpt /convert /disk:0"),
+            ("cmd", "chkdsk C: /f"),
             ("git-bash", "ssh servidor hostname"),
             ("powershell", "Enter-PSSession servidor"),
             ("cmd", "msiexec /i paquete.msi /quiet"),
