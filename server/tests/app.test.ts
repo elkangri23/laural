@@ -587,6 +587,11 @@ describe("API de snapshots de preferencias", () => {
     expect(response.body).toContain("Restablecer contraseña");
     expect(response.body).toContain("no inicia sesión ni elimina passkeys o MFA");
     expect(response.body).not.toContain("<script");
+    // La página es un acordeón exclusivo: cada paso en su sección y
+    // solo una abierta a la vez (al abrir, la de inicio de sesión).
+    expect(response.body).toContain("Crear una cuenta");
+    expect(response.body).toContain('name="auth-section"');
+    expect(response.body).toContain('<details name="auth-section" open><summary>Iniciar sesión</summary>');
     const css = await app.inject({ method: "GET", url: "/auth.css" });
     expect(css.headers["content-type"]).toContain("text/css");
     expect(css.body).toContain("--accent");
