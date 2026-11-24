@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkCriticalCoverage } from "../scripts/check-critical-coverage.mjs";
+import { checkCriticalCoverage } from "../scripts/critical-coverage.mjs";
 
 function file(path: string, statementHits = [1, 1], branchHits = [1, 1]) {
   return {
@@ -14,6 +14,9 @@ function file(path: string, statementHits = [1, 1], branchHits = [1, 1]) {
 describe("gate de cobertura crítica del servicio", () => {
   it("acepta informes con todas las líneas y ramas cubiertas", () => {
     expect(checkCriticalCoverage({ a: file("C:\\repo\\server\\src\\auth.ts") }, ["src/auth.ts"])).toEqual([]);
+    expect(checkCriticalCoverage({}, [])).toEqual([]);
+    expect(checkCriticalCoverage(null, [])).toEqual([]);
+    expect(checkCriticalCoverage({ ignored: null, a: file("/repo/src/auth.ts") }, ["src/auth.ts"])).toEqual([]);
   });
 
   it("rechaza líneas y ramas descubiertas", () => {
@@ -21,6 +24,7 @@ describe("gate de cobertura crítica del servicio", () => {
     expect(failures).toHaveLength(1);
     expect(failures[0]).toContain("1/2 líneas y 1/2 ramas");
     expect(failures[0]).toContain("2");
+    expect(checkCriticalCoverage({ a: file("/repo/src/auth.ts", [1, 1], [1, 0]) }, ["src/auth.ts"])[0]).toContain("2/2 líneas y 1/2 ramas");
   });
 
   it("rechaza archivos ausentes o duplicados en el informe", () => {
@@ -40,5 +44,11 @@ describe("gate de cobertura crítica del servicio", () => {
     const invalidBranch = file("/repo/src/auth.ts");
     invalidBranch.b["0"][0] = Number.NaN;
     expect(checkCriticalCoverage({ a: invalidBranch }, ["src/auth.ts"])[0]).toContain("líneas ejecutables válidas");
+
+    const incomplete = file("/repo/src/auth.ts");
+    delete incomplete.statementMap;
+    delete incomplete.b;
+    delete incomplete.branchMap;
+    expect(checkCriticalCoverage({ a: incomplete }, ["src/auth.ts"])[0]).toContain("líneas ejecutables válidas");
   });
 });

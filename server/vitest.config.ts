@@ -5,7 +5,7 @@ export default defineConfig({
     include: ["tests/**/*.test.ts"],
     coverage: {
       provider: "v8",
-      include: ["src/**/*.ts"],
+      include: ["src/**/*.ts", "scripts/critical-coverage.mjs"],
       exclude: ["src/main.ts", "src/migrate.ts"],
       reporter: ["text", "html", "lcov", "json"],
     },
