@@ -2174,7 +2174,7 @@ fn external_tool_is_high_risk(command: &str, executable: &str) -> bool {
     if executable == "logman" {
         return logman_command_is_high_risk(command);
     }
-    if matches!(executable, "lodctr" | "unlodctr") {
+    if matches!(executable, "lodctr" | "unlodctr" | "typeperf") {
         return performance_counter_tool_is_high_risk(command);
     }
     if executable == "pnputil" {
@@ -4565,7 +4565,7 @@ mod tests {
     }
 
     #[test]
-    fn exige_revision_para_modificar_contadores_de_rendimiento() {
+    fn exige_revision_para_utilidades_de_contadores_de_rendimiento() {
         for command in [
             "lodctr perf.ini",
             "lodctr /r",
@@ -4576,6 +4576,12 @@ mod tests {
             "unlodctr Servicio",
             "unlodctr \"Servicio con espacios\"",
             "unlodctr operacion-desconocida",
+            "typeperf \\\\Processor(_Total)\\% Processor Time",
+            "typeperf -cf contadores.txt -si 5 -sc 50 -f TSV -o captura.tsv",
+            "typeperf -q Processor -o contadores.txt",
+            "typeperf -qx Processor -s servidor",
+            "typeperf -config opciones.ini",
+            "typeperf operacion-desconocida",
         ] {
             assert!(command_is_high_risk("cmd", command), "{command}");
         }
@@ -4587,6 +4593,9 @@ mod tests {
             "unlodctr",
             "unlodctr /?",
             "unlodctr -?",
+            "typeperf",
+            "typeperf /?",
+            "typeperf -?",
         ] {
             assert!(!command_is_high_risk("cmd", command), "{command}");
         }
@@ -5458,6 +5467,7 @@ mod tests {
             ("cmd", "logman stop sesion-prueba -s servidor"),
             ("cmd", "lodctr /r"),
             ("cmd", "unlodctr servicio"),
+            ("cmd", "typeperf -q Processor -o contadores.txt"),
             ("git-bash", "PATH=/tmp rm -rf proyecto"),
             ("wsl", "find . -type f -delete"),
             ("powershell", "git -c color.ui=false status --short"),

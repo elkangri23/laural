@@ -50,3 +50,5 @@ Actualización M3: clientes SSH/SCP/SFTP y PuTTY, PsExec, WinRS, `ssh-add` y cmd
 Actualización M3: `msiexec`, `wmic`, `bitsadmin` y `certutil` se tratan como lanzadores de sistema de alto impacto y requieren aprobación antes de reglas o ejecución automática.
 
 Actualización M3: `lodctr` y `unlodctr` requieren aprobación para cualquier argumento, ya que pueden cambiar o eliminar datos de contadores en el Registro. Solo la invocación vacía y las opciones exactas de ayuda se consideran inocuas; los argumentos desconocidos también requieren aprobación.
+
+Actualización M3: `typeperf` requiere aprobación ante cualquier argumento, pues puede muestrear indefinidamente, consultar equipos remotos y escribir resultados incluso cuando consulta catálogos. Solo sintaxis vacía y ayuda exacta se permiten sin revisión; la aprobación no constituye aislamiento.

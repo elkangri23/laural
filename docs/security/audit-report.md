@@ -7,6 +7,14 @@
 
 ## Hallazgos corregidos
 
+### Clasificación de recopilación de contadores (`typeperf`) (24-11-2026)
+
+`typeperf` puede recolectar valores de contadores hasta que se interrumpa, muestrear un equipo remoto y escribir resultados en un archivo o base de datos. Incluso sus consultas de catálogo aceptan un destino de salida. Ahora toda invocación con argumentos exige aprobación, incluidas consultas, equipos remotos, archivos de configuración y opciones desconocidas; únicamente la invocación sin argumentos y la ayuda exacta quedan libres. Las regresiones verifican también que una regla exacta no omita la confirmación. Esto añade revisión humana, pero no limita privilegios ni aísla la ejecución aprobada.
+
+Verificación local: Rust 153 pasadas y 2 pruebas manuales ignoradas; UI 168/168 con 79,78 % de cobertura de líneas; `cargo check`, formato y diff correctos. Windows/MSVC ejecuta `cargo llvm-cov --lib`, pero no genera perfiles de cobertura locales. CI pendiente.
+
+Referencia: [typeperf de Microsoft Learn](https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/typeperf).
+
 ### Clasificación de contadores de rendimiento (`lodctr` y `unlodctr`) (24-11-2026)
 
 `lodctr` puede registrar o reemplazar datos de contadores en el Registro, mientras que `unlodctr` elimina nombres y descripciones para un servicio o controlador. Antes, una llamada directa podía quedar sin aprobación o entrar por una regla exacta. Ahora cualquier invocación con argumentos exige aprobación; solo la sintaxis sin argumentos y las opciones exactas de ayuda quedan libres. La regla conservadora también abarca opciones no reconocidas y prevalece sobre reglas exactas. La aprobación no reduce los permisos del proceso ni lo aísla.
