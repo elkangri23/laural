@@ -2176,7 +2176,7 @@ fn external_tool_is_high_risk(command: &str, executable: &str) -> bool {
     }
     if matches!(
         executable,
-        "lodctr" | "unlodctr" | "typeperf" | "relog" | "diskperf"
+        "lodctr" | "unlodctr" | "typeperf" | "relog" | "diskperf" | "tracerpt"
     ) {
         return performance_counter_tool_is_high_risk(command);
     }
@@ -4594,6 +4594,11 @@ mod tests {
             "diskperf -nv",
             "diskperf -n \\\\servidor",
             "diskperf operacion-desconocida",
+            "tracerpt traza.etl -o volcado.xml -of XML",
+            "tracerpt -rt \"NT Kernel Logger\" -o salida.csv -of CSV",
+            "tracerpt traza.etl -config opciones.ini",
+            "tracerpt traza.etl -report informe.xml -summary resumen.txt",
+            "tracerpt operacion-desconocida",
         ] {
             assert!(command_is_high_risk("cmd", command), "{command}");
         }
@@ -4613,6 +4618,8 @@ mod tests {
             "relog -?",
             "diskperf",
             "diskperf -?",
+            "tracerpt",
+            "tracerpt -?",
         ] {
             assert!(!command_is_high_risk("cmd", command), "{command}");
         }
@@ -5487,6 +5494,7 @@ mod tests {
             ("cmd", "typeperf -q Processor -o contadores.txt"),
             ("cmd", "relog entrada.blg /o salida.csv"),
             ("cmd", "diskperf -y \\\\servidor"),
+            ("cmd", "tracerpt traza.etl -o volcado.xml"),
             ("git-bash", "PATH=/tmp rm -rf proyecto"),
             ("wsl", "find . -type f -delete"),
             ("powershell", "git -c color.ui=false status --short"),

@@ -7,6 +7,14 @@
 
 ## Hallazgos corregidos
 
+### Clasificación de procesamiento de trazas (`tracerpt`) (24-11-2026)
+
+`tracerpt` procesa archivos de traza ETW, sesiones de eventos en tiempo real y registros de rendimiento. Sus opciones crean volcados, informes, resúmenes y esquemas, y un archivo de configuración puede aportar parámetros. Ahora cualquier invocación con argumentos requiere aprobación; solo la invocación vacía y la ayuda exacta quedan libres. Las regresiones cubren fuentes de datos, salidas y precedencia ante reglas exactas. La aprobación no limita los permisos del proceso ni es aislamiento.
+
+Verificación local: Rust 153 pasadas y 2 pruebas manuales ignoradas; UI 168/168 con 79,78 % de cobertura de líneas; `cargo check`, formato y diff correctos. Windows/MSVC ejecuta `cargo llvm-cov --lib`, pero no genera perfiles locales. CI pendiente.
+
+Referencia: [tracerpt de Microsoft Learn](https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/tracerpt).
+
 ### Clasificación de configuración de contadores de disco (`diskperf`) (24-11-2026)
 
 `diskperf` habilita o deshabilita contadores de discos físicos o volúmenes lógicos y admite dirigir la operación a otro equipo. La modificación se aplica al reiniciar. Ahora cualquier invocación con argumentos requiere aprobación; solo el uso vacío y la ayuda contextual exacta quedan libres. La regresión incluye variantes locales/remotas y verifica que una regla exacta no omita la aprobación. La confirmación no altera el nivel de privilegio del proceso ni lo aísla.

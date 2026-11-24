@@ -56,3 +56,5 @@ Actualización M3: `typeperf` requiere aprobación ante cualquier argumento, pue
 Actualización M3: `relog` requiere aprobación para cualquier argumento porque transforma registros de rendimiento y puede escribir archivos o bases de datos; su archivo de configuración también puede suministrar opciones de ejecución. Solo la invocación vacía y la ayuda exacta quedan sin revisión.
 
 Actualización M3: `diskperf` requiere aprobación para cualquier argumento porque habilita o deshabilita contadores físicos o lógicos, admite equipos remotos y aplica cambios al reiniciar. Solo el uso sin argumentos y la ayuda contextual quedan libres.
+
+Actualización M3: `tracerpt` requiere aprobación para cualquier argumento, pues procesa archivos ETW o sesiones en tiempo real y genera volcados, informes y esquemas; la configuración también puede suministrar opciones. La ayuda exacta y el uso vacío quedan libres.
