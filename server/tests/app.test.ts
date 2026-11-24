@@ -184,9 +184,12 @@ describe("límites de acceso nativo por cuenta", () => {
     const app = createTestApp({ emailAuth, nativeAuth, accountRecoveryEnabled: true });
     const query = new URLSearchParams({ redirect_uri: "http://127.0.0.1:49152/callback", state: "s".repeat(43), code_challenge: "h".repeat(43), code_challenge_method: "S256" });
     const start = await app.inject({ method: "GET", url: `/auth/native?${query}` });
-    expect(start.body).toContain("/auth/native/recovery/request");
+    expect(start.body).toContain("/auth/native/recovery?csrf=");
     const cookie = String(start.headers["set-cookie"]).split(";")[0];
     const headers = { cookie, "content-type": "application/x-www-form-urlencoded" };
+    const recoveryPage = await app.inject({ method: "GET", url: `/auth/native/recovery?csrf=${csrf}`, headers: { cookie } });
+    expect(recoveryPage.statusCode).toBe(200);
+    expect(recoveryPage.body).toContain("/auth/native/recovery/request");
     const request = await app.inject({
       method: "POST", url: "/auth/native/recovery/request", headers,
       payload: new URLSearchParams({ csrf, email: "unknown@example.test" }).toString(),
@@ -584,14 +587,35 @@ describe("API de snapshots de preferencias", () => {
     expect(response.headers["set-cookie"]).toContain("HttpOnly; SameSite=Strict");
     expect(response.body).toContain("lang=\"es\"");
     expect(response.body).toContain("name=\"password\"");
-    expect(response.body).toContain("Restablecer contraseña");
-    expect(response.body).toContain("no inicia sesión ni elimina passkeys o MFA");
     expect(response.body).not.toContain("<script");
-    // La página es un acordeón exclusivo: cada paso en su sección y
-    // solo una abierta a la vez (al abrir, la de inicio de sesión).
-    expect(response.body).toContain("Crear una cuenta");
-    expect(response.body).toContain('name="auth-section"');
-    expect(response.body).toContain('<details name="auth-section" open><summary>Iniciar sesión</summary>');
+    // El inicio de sesión es una página propia que enlaza a las demás;
+    // cada paso tiene su página con su formulario.
+    expect(response.body).toContain("¿No tienes cuenta? Crea una");
+    expect(response.body).toContain("/auth/native/register?csrf=");
+    expect(response.body).toContain("¿Olvidaste tu contraseña?");
+    expect(response.body).toContain("/auth/native/password-reset?csrf=");
+    expect(response.body).not.toContain("/auth/native/recovery?csrf=");
+    const cookie = String(response.headers["set-cookie"]).split(";")[0] ?? "";
+    const csrf = /name="csrf" value="([^"]+)"/.exec(response.body)?.[1] ?? "";
+    const pageHeaders = { cookie };
+    const registerPage = await app.inject({ method: "GET", url: `/auth/native/register?csrf=${csrf}`, headers: pageHeaders });
+    expect(registerPage.statusCode).toBe(200);
+    expect(registerPage.body).toContain("Crea tu cuenta");
+    expect(registerPage.body).toContain('action="/auth/native/register"');
+    const verificationPage = await app.inject({ method: "GET", url: `/auth/native/verification?csrf=${csrf}`, headers: pageHeaders });
+    expect(verificationPage.statusCode).toBe(200);
+    expect(verificationPage.body).toContain('action="/auth/native/verification/confirm"');
+    expect(verificationPage.body).toContain("no inicia sesión ni elimina passkeys o MFA");
+    const resetPage = await app.inject({ method: "GET", url: `/auth/native/password-reset?csrf=${csrf}`, headers: pageHeaders });
+    expect(resetPage.statusCode).toBe(200);
+    expect(resetPage.body).toContain("Restablecer contraseña");
+    expect(resetPage.body).toContain('action="/auth/native/password-reset/confirm"');
+    // La recuperación está apagada en este test: su página no existe.
+    expect((await app.inject({ method: "GET", url: `/auth/native/recovery?csrf=${csrf}`, headers: pageHeaders })).statusCode).toBe(404);
+    // Sin flujo válido, las páginas vuelven al inicio de sesión con aviso.
+    const expired = await app.inject({ method: "GET", url: `/auth/native/register?csrf=${"x".repeat(43)}` });
+    expect(expired.statusCode).toBe(400);
+    expect(expired.body).toContain("La sesión de autenticación caducó");
     const css = await app.inject({ method: "GET", url: "/auth.css" });
     expect(css.headers["content-type"]).toContain("text/css");
     expect(css.body).toContain("--accent");
