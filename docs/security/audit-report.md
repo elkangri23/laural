@@ -7,6 +7,14 @@
 
 ## Hallazgos corregidos
 
+### Clasificación de comandos de servicio remotos (`sc.exe`) (24-11-2026)
+
+El formato oficial permite anteponer un nombre UNC de servidor antes del verbo. El clasificador solo leía el token inmediato al ejecutable, por lo que `sc \\servidor stop Servicio` podía escapar la aprobación; también faltaba cubrir varios verbos que alteran configuración o seguridad. Ahora se analiza la posición del verbo tras el servidor, se requiere aprobación para cambios, controles y verbos desconocidos, y se mantiene una lista explícita de consultas de solo lectura. Las regresiones cubren mutaciones locales/remotas, consultas y precedencia ante reglas exactas. Sigue siendo un filtro heurístico, no un sandbox.
+
+Verificación local: Rust 150 pasadas y 2 pruebas manuales ignoradas; UI 168/168 con 79,78 % de cobertura de líneas; `cargo check`, formato y diff correctos. Windows/MSVC ejecuta las pruebas con `cargo llvm-cov --lib`, pero no genera perfiles locales. CI pendiente.
+
+Referencia: [Configuring a Service Using SC de Microsoft](https://learn.microsoft.com/en-us/windows/win32/services/configuring-a-service-using-sc).
+
 ### Clasificación de riesgo de Driver Verifier (24-11-2026)
 
 El agente solicita aprobación para activar, configurar o restablecer Driver Verifier, incluidos los modos volátiles que tienen efecto inmediato; también la solicita al abrir la interfaz gráfica de configuración y ante opciones desconocidas. Solo ayuda y consultas exactas se permiten como lectura. Driver Verifier puede activar comprobaciones que provoquen bug checks y reinicios cuando detecta fallos en controladores; una mala configuración puede impedir el uso normal del equipo hasta restablecerla. La aprobación reduce activaciones accidentales, pero no hace segura la operación ni aísla el comando.

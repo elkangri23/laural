@@ -2165,6 +2165,9 @@ fn external_tool_is_high_risk(command: &str, executable: &str) -> bool {
     if executable == "netsh" {
         return netsh_command_is_high_risk(command);
     }
+    if executable == "sc" {
+        return sc_command_is_high_risk(command);
+    }
     if executable == "pnputil" {
         return pnputil_command_is_high_risk(command);
     }
@@ -2300,10 +2303,6 @@ fn external_tool_is_high_risk(command: &str, executable: &str) -> bool {
                 )
             })
         }
-        "sc" => matches!(
-            subcommand,
-            "create" | "config" | "delete" | "start" | "stop" | "failure"
-        ),
         "net" => net_command_is_high_risk(command),
         "wevtutil" => matches!(subcommand, "cl" | "clear-log" | "dl" | "delete-log" | "sl"),
         "winget" => matches!(
@@ -2366,6 +2365,36 @@ fn external_tool_is_high_risk(command: &str, executable: &str) -> bool {
         "brew" => matches!(subcommand, "install" | "uninstall" | "upgrade"),
         _ => false,
     }
+}
+
+fn sc_command_is_high_risk(command: &str) -> bool {
+    let arguments: Vec<_> = command.split_whitespace().skip(1).collect();
+    if arguments.is_empty() || matches!(arguments.as_slice(), ["/?"] | ["-?"] | ["help"]) {
+        return false;
+    }
+
+    let command_index = usize::from(arguments[0].starts_with("\\\\"));
+    let Some(operation) = arguments.get(command_index) else {
+        return true;
+    };
+
+    !matches!(
+        *operation,
+        "enumdepend"
+            | "getdisplayname"
+            | "getkeyname"
+            | "qc"
+            | "qdescription"
+            | "qfailure"
+            | "qfailureflag"
+            | "qprivs"
+            | "qsidtype"
+            | "query"
+            | "queryex"
+            | "querylock"
+            | "sdshow"
+            | "showsid"
+    )
 }
 
 fn docker_command_is_high_risk(command: &str) -> bool {
@@ -4396,6 +4425,12 @@ mod tests {
             ("powershell", "reg import preferencias.reg"),
             ("cmd", "schtasks /Create /TN tarea /TR programa.exe"),
             ("git-bash", "sc.exe config servicio start= disabled"),
+            ("cmd", "sc \\\\servidor stop Servicio"),
+            ("cmd", "sc \\\\servidor config Servicio start= disabled"),
+            ("cmd", "sc description Servicio texto"),
+            ("cmd", "sc failureflag Servicio 1"),
+            ("cmd", "sc sdset Servicio D:(A;;GA;;;WD)"),
+            ("cmd", "sc sidtype Servicio unrestricted"),
             ("wsl", "net.exe user cuenta clave /add"),
             ("powershell", "net user cuenta nueva-clave"),
             ("wsl", "net user cuenta /active:no"),
@@ -4422,6 +4457,12 @@ mod tests {
             ("reg query HKCU\\Software\\Laural", "reg"),
             ("schtasks /Query /FO LIST", "schtasks"),
             ("sc.exe query servicio", "sc"),
+            ("sc \\\\servidor query Servicio", "sc"),
+            ("sc \\\\servidor qc Servicio", "sc"),
+            ("sc qfailure Servicio", "sc"),
+            ("sc sdshow Servicio", "sc"),
+            ("sc", "sc"),
+            ("sc /?", "sc"),
             ("net user", "net"),
             ("net user /domain", "net"),
             ("net user cuenta", "net"),
@@ -5291,6 +5332,7 @@ mod tests {
                 "fsutil volume dismount C:".into(),
                 "fltmc unload filtro-prueba".into(),
                 "verifier /reset".into(),
+                "sc \\\\servidor stop Servicio".into(),
                 "ssh servidor hostname".into(),
                 "Enter-PSSession servidor".into(),
                 "msiexec /i paquete.msi /quiet".into(),
@@ -5360,6 +5402,7 @@ mod tests {
             ("cmd", "fsutil volume dismount C:"),
             ("cmd", "fltmc unload filtro-prueba"),
             ("cmd", "verifier /reset"),
+            ("cmd", "sc \\\\servidor stop Servicio"),
             ("git-bash", "ssh servidor hostname"),
             ("powershell", "Enter-PSSession servidor"),
             ("cmd", "msiexec /i paquete.msi /quiet"),
