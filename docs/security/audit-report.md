@@ -7,6 +7,14 @@
 
 ## Hallazgos corregidos
 
+### Clasificación de riesgo de Driver Verifier (24-11-2026)
+
+El agente solicita aprobación para activar, configurar o restablecer Driver Verifier, incluidos los modos volátiles que tienen efecto inmediato; también la solicita al abrir la interfaz gráfica de configuración y ante opciones desconocidas. Solo ayuda y consultas exactas se permiten como lectura. Driver Verifier puede activar comprobaciones que provoquen bug checks y reinicios cuando detecta fallos en controladores; una mala configuración puede impedir el uso normal del equipo hasta restablecerla. La aprobación reduce activaciones accidentales, pero no hace segura la operación ni aísla el comando.
+
+Verificación local: Rust 150 pasadas y 2 pruebas manuales ignoradas; UI 168/168 con 79,78 % de cobertura de líneas; `cargo check`, formato y diff correctos. Windows/MSVC ejecuta `cargo llvm-cov --lib`, pero no genera datos instrumentados locales. CI pendiente.
+
+Referencia: [documentación de Driver Verifier](https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/verifier).
+
 ### Clasificación de riesgo de `fltmc` (24-11-2026)
 
 El agente solicita aprobación para cargar o descargar minifiltros y adjuntarlos o separarlos de volúmenes; comandos desconocidos también requieren revisión. La enumeración de filtros, instancias y volúmenes, y la ayuda explícita, se consideran consultas. Los minifiltros operan en el stack de E/S de archivos con privilegios de kernel, por lo que una modificación puede afectar lectura y escritura de archivos del sistema. Esta regla reduce ejecuciones accidentales, pero no aísla el comando aprobado.

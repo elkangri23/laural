@@ -2216,6 +2216,9 @@ fn external_tool_is_high_risk(command: &str, executable: &str) -> bool {
     if executable == "fltmc" {
         return fltmc_command_is_high_risk(command);
     }
+    if executable == "verifier" {
+        return verifier_command_is_high_risk(command);
+    }
     if executable == "manage-bde" {
         return manage_bde_command_is_high_risk(command);
     }
@@ -2769,6 +2772,14 @@ fn fltmc_command_is_high_risk(command: &str) -> bool {
     !matches!(
         arguments[0].to_ascii_lowercase().as_str(),
         "filters" | "instances" | "volumes"
+    )
+}
+
+fn verifier_command_is_high_risk(command: &str) -> bool {
+    let arguments: Vec<_> = command.split_whitespace().skip(1).collect();
+    !matches!(
+        arguments.as_slice(),
+        ["/help"] | ["/?"] | ["-?"] | ["/query"] | ["/querysettings"]
     )
 }
 
@@ -4836,6 +4847,34 @@ mod tests {
     }
 
     #[test]
+    fn exige_revision_para_cambiar_driver_verifier() {
+        for command in [
+            "verifier",
+            "verifier /reset",
+            "verifier /standard /all",
+            "verifier /flags 0x209BB /driver ejemplo.sys",
+            "verifier /volatile /adddriver ejemplo.sys",
+            "verifier /volatile /removedriver ejemplo.sys",
+            "verifier /bootmode persistent",
+            "verifier /opcion-desconocida",
+            "verifier /query /reset",
+        ] {
+            assert!(command_is_high_risk("cmd", command), "{command}");
+        }
+
+        for command in [
+            "verifier /?",
+            "verifier /help",
+            "verifier -?",
+            "verifier /query",
+            "verifier /querysettings",
+            "C:\\Windows\\System32\\verifier.exe /querysettings",
+        ] {
+            assert!(!command_is_high_risk("cmd", command), "{command}");
+        }
+    }
+
+    #[test]
     fn exige_revision_para_modificar_credenciales_de_windows() {
         for (command, executable) in [
             (
@@ -5251,6 +5290,7 @@ mod tests {
                 "mountvol C:\\ /p".into(),
                 "fsutil volume dismount C:".into(),
                 "fltmc unload filtro-prueba".into(),
+                "verifier /reset".into(),
                 "ssh servidor hostname".into(),
                 "Enter-PSSession servidor".into(),
                 "msiexec /i paquete.msi /quiet".into(),
@@ -5319,6 +5359,7 @@ mod tests {
             ("cmd", "mountvol C:\\ /p"),
             ("cmd", "fsutil volume dismount C:"),
             ("cmd", "fltmc unload filtro-prueba"),
+            ("cmd", "verifier /reset"),
             ("git-bash", "ssh servidor hostname"),
             ("powershell", "Enter-PSSession servidor"),
             ("cmd", "msiexec /i paquete.msi /quiet"),
