@@ -7,6 +7,14 @@
 
 ## Hallazgos corregidos
 
+### Clasificación de configuración de contadores de disco (`diskperf`) (24-11-2026)
+
+`diskperf` habilita o deshabilita contadores de discos físicos o volúmenes lógicos y admite dirigir la operación a otro equipo. La modificación se aplica al reiniciar. Ahora cualquier invocación con argumentos requiere aprobación; solo el uso vacío y la ayuda contextual exacta quedan libres. La regresión incluye variantes locales/remotas y verifica que una regla exacta no omita la aprobación. La confirmación no altera el nivel de privilegio del proceso ni lo aísla.
+
+Verificación local: Rust 153 pasadas y 2 pruebas manuales ignoradas; UI 168/168 con 79,78 % de cobertura de líneas; `cargo check`, formato y diff correctos. Windows/MSVC ejecuta `cargo llvm-cov --lib`, pero no genera perfiles locales. CI pendiente.
+
+Referencia: [diskperf de Microsoft Learn](https://learn.microsoft.com/es-es/windows-server/administration/windows-commands/diskperf).
+
 ### Clasificación de transformación de registros (`relog`) (24-11-2026)
 
 `relog` transforma registros de rendimiento, permite filtrar contadores y escribir resultados en archivos o bases de datos SQL. Su archivo de configuración puede contener parámetros de línea de comandos. Ahora cualquier invocación con argumentos exige aprobación, también con opciones de consulta/silencio o configuración; solo la invocación sin argumentos y la ayuda exacta quedan libres. La regresión confirma además que reglas exactas no saltan la aprobación. La aprobación sigue ejecutando con los permisos actuales del usuario y no es un sandbox.
