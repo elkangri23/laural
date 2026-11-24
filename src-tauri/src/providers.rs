@@ -2174,7 +2174,7 @@ fn external_tool_is_high_risk(command: &str, executable: &str) -> bool {
     if executable == "logman" {
         return logman_command_is_high_risk(command);
     }
-    if matches!(executable, "lodctr" | "unlodctr" | "typeperf") {
+    if matches!(executable, "lodctr" | "unlodctr" | "typeperf" | "relog") {
         return performance_counter_tool_is_high_risk(command);
     }
     if executable == "pnputil" {
@@ -4582,6 +4582,10 @@ mod tests {
             "typeperf -qx Processor -s servidor",
             "typeperf -config opciones.ini",
             "typeperf operacion-desconocida",
+            "relog c:\\perflogs\\medicion.blg /o c:\\salida\\medicion.csv /f csv",
+            "relog entrada.blg /config opciones.ini",
+            "relog entrada.blg /q",
+            "relog operacion-desconocida",
         ] {
             assert!(command_is_high_risk("cmd", command), "{command}");
         }
@@ -4596,6 +4600,9 @@ mod tests {
             "typeperf",
             "typeperf /?",
             "typeperf -?",
+            "relog",
+            "relog /?",
+            "relog -?",
         ] {
             assert!(!command_is_high_risk("cmd", command), "{command}");
         }
@@ -5468,6 +5475,7 @@ mod tests {
             ("cmd", "lodctr /r"),
             ("cmd", "unlodctr servicio"),
             ("cmd", "typeperf -q Processor -o contadores.txt"),
+            ("cmd", "relog entrada.blg /o salida.csv"),
             ("git-bash", "PATH=/tmp rm -rf proyecto"),
             ("wsl", "find . -type f -delete"),
             ("powershell", "git -c color.ui=false status --short"),

@@ -52,3 +52,5 @@ Actualización M3: `msiexec`, `wmic`, `bitsadmin` y `certutil` se tratan como la
 Actualización M3: `lodctr` y `unlodctr` requieren aprobación para cualquier argumento, ya que pueden cambiar o eliminar datos de contadores en el Registro. Solo la invocación vacía y las opciones exactas de ayuda se consideran inocuas; los argumentos desconocidos también requieren aprobación.
 
 Actualización M3: `typeperf` requiere aprobación ante cualquier argumento, pues puede muestrear indefinidamente, consultar equipos remotos y escribir resultados incluso cuando consulta catálogos. Solo sintaxis vacía y ayuda exacta se permiten sin revisión; la aprobación no constituye aislamiento.
+
+Actualización M3: `relog` requiere aprobación para cualquier argumento porque transforma registros de rendimiento y puede escribir archivos o bases de datos; su archivo de configuración también puede suministrar opciones de ejecución. Solo la invocación vacía y la ayuda exacta quedan sin revisión.
