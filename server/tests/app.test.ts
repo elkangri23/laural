@@ -605,7 +605,7 @@ describe("API de snapshots de preferencias", () => {
     const verificationPage = await app.inject({ method: "GET", url: `/auth/native/verification?csrf=${csrf}`, headers: pageHeaders });
     expect(verificationPage.statusCode).toBe(200);
     expect(verificationPage.body).toContain('action="/auth/native/verification/confirm"');
-    expect(verificationPage.body).toContain("no inicia sesión ni elimina passkeys o MFA");
+    expect(verificationPage.body).toContain("No inicia sesión ni elimina passkeys o MFA");
     const resetPage = await app.inject({ method: "GET", url: `/auth/native/password-reset?csrf=${csrf}`, headers: pageHeaders });
     expect(resetPage.statusCode).toBe(200);
     expect(resetPage.body).toContain("Restablecer contraseña");
