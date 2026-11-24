@@ -7,11 +7,19 @@
 
 ## Hallazgos corregidos
 
+### Clasificación de contadores de rendimiento (`lodctr` y `unlodctr`) (24-11-2026)
+
+`lodctr` puede registrar o reemplazar datos de contadores en el Registro, mientras que `unlodctr` elimina nombres y descripciones para un servicio o controlador. Antes, una llamada directa podía quedar sin aprobación o entrar por una regla exacta. Ahora cualquier invocación con argumentos exige aprobación; solo la sintaxis sin argumentos y las opciones exactas de ayuda quedan libres. La regla conservadora también abarca opciones no reconocidas y prevalece sobre reglas exactas. La aprobación no reduce los permisos del proceso ni lo aísla.
+
+Verificación local: Rust 153 pasadas y 2 pruebas manuales ignoradas; UI 168/168 con 79,78 % de cobertura de líneas; `cargo check`, formato y diff correctos. Windows/MSVC ejecuta `cargo llvm-cov --lib`, pero no genera perfiles de cobertura locales. CI pendiente.
+
+Referencias: [lodctr de Microsoft Learn](https://learn.microsoft.com/windows-server/administration/windows-commands/lodctr) y [unlodctr de Microsoft Learn](https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/unlodctr).
+
 ### Clasificación de `logman` (24-11-2026)
 
 `logman` administra recopiladores de rendimiento y sesiones ETW; puede crear, iniciar/detener, modificar y borrar colecciones, y ejecutar esas operaciones en otro equipo. Ahora el agente exige aprobación para esas acciones, importación/exportación y verbos desconocidos. Las consultas documentadas (`query`), ayuda y uso sin argumentos se mantienen como lectura. Las acciones aprobadas siguen ejecutándose con los permisos del usuario y pueden escribir archivos de log o generar carga de seguimiento.
 
-Verificación local: Rust 152 pasadas y 2 pruebas manuales ignoradas; UI 168/168 con 79,78 % de cobertura de líneas; `cargo check`, formato y diff correctos. Windows/MSVC ejecuta `cargo llvm-cov --lib`, pero no emite perfiles de cobertura locales. CI pendiente.
+Verificación local: Rust 152 pasadas y 2 pruebas manuales ignoradas; UI 168/168 con 79,78 % de cobertura de líneas; `cargo check`, formato y diff correctos. Windows/MSVC ejecuta `cargo llvm-cov --lib`, pero no emite perfiles de cobertura locales. CI del commit `3cc3c99` pasó los tres jobs.
 
 Referencia: [documentación de logman de Microsoft](https://learn.microsoft.com/es-es/windows-server/administration/windows-commands/logman).
 
@@ -19,7 +27,7 @@ Referencia: [documentación de logman de Microsoft](https://learn.microsoft.com/
 
 `regini.exe` podía modificar o eliminar claves del Registro y reemplazar permisos desde archivos de texto, incluso en una máquina remota. El agente no tenía una regla específica para este ejecutable, por lo que una invocación podía pasar a modo automático o una regla exacta. Ahora toda invocación con argumentos exige aprobación; solo el comando vacío, que muestra sintaxis, queda libre. Las regresiones cubren scripts locales, máquina remota, hive alternativo y precedencia ante reglas. La confirmación no limita los permisos del proceso aprobado.
 
-Verificación local: Rust 151 pasadas y 2 pruebas manuales ignoradas; UI 168/168 con 79,78 % de cobertura de líneas; `cargo check`, formato y diff correctos. Una primera ejecución simultánea de la UI agotó el timeout de una prueba; al repetirla sola pasó completa. Windows/MSVC ejecuta `cargo llvm-cov --lib`, pero no produce perfiles locales. CI pendiente.
+Verificación local: Rust 151 pasadas y 2 pruebas manuales ignoradas; UI 168/168 con 79,78 % de cobertura de líneas; `cargo check`, formato y diff correctos. Una primera ejecución simultánea de la UI agotó el timeout de una prueba; al repetirla sola pasó completa. Windows/MSVC ejecuta `cargo llvm-cov --lib`, pero no produce perfiles locales. CI del commit `3cc3c99` pasó los tres jobs.
 
 Referencia: [documentación de Regini de Microsoft](https://learn.microsoft.com/es-es/windows-server/administration/windows-commands/regini).
 

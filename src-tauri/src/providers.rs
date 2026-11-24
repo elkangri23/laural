@@ -2174,6 +2174,9 @@ fn external_tool_is_high_risk(command: &str, executable: &str) -> bool {
     if executable == "logman" {
         return logman_command_is_high_risk(command);
     }
+    if matches!(executable, "lodctr" | "unlodctr") {
+        return performance_counter_tool_is_high_risk(command);
+    }
     if executable == "pnputil" {
         return pnputil_command_is_high_risk(command);
     }
@@ -2418,6 +2421,11 @@ fn logman_command_is_high_risk(command: &str) -> bool {
     }
 
     *operation != "query"
+}
+
+fn performance_counter_tool_is_high_risk(command: &str) -> bool {
+    let arguments: Vec<_> = command.split_whitespace().skip(1).collect();
+    !matches!(arguments.as_slice(), [] | ["/?"] | ["-?"])
 }
 
 fn docker_command_is_high_risk(command: &str) -> bool {
@@ -4557,6 +4565,34 @@ mod tests {
     }
 
     #[test]
+    fn exige_revision_para_modificar_contadores_de_rendimiento() {
+        for command in [
+            "lodctr perf.ini",
+            "lodctr /r",
+            "lodctr /r:respaldo.ini",
+            "lodctr /s:respaldo.ini",
+            "lodctr /t:servicio",
+            "lodctr operacion-desconocida",
+            "unlodctr Servicio",
+            "unlodctr \"Servicio con espacios\"",
+            "unlodctr operacion-desconocida",
+        ] {
+            assert!(command_is_high_risk("cmd", command), "{command}");
+        }
+
+        for command in [
+            "lodctr",
+            "lodctr /?",
+            "lodctr -?",
+            "unlodctr",
+            "unlodctr /?",
+            "unlodctr -?",
+        ] {
+            assert!(!command_is_high_risk("cmd", command), "{command}");
+        }
+    }
+
+    #[test]
     fn exige_revision_para_modificar_o_exportar_la_politica_de_auditoria() {
         for command in [
             "auditpol /set /subcategory:* /success:enable",
@@ -5420,6 +5456,8 @@ mod tests {
             ("powershell", "reg delete HKCU\\Software\\Laural /f"),
             ("cmd", "regini -m \\\\servidor cambios.reg"),
             ("cmd", "logman stop sesion-prueba -s servidor"),
+            ("cmd", "lodctr /r"),
+            ("cmd", "unlodctr servicio"),
             ("git-bash", "PATH=/tmp rm -rf proyecto"),
             ("wsl", "find . -type f -delete"),
             ("powershell", "git -c color.ui=false status --short"),

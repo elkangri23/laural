@@ -48,3 +48,5 @@ Actualización M3: las mutaciones de credenciales de Windows con `cmdkey` y `vau
 Actualización M3: clientes SSH/SCP/SFTP y PuTTY, PsExec, WinRS, `ssh-add` y cmdlets de gestión de sesiones remotas PowerShell requieren aprobación manual. Cambiar a un host remoto modifica el destino y el alcance de la acción; la aprobación ocurre antes de las reglas exactas.
 
 Actualización M3: `msiexec`, `wmic`, `bitsadmin` y `certutil` se tratan como lanzadores de sistema de alto impacto y requieren aprobación antes de reglas o ejecución automática.
+
+Actualización M3: `lodctr` y `unlodctr` requieren aprobación para cualquier argumento, ya que pueden cambiar o eliminar datos de contadores en el Registro. Solo la invocación vacía y las opciones exactas de ayuda se consideran inocuas; los argumentos desconocidos también requieren aprobación.
