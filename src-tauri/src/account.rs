@@ -1192,6 +1192,14 @@ mod tests {
                 "{SYNC_ORIGIN}/auth/passkeys/manage?ticket={}",
                 "a".repeat(43)
             ),
+            format!(
+                "https://usuario@sync.laurafernandezenfermeria.com/auth/passkeys/manage#ticket={}",
+                "a".repeat(43)
+            ),
+            format!(
+                "https://:clave@sync.laurafernandezenfermeria.com/auth/passkeys/manage#ticket={}",
+                "a".repeat(43)
+            ),
         ] {
             assert!(!is_allowed_passkey_management_url(
                 &Url::parse(&value).unwrap()
