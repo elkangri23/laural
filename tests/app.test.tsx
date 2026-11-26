@@ -667,12 +667,13 @@ test("el agente automático se detiene ante un código de salida distinto de cer
       commandCall?.[1]?.completionToken as string,
       7,
     );
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 50));
   });
 
   expect(planCount).toBe(1);
   expect(mocks.invoke.mock.calls.filter(([name]) => name === "run_agent_command")).toHaveLength(1);
   expect(host.textContent).toContain("El comando terminó con código 7.");
+  expect(host.textContent).toContain("La secuencia automática se detuvo porque un comando no devolvió un código de salida correcto.");
 });
 
 test("cancelar el agente durante un comando impide que planifique el siguiente paso", async () => {
