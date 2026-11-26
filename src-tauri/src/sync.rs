@@ -466,12 +466,14 @@ fn decide_sync(
 #[command]
 pub fn get_preference_sync_status(app: AppHandle) -> Result<LocalSyncStatus, String> {
     let state = read_sync_state(&app)?;
-    Ok(LocalSyncStatus {
-        configured: state
-            .as_ref()
-            .is_some_and(|value| value.local_snapshot.is_some()),
+    Ok(local_sync_status(state.as_ref()))
+}
+
+fn local_sync_status(state: Option<&SyncState>) -> LocalSyncStatus {
+    LocalSyncStatus {
+        configured: state.is_some_and(|value| value.local_snapshot.is_some()),
         pending: state.is_some_and(|value| value.pending),
-    })
+    }
 }
 
 pub(crate) async fn forget_local_preference_sync_state(app: &AppHandle) -> Result<(), String> {
@@ -879,6 +881,29 @@ mod tests {
             revision: Some(revision),
             pending: false,
         }
+    }
+
+    #[test]
+    fn informa_si_la_sincronizacion_esta_configurada_o_pendiente() {
+        let absent = local_sync_status(None);
+        assert!(!absent.configured);
+        assert!(!absent.pending);
+
+        let configured = state(9, snapshot("laurel"));
+        let ready = local_sync_status(Some(&configured));
+        assert!(ready.configured);
+        assert!(!ready.pending);
+
+        let pending_without_baseline = pending_sync_state(None);
+        let pending = local_sync_status(Some(&pending_without_baseline));
+        assert!(!pending.configured);
+        assert!(pending.pending);
+
+        let mut configured_pending = configured;
+        configured_pending.pending = true;
+        let pending_with_baseline = local_sync_status(Some(&configured_pending));
+        assert!(pending_with_baseline.configured);
+        assert!(pending_with_baseline.pending);
     }
 
     #[test]

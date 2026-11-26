@@ -1,6 +1,7 @@
 # Registro de cambios
 
 ## Próxima versión
+- `sync.rs` (Crítico): el estado local de sincronización se calcula en una función pura y cubre los casos sin estado, configurado, pendiente sin base y pendiente con base. Suite Rust: 258 pasadas y 2 manuales ignoradas; formato y diff correctos. CI de esta regresión pendiente.
 - `sync.rs` (Crítico): cubre respuestas remotas con `snapshot: null` y valida claves generadas mediante decodificación Base64 URL-safe determinista. CI de `a053b9b` completó en verde: 84,11 % de líneas (1429/1699) y 95,61 % de ramas (109/114). Las cinco ramas restantes corresponden a lecturas parciales/EOF del servidor HTTP simulado de los tests. Suite Rust local: 257 pasadas y 2 manuales ignoradas.
 - El cierre de la subida automática trata por separado guardado, conflicto, error remoto y fallo de persistencia local; el conflicto y los errores dejan el estado pendiente. Suite Rust: 257 pasadas, 2 pruebas manuales ignoradas.
 - La decisión final de confirmación remota usa ramas explícitas para coincidencia y rechazo; se mantiene la prueba de error al persistir. Suite Rust: 256 pasadas, 2 pruebas manuales ignoradas.
