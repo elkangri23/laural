@@ -191,6 +191,16 @@ Verificación en vivo el 2026-11-24:
   problema latente — su 303 va a `accounts.google.com` —; habrá que
   añadirlo a `form-action` al activarlo.
 
+- Plantilla de correo unificada (commits `db819e4` y `dab5157`, desplegado
+  2026-11-26): los seis correos del servidor (`server/src/resend-mailer.ts`)
+  comparten una única plantilla `emailShell` con el diseño de Laural
+  (fondo verde oscuro, tarjeta, marca L, PIN en caja destacada, botón verde
+  para el enlace de reenrolamiento). Antes eran párrafos sueltos en blanco
+  y negro y el aviso al administrador ni siquiera tenía versión HTML. Todo
+  con estilos en línea y tablas (los clientes de correo no admiten hojas
+  externas); las versiones en texto plano no cambian. Tests: cada correo
+  comprueba la estructura común y su encabezado.
+
 ## Pendiente tras el despliegue
 
 - Primer registro real de una cuenta (idealmente la de Antonio):
