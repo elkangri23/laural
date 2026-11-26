@@ -623,20 +623,58 @@ fn parse_callback(request: &[u8]) -> Result<(String, String), ()> {
     Ok((code.ok_or(())?, state.ok_or(())?))
 }
 
-fn write_callback_response(stream: &mut TcpStream, success: bool) {
-    let (status, body) = if success {
+// Misma paleta que las páginas de acceso del servidor (server/web/auth.css):
+// fondo verde oscuro, acento #9bc66c, tarjeta con borde y sombra. La página es
+// estática y autocontenida: sin scripts ni recursos externos, solo <style> en
+// línea, por eso la CSP permite style-src 'unsafe-inline'.
+const CALLBACK_CSS: &str = r##":root { color-scheme: dark; font-family: "Segoe UI Variable", "Segoe UI", sans-serif; background: #101511; color: #edf3ec; }
+* { box-sizing: border-box; }
+body { min-height: 100vh; margin: 0; display: grid; place-items: center; padding: 32px 18px; background: radial-gradient(ellipse at 50% 0%, #26382a 0, #101511 58%); }
+.shell { width: min(100%, 540px); }
+.brand { display: flex; align-items: center; gap: 12px; margin: 0 0 22px 4px; }
+.mark { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 13px; background: #9bc66c; color: #142014; font-weight: 800; }
+.brand-name { font-size: 19px; font-weight: 700; letter-spacing: .02em; }
+.brand-caption { color: #a9b6aa; font-size: 12px; margin-top: 2px; }
+main { padding: clamp(24px, 6vw, 42px); border: 1px solid #344138; border-radius: 22px; background: #19201b; box-shadow: 0 24px 80px #0006; text-align: center; }
+.status { width: 64px; height: 64px; margin: 0 auto 20px; display: grid; place-items: center; border-radius: 50%; font-size: 32px; font-weight: 800; }
+.status.ok { background: #9bc66c; color: #142014; }
+.status.error { background: #5a2b2b; color: #f0b4b4; border: 1px solid #8a4444; }
+h1 { margin: 0; font-size: clamp(25px, 5vw, 32px); letter-spacing: -.035em; }
+.intro { margin: 10px 0 0; color: #a9b6aa; line-height: 1.55; }
+footer { margin: 15px 4px 0; color: #a9b6aa; font-size: 12px; text-align: center; }
+"##;
+
+fn callback_page(success: bool) -> String {
+    let (icon, kind, title, message) = if success {
         (
-            "200 OK",
-            "<h1>Inicio de sesión recibido</h1><p>Puedes volver a Laural.</p>",
+            "✓",
+            "ok",
+            "Sesión iniciada",
+            "Has iniciado sesión en Laural. Ya puedes cerrar esta pestaña y volver a la aplicación.",
         )
     } else {
         (
-            "400 Bad Request",
-            "<h1>Solicitud no válida</h1><p>Vuelve a Laural e inténtalo de nuevo.</p>",
+            "!",
+            "error",
+            "No se pudo completar el inicio de sesión",
+            "Vuelve a Laural e inténtalo de nuevo.",
         )
     };
+    format!(
+        r##"<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{title} · Laural</title><style>{css}</style></head><body><div class="shell"><header class="brand"><div class="mark" aria-hidden="true">L</div><div><div class="brand-name">Laural</div><div class="brand-caption">Cuenta y sincronización</div></div></header><main><div class="status {kind}" aria-hidden="true">{icon}</div><h1>{title}</h1><p class="intro">{message}</p></main><footer>Laural · Acceso seguro desde navegador externo</footer></div></body></html>"##,
+        title = title,
+        css = CALLBACK_CSS,
+        kind = kind,
+        icon = icon,
+        message = message
+    )
+}
+
+fn write_callback_response(stream: &mut TcpStream, success: bool) {
+    let status = if success { "200 OK" } else { "400 Bad Request" };
+    let body = callback_page(success);
     let response = format!(
-        "HTTP/1.1 {status}\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nX-Frame-Options: DENY\r\nReferrer-Policy: no-referrer\r\nContent-Security-Policy: default-src 'none'; base-uri 'none'; frame-ancestors 'none'\r\nConnection: close\r\n\r\n{body}",
+        "HTTP/1.1 {status}\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nX-Frame-Options: DENY\r\nReferrer-Policy: no-referrer\r\nContent-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'\r\nConnection: close\r\n\r\n{body}",
         body.len()
     );
     let _ = stream.write_all(response.as_bytes());
@@ -846,7 +884,21 @@ mod tests {
         assert!(response.contains("Cache-Control: no-store"));
         assert!(response.contains("X-Content-Type-Options: nosniff"));
         assert!(response.contains("Content-Security-Policy: default-src 'none'"));
-        assert!(response.contains("Inicio de sesión recibido"));
+        // La página del callback lleva el diseño de Laural (no texto plano):
+        // estilos en línea permitidos por la CSP, marca y tarjeta.
+        assert!(response.contains("style-src 'unsafe-inline'"));
+        assert!(response.contains("<style>"));
+        assert!(response.contains("Sesión iniciada"));
+        assert!(response.contains("cerrar esta pestaña"));
+        assert!(response.contains("brand-name"));
+    }
+
+    #[test]
+    fn pagina_callback_error_explica_que_volver_a_laural() {
+        let page = callback_page(false);
+        assert!(page.contains("No se pudo completar el inicio de sesión"));
+        assert!(page.contains("Vuelve a Laural e inténtalo de nuevo."));
+        assert!(page.contains("status error"));
     }
 
     #[test]
