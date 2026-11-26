@@ -238,20 +238,22 @@ pub async fn clear_deleted_account_local_data(
 async fn clear_deleted_account_local_data_inner(
     app: &AppHandle,
 ) -> Result<AccountDeletionResult, String> {
-    let session_credential_cleared = match session_entry() {
-        Ok(entry) => matches!(
-            entry.delete_credential(),
-            Ok(()) | Err(keyring::Error::NoEntry)
-        ),
-        Err(_) => false,
-    };
-    let sync_state_cleared = crate::sync::forget_local_preference_sync_state(app)
-        .await
-        .is_ok();
+    let session_result = session_entry().map(|entry| entry.delete_credential());
+    let session_credential_cleared = session_credential_delete_succeeded(session_result);
+    let sync_state_cleared =
+        sync_state_delete_succeeded(crate::sync::forget_local_preference_sync_state(app).await);
     Ok(AccountDeletionResult {
         session_credential_cleared,
         sync_state_cleared,
     })
+}
+
+fn session_credential_delete_succeeded(result: Result<keyring::Result<()>, String>) -> bool {
+    matches!(result, Ok(Ok(())) | Ok(Err(keyring::Error::NoEntry)))
+}
+
+fn sync_state_delete_succeeded(result: Result<(), String>) -> bool {
+    result.is_ok()
 }
 
 fn valid_account_deletion_confirmation(value: &str) -> bool {
@@ -1009,6 +1011,25 @@ mod tests {
         assert!(!valid_account_deletion_confirmation("eliminar"));
         assert!(!valid_account_deletion_confirmation("ELIMINAR "));
         assert!(!valid_account_deletion_confirmation(""));
+    }
+
+    #[test]
+    fn informa_por_separado_los_resultados_de_limpieza_local_de_cuenta() {
+        assert!(session_credential_delete_succeeded(Ok(Ok(()))));
+        assert!(session_credential_delete_succeeded(Ok(Err(
+            keyring::Error::NoEntry
+        ))));
+        assert!(!session_credential_delete_succeeded(Ok(Err(
+            keyring::Error::BadEncoding(vec![0xff])
+        ))));
+        assert!(!session_credential_delete_succeeded(Err(
+            "almacén inaccesible".into()
+        )));
+
+        assert!(sync_state_delete_succeeded(Ok(())));
+        assert!(!sync_state_delete_succeeded(Err(
+            "estado no disponible".into()
+        )));
     }
 
     #[test]
