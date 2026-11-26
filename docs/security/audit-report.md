@@ -1,9 +1,31 @@
 # Auditoría de seguridad
 
-- Fecha: 2026-11-23
-- Alcance: código fuente de Laural, configuración de Tauri, dependencias declaradas, controles de tamaño, canal de actualización y verificación de firma.
+- Fecha de revisión más reciente: 2026-11-26 (revisiones anteriores conservadas abajo)
+- Alcance: código fuente de Laural, configuración de Tauri, dependencias declaradas, controles de tamaño, canal de actualización, verificación de firma y workflows de publicación/CI.
 - Objetivo de distribución: aplicación de escritorio Windows.
 - Tipo: revisión estática y pruebas automatizadas; no es una certificación ni una prueba de penetración externa.
+
+## Revisión de seguridad · 2026-11-26
+
+Revisión estática enfocada en cadena de suministro GitHub Actions, publicación firmada, permisos de workflows, CSP/capacidades Tauri y auditoría de dependencias. No es una prueba de penetración.
+
+### Riesgo corregido: publicación y acciones de CI
+
+Las acciones externas se referenciaban mediante tags mutables (`@v5`, `@v1`, `@master`). El workflow de publicación otorgaba `contents: write` por defecto a nivel de workflow. Ahora las acciones de ambos workflows están fijadas a SHA completos, los permisos predeterminados son vacíos y `contents: write` se declara solo en el job de publicación. Antes de firmar, el job comprueba que el commit del tag sea antecesor de `main`.
+
+En GitHub se creó el ruleset `Proteger etiquetas de publicación` para `refs/tags/v*`: solo la cuenta administradora puede crear, actualizar o eliminar esos tags; la misma cuenta conserva la capacidad de publicar. El repositorio no tenía rulesets ni protección de `main`. No se cambió el flujo de push directo a `main`; esto sigue siendo una decisión operativa pendiente, porque exigir PR/status checks alteraría cómo se publica el código.
+
+### Auditoría de dependencias
+
+- `npm audit --audit-level=moderate`: 0 vulnerabilidades en los paquetes JavaScript.
+- `cargo audit --file src-tauri/Cargo.lock --ignore RUSTSEC-2024-0429 --deny unsound`: 0 vulnerabilidades/avisos de código inseguro bloqueantes; 5 avisos de crates sin mantenimiento (`chrono`, `proc-macro-error`, `zbus_names`, `zvariant`, `zvariant_derive`), sin actualización correctiva disponible según el registro. `RUSTSEC-2024-0429` sigue ignorado por el workflow para la ruta Linux GTK no usada en el producto Windows; revisar ese supuesto cuando se distribuya en Linux.
+
+### Riesgos residuales
+
+- La cuenta administradora y la clave privada de firma son puntos de confianza: su compromiso permitiría alterar `main` y publicar una actualización firmada.
+- La rama `main` no tiene protección configurada; las reglas de tags reducen la vía de publicación de colaboradores, pero no sustituyen revisión de cambios en `main`.
+- Las dependencias Rust sin mantenimiento deben revisarse al cambiar la plataforma o al aparecer un reemplazo mantenido.
+- No se realizó pentest externo ni revisión dinámica del instalador en una máquina limpia.
 
 ## Hallazgos corregidos
 

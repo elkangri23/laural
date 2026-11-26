@@ -14,6 +14,7 @@ Laural recibe instrucciones de usuario y salida de terminal/proyecto, y puede es
 - Las ediciones de archivo requieren aprobación y se limitan a rutas canónicas dentro del proyecto.
 - El agente ejecuta shells con los permisos de la cuenta actual; no existe sandbox.
 - Los filtros de riesgo son heurísticos; no deben describirse como una barrera de seguridad completa.
+- Los workflows fijan acciones externas a SHA y limitan los tags `v*` a la cuenta administradora; la rama `main` aún no requiere PR ni revisión obligatoria.
 
 ## Revisión OWASP por superficie
 
