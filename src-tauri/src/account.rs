@@ -793,7 +793,13 @@ fn session_entry() -> Result<Entry, String> {
 }
 
 fn read_session() -> Result<Option<Zeroizing<String>>, String> {
-    match session_entry()?.get_password() {
+    read_session_credential(session_entry()?.get_password())
+}
+
+fn read_session_credential(
+    credential: keyring::Result<String>,
+) -> Result<Option<Zeroizing<String>>, String> {
+    match credential {
         Ok(token) if valid_token(&token) => Ok(Some(Zeroizing::new(token))),
         Ok(_) => Err("La sesión guardada no tiene un formato válido.".into()),
         Err(keyring::Error::NoEntry) => Ok(None),
@@ -1064,6 +1070,31 @@ mod tests {
         assert!(valid_session_id("d5363ea7-f6cb-4cca-8e03-85aa33089e7a"));
         assert!(!valid_session_id("../../v1/auth/session/revoke"));
         assert!(!valid_session_id("d5363ea7-f6cb-4cca-8e03-85aa33089e7z"));
+    }
+
+    #[test]
+    fn lee_sesion_solo_si_el_token_del_almacen_tiene_formato_valido() {
+        let token = "a".repeat(43);
+        assert_eq!(
+            read_session_credential(Ok(token.clone()))
+                .unwrap()
+                .unwrap()
+                .as_str(),
+            token
+        );
+        assert!(
+            read_session_credential(Err(keyring::Error::NoEntry))
+                .unwrap()
+                .is_none()
+        );
+        assert_eq!(
+            read_session_credential(Ok("token-invalido".into())).err(),
+            Some("La sesión guardada no tiene un formato válido.".into())
+        );
+        assert_eq!(
+            read_session_credential(Err(keyring::Error::BadEncoding(vec![0xff]))).err(),
+            Some("No se pudo leer la sesión del almacén seguro de Windows.".into())
+        );
     }
 
     #[test]
