@@ -1,6 +1,7 @@
 # Registro de cambios
 
 ## Próxima versión
+- Regresión del agente: cancelar mientras un comando está en curso impide que el ciclo pida otro plan o ejecute otra acción.
 - Regresión del agente: un comando con código de salida distinto de cero detiene el ciclo sin solicitar otro plan ni ejecutar una segunda acción.
 - El agente observa cada acción exitosa y pide un nuevo plan con código y salida acotada, conserva las acciones completadas, se pausa al llegar a ocho pasos y muestra cuándo el modelo considera cumplido el objetivo. Un error detiene el ciclo; los cambios de archivo siguen requiriendo aprobación. ADR-0057.
 - El agente puede pedir una aclaración sin proponer acciones y conserva la petición original al recibir la respuesta; el plan evita cambios ajenos al objetivo y no presume el contenido de archivos ausentes del contexto. PowerShell, CMD, WSL y Git Bash notifican la finalización con código de salida y un identificador único por ejecución. Informe: `docs/product/agent-operativity-audit.md`.
