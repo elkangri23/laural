@@ -1,6 +1,7 @@
 # Registro de cambios
 
 ## Próxima versión
+- La decisión final de confirmación remota usa ramas explícitas para coincidencia y rechazo; se mantiene la prueba de error al persistir. Suite Rust: 256 pasadas, 2 pruebas manuales ignoradas.
 - La confirmación remota persiste la línea base únicamente tras una coincidencia exacta; se prueban desajustes, ausencia de snapshot y fallo al guardar. Suite Rust: 256 pasadas, 2 pruebas manuales ignoradas; `sync.rs` alcanza 94,17 % de ramas.
 - El resultado de escritura remota solo actualiza la línea base local si la nube confirma el guardado; los conflictos preservan el estado y los errores locales se propagan. Suite Rust: 256 pasadas, 2 pruebas manuales ignoradas; `sync.rs` alcanza 92,50 % de ramas.
 - La confirmación de preferencias no guarda una línea base hasta verificar que coincidan la revisión remota y el contenido. Regresiones cubren éxito, revisión desfasada, snapshot ausente y ajustes diferentes. Suite Rust: 255 pasadas, 2 pruebas manuales ignoradas; `sync.rs` sube a 83,47 % de líneas y 90,98 % de ramas.

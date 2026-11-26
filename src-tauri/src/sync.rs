@@ -327,8 +327,9 @@ fn finalize_remote_confirmation(
     revision: u64,
     persist_baseline: impl FnOnce(PreferenceSnapshot, PreferenceSnapshot, u64) -> Result<(), String>,
 ) -> Result<bool, String> {
-    let Some(remote_snapshot) = confirmed_cloud_snapshot(remote, &expected, revision) else {
-        return Ok(false);
+    let remote_snapshot = match confirmed_cloud_snapshot(remote, &expected, revision) {
+        Some(snapshot) => snapshot,
+        None => return Ok(false),
     };
     persist_baseline(expected, remote_snapshot, revision)?;
     Ok(true)
