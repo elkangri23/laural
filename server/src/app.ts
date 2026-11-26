@@ -70,7 +70,13 @@ export function createApp(dependencies: AppDependencies): FastifyInstance {
     reply.header("X-Frame-Options", "DENY");
     reply.header("Referrer-Policy", "no-referrer");
     reply.header("Cache-Control", "no-store");
-    reply.header("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'");
+    // form-action incluye el callback loopback: Chrome y Safari aplican la
+    // directiva también a la redirección tras el envío del formulario, y el
+    // inicio de sesión responde 303 hacia http://127.0.0.1:puerto/callback.
+    // Sin esa fuente el navegador se queda en el formulario sin navegar y la
+    // app nunca recibe el código (el servidor sí lo emite). La redirección
+    // solo puede ir a loopback: validateNativeFlowParameters la exige.
+    reply.header("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; form-action 'self' http://127.0.0.1:*; base-uri 'none'; frame-ancestors 'none'");
     return payload;
   });
 
