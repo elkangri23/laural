@@ -2,6 +2,7 @@
 
 ## Próxima versión
 - La decisión de sincronización exige elegir si falta cualquier dato de la línea base y detecta cambios de contenido remoto aunque la revisión sea la misma. Suite Rust: 249 pasadas, 2 pruebas manuales ignoradas.
+- La medición CI de `sync.rs` queda en 79,59 % de líneas y 81,45 % de ramas; los jobs de cobertura y servicio terminaron correctamente.
 - La eliminación del estado local de sincronización queda aislada de Tauri y cubre éxito, archivo ausente y fallo del sistema de archivos. Suite Rust: 247 pasadas, 2 pruebas manuales ignoradas.
 - El agente da ejemplos completos de búsqueda de imágenes para PowerShell, CMD, WSL y Git Bash. PowerShell filtra extensiones explícitamente; Bash usa `find` con patrones agrupados; CMD conserva sus patrones compatibles. La prueba también comprueba que, ante un shell desconocido, el agente no invente sintaxis.
 - El control de riesgo del agente exige revisión antes de crear, borrar (incluido `--delete-merged`), renombrar, copiar o cambiar el seguimiento de ramas Git, incluso con opciones cortas combinadas. Las consultas conocidas se permiten; opciones ambiguas o desconocidas requieren revisión.
