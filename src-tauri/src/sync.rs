@@ -282,11 +282,28 @@ pub async fn write_remote_preferences(
             return Err(error);
         }
     };
-    if let RemoteWriteResult::Saved { revision } = result {
-        record_sync_baseline(&app, snapshot.clone(), snapshot, revision)?;
-        return Ok(RemoteWriteResult::Saved { revision });
+    finalize_remote_write(result, &snapshot, |written_snapshot, revision| {
+        record_sync_baseline(
+            &app,
+            written_snapshot.clone(),
+            written_snapshot.clone(),
+            revision,
+        )
+    })
+}
+
+fn finalize_remote_write(
+    result: RemoteWriteResult,
+    snapshot: &PreferenceSnapshot,
+    persist_baseline: impl FnOnce(&PreferenceSnapshot, u64) -> Result<(), String>,
+) -> Result<RemoteWriteResult, String> {
+    match result {
+        RemoteWriteResult::Saved { revision } => {
+            persist_baseline(snapshot, revision)?;
+            Ok(RemoteWriteResult::Saved { revision })
+        }
+        RemoteWriteResult::Conflict => Ok(RemoteWriteResult::Conflict),
     }
-    Ok(result)
 }
 
 #[command]
@@ -1434,6 +1451,36 @@ mod tests {
         let (result, _) =
             put_with_response("200 OK", "ETag: \"8\"\r\n".into(), b"{".to_vec(), &value, 7).await;
         assert_error_contains(result, "confirmación inválida");
+    }
+
+    #[test]
+    fn solo_persiste_la_linea_base_si_la_nube_confirma_la_escritura() {
+        let value = snapshot("ocean");
+        let mut persisted = None;
+        let saved = finalize_remote_write(
+            RemoteWriteResult::Saved { revision: 12 },
+            &value,
+            |written_snapshot, revision| {
+                persisted = Some((written_snapshot.preferences.theme_id.clone(), revision));
+                Ok(())
+            },
+        )
+        .unwrap();
+
+        assert!(matches!(saved, RemoteWriteResult::Saved { revision: 12 }));
+        assert_eq!(persisted, Some(("ocean".into(), 12)));
+
+        let conflict = finalize_remote_write(RemoteWriteResult::Conflict, &value, |_, _| {
+            panic!("un conflicto no debe persistir una línea base")
+        })
+        .unwrap();
+        assert!(matches!(conflict, RemoteWriteResult::Conflict));
+
+        let failed =
+            finalize_remote_write(RemoteWriteResult::Saved { revision: 13 }, &value, |_, _| {
+                Err("No se pudo escribir el estado local.".into())
+            });
+        assert_error_contains(failed, "estado local");
     }
 
     #[test]
