@@ -1,6 +1,7 @@
 # Registro de cambios
 
 ## Próxima versión
+- El planificador distingue las consultas de las modificaciones: prefiere acciones mínimas, inspecciona solo lo que no está en contexto y pide verificar los cambios con evidencia suficiente.
 - El agente muestra el motivo de detención cuando un comando automático falla y conserva la acción fallida para revisarla.
 - Regresión del agente: cancelar mientras un comando está en curso impide que el ciclo pida otro plan o ejecute otra acción.
 - Regresión del agente: un comando con código de salida distinto de cero detiene el ciclo sin solicitar otro plan ni ejecutar una segunda acción.

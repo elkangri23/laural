@@ -34,6 +34,12 @@ Las instrucciones ya aislaban el contexto no confiable y limitaban el shell, per
 
 **Resuelto:** las instrucciones ahora requieren identificar el resultado pedido, limitarse a acciones necesarias, no inventar contenido de archivos y preguntar antes de adivinar información imprescindible.
 
+### Media — el plan podía confundir una orden ejecutada con un objetivo verificado
+
+Un código de salida satisfactorio confirma que el shell terminó correctamente, pero no necesariamente que el resultado pedido se haya conseguido.
+
+**Mejorado:** el planificador debe usar una acción mínima para consultas, inspeccionar solo el estado que no esté ya en contexto y verificar cambios con evidencia suficiente, sin añadir comprobaciones redundantes a consultas simples. Esta indicación guía al modelo; la app no verifica automáticamente que cada objetivo esté cumplido.
+
 ## Límites que siguen abiertos
 
 - **La finalización depende del modelo:** Laural muestra el resumen de finalización junto con el resultado recibido, pero no demuestra que el objetivo externo esté realmente conseguido. El modelo puede equivocarse al interpretar una salida.
@@ -45,12 +51,12 @@ Las instrucciones ya aislaban el contexto no confiable y limitaban el shell, per
 
 ## Pruebas
 
-- `providers.rs` se clasifica como **Crítico**: las regresiones verifican pregunta/finalización válidas, estados incoherentes, límites del historial y rechazo de acciones repetidas.
+- `providers.rs` se clasifica como **Crítico**: las regresiones verifican pregunta/finalización válidas, estados incoherentes, límites del historial, rechazo de acciones repetidas y pautas de inspección/verificación del planificador.
 - `lib.rs` se clasifica como **Crítico**: las regresiones verifican el código de salida y el token para los cuatro shells admitidos, además del rechazo de tokens inválidos.
 - `TerminalPane.tsx` se clasifica como **Crítico**: las regresiones aceptan una marca OSC 777 numérica válida y rechazan códigos mal formados.
 - `App.tsx` se clasifica como **Estándar**: las regresiones verifican que el turno de aclaración conserve el objetivo original, que no se replanifique antes del token correcto, que la salida y el código exitoso entren en la siguiente decisión, que un código distinto de cero no provoque otra planificación ni ejecución y muestre el motivo de parada, y que cancelar durante un comando impida continuar.
 
-Validación local de esta revisión: UI 294/294; cobertura UI 92,24 % de líneas, con `App.tsx` en 83,08 % y `TerminalPane.tsx` en 100 % de líneas y ramas. La política 100/80/0 pasa: 11 archivos Críticos al 100/100, 14 Estándar con al menos 80 % de líneas y 8 Triviales excluidos. Rust: 267 pruebas pasadas y 2 manuales ignoradas (sin cambios Rust desde esa ejecución). `npm run test:coverage-policy` pasa. La compilación, el presupuesto de bundles y `git diff --check` pasaron en el commit anterior; esta revisión solo añade una prueba UI y actualiza documentación. No hay proveedor local escuchando en Ollama, LM Studio ni el puerto FreeLLMAPI configurado, así que no se pudo probar la conversación real. La cobertura Rust no se pudo medir localmente con MSVC; debe confirmarse en CI Linux.
+Validación local de esta revisión: UI 294/294; cobertura UI 92,24 % de líneas, con `App.tsx` en 83,08 % y `TerminalPane.tsx` en 100 % de líneas y ramas. La política 100/80/0 pasa: 11 archivos Críticos al 100/100, 14 Estándar con al menos 80 % de líneas y 8 Triviales excluidos. Rust: 268 pruebas pasadas y 2 manuales ignoradas. `cargo fmt --check` pasa; la cobertura Rust no se pudo medir localmente con MSVC y debe confirmarse en CI Linux. La compilación UI, el gate 100/80/0 y `git diff --check` pasaron en la revisión anterior; esta revisión solo modifica el prompt del backend y su regresión Rust. No hay proveedor local escuchando en Ollama, LM Studio ni el puerto FreeLLMAPI configurado, así que no se pudo probar la conversación real.
 
 La cobertura integral por archivo se mide con la política 100/80/0 del proyecto; Windows/MSVC ejecuta Cargo pero no genera los perfiles `llvm-cov`, por lo que la cobertura Rust debe confirmarse en CI Linux.
 
