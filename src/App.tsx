@@ -37,10 +37,14 @@ type Provider = { id: string; providerKind: string; name: string; baseUrl: strin
 type PlanAction =
   | { type: "run_command"; command: string; reason: string; status?: string; result?: string }
   | { type: "write_file"; path: string; content: string; reason: string; status?: string; result?: string };
-type AgentPlan = { summary: string; clarifyingQuestion?: string | null; actions: PlanAction[] };
+type AgentExecutionObservation = { action: string; result: string; output: string };
+type AgentCycle = { task: string; shell: Shell; terminalId: string; projectPath: string | null; selectedFiles: string[]; gitDiffContext: string; mode: ExecutionMode; observations: AgentExecutionObservation[]; completedActions: PlanAction[]; actionCount: number };
+type AgentPlan = { summary: string; isComplete?: boolean; cycleLimitReached?: boolean; clarifyingQuestion?: string | null; actions: PlanAction[] };
 const COMMAND_OUTPUT_BATCH_MS = 50;
 const MAX_COMMAND_BLOCKS = 80;
 const MAX_COMMAND_HISTORY = 100;
+const MAX_AGENT_CYCLE_ACTIONS = 8;
+const MAX_AGENT_OBSERVATION_OUTPUT_CHARS = 1_000;
 const MAX_OPEN_TERMINALS = 16;
 const CHAT_DELTA_BATCH_MS = 50;
 const SYNC_RISK_ACK_KEY = "laural.sync-risk-ack.v1";
@@ -144,12 +148,14 @@ function AppContent() {
   const [ruleDraft, setRuleDraft] = useState("git status\ngit diff");
   const [policyNotice, setPolicyNotice] = useState("");
   const terminalContextRef = useRef<Record<string, string>>({});
+  const agentCommandOutputRef = useRef<Record<string, string>>({});
   const pendingCommandOutputRef = useRef<Record<string, string>>({});
   const outputFlushTimerRef = useRef<number | null>(null);
   const activeChatRequestRef = useRef<string | null>(null);
   const activeCommandBlockRef = useRef<Record<string, string>>({});
   const activeAgentRequestRef = useRef<string | null>(null);
-  const agentClarificationRef = useRef<{ task: string; question: string } | null>(null);
+  const agentCycleRef = useRef<AgentCycle | null>(null);
+  const agentClarificationRef = useRef<{ task: string; question: string; cycle: AgentCycle } | null>(null);
   const agentStopRequestedRef = useRef(false);
   const activeAgentTerminalRef = useRef<string | null>(null);
   const commandCompletionRef = useRef<Record<string, { resolve: (exitCode: number | null) => void; timer: ReturnType<typeof setTimeout>; requiresAgentToken?: boolean; token?: string }>>({});
@@ -359,6 +365,13 @@ function AppContent() {
   const captureTerminalOutput = useCallback((terminalId: string, text: string) => {
     const current = terminalContextRef.current[terminalId] ?? "";
     terminalContextRef.current[terminalId] = appendTerminalOutput(current, text);
+    if (activeAgentTerminalRef.current === terminalId) {
+      agentCommandOutputRef.current[terminalId] = appendTerminalOutput(
+        agentCommandOutputRef.current[terminalId] ?? "",
+        text,
+        MAX_AGENT_OBSERVATION_OUTPUT_CHARS,
+      );
+    }
     const blockId = activeCommandBlockRef.current[terminalId];
     if (!blockId) return;
     const pending = pendingCommandOutputRef.current;
@@ -416,6 +429,7 @@ function AppContent() {
   );
   const activeTheme = themes.find((theme) => theme.id === themeId) ?? themes[0];
   const visibleBlocks = commandBlocks.filter((block) => block.terminalId === activeTabId).slice(-30).reverse();
+  const firstUnresolvedAgentAction = agentPlan?.actions.findIndex((action) => !["completed", "applied", "cancelled", "rejected", "submitted"].includes(action.status ?? "pending")) ?? -1;
   const quickActions = messages.palette.quickActions;
   const paletteActions = [
     { id: "new-terminal", ...quickActions.newTerminal, run: () => addTerminal("powershell") },
@@ -699,50 +713,59 @@ function AppContent() {
       const agentTask = clarification
         ? `Tarea original: ${clarification.task}\n\nAclaración solicitada: ${clarification.question}\n\nRespuesta del usuario: ${question}`
         : question;
+      const cycle: AgentCycle = clarification
+        ? { ...clarification.cycle, task: agentTask, observations: [...clarification.cycle.observations], completedActions: [...clarification.cycle.completedActions] }
+        : {
+          task: agentTask,
+          shell: activeTab?.shell ?? "powershell",
+          terminalId: activeTabId,
+          projectPath,
+          selectedFiles: [...contextFiles],
+          gitDiffContext,
+          mode: executionMode,
+          observations: [],
+          completedActions: [],
+          actionCount: 0,
+        };
+      agentCycleRef.current = cycle;
       setPrompt("");
       setAgentPlan(null);
-      setAgentPlanProjectPath(projectPath);
+      setAgentPlanProjectPath(cycle.projectPath);
       setAgentPlanBusy(true);
       const requestId = crypto.randomUUID();
       activeAgentRequestRef.current = requestId;
       agentStopRequestedRef.current = false;
       setChatMessages((current) => limitChatMessages([...current, { role: "user", content: question }]));
-      const planTerminalId = activeTabId;
-      const shell = activeTab?.shell ?? "powershell";
       void invoke<AgentPlan>("plan_agent", {
         requestId,
-        task: agentTask,
-        shell,
-        terminalContext: terminalContextRef.current[planTerminalId] ?? "",
-        projectPath,
-        selectedFiles: contextFiles,
-        gitDiffContext,
+        task: cycle.task,
+        shell: cycle.shell,
+        terminalContext: terminalContextRef.current[cycle.terminalId] ?? "",
+        projectPath: cycle.projectPath,
+        selectedFiles: cycle.selectedFiles,
+        gitDiffContext: cycle.gitDiffContext,
+        executionHistory: cycle.observations,
       }).then(async (plan) => {
         if (agentStopRequestedRef.current) {
+          agentCycleRef.current = null;
           setAgentPlanProjectPath(null);
           return;
         }
         const prepared: AgentPlan = { ...plan, actions: plan.actions.map((action) => ({ ...action, status: "pending" })) };
-        agentClarificationRef.current = plan.clarifyingQuestion ? { task: agentTask, question: plan.clarifyingQuestion } : null;
+        agentClarificationRef.current = plan.clarifyingQuestion ? { task: cycle.task, question: plan.clarifyingQuestion, cycle: { ...cycle, observations: [...cycle.observations], completedActions: [...cycle.completedActions] } } : null;
+        if (plan.isComplete) agentCycleRef.current = null;
         setAgentPlan(prepared);
         const statusMessage = plan.clarifyingQuestion
           ? appText.agentNeedsClarification.replace("{question}", plan.clarifyingQuestion)
-          : appText.agentPlanPrepared.replace("{count}", String(plan.actions.length));
+          : plan.isComplete
+            ? appText.agentGoalComplete.replace("{summary}", plan.summary)
+            : appText.agentPlanPrepared.replace("{count}", String(plan.actions.length));
         setChatMessages((current) => limitChatMessages([...current, { role: "assistant", content: statusMessage }]));
-        if (executionMode !== "review") {
-          for (let index = 0; index < prepared.actions.length; index += 1) {
-            if (agentStopRequestedRef.current) break;
-            if (prepared.actions[index].type === "run_command") {
-              const completed = await executeAgentCommand(index, false, prepared, planTerminalId);
-              if (!completed) {
-                if (!agentStopRequestedRef.current) setChatMessages((current) => limitChatMessages([...current, { role: "assistant", content: appText.agentSequenceStopped }]));
-                break;
-              }
-            }
-          }
-          if (agentStopRequestedRef.current) setChatMessages((current) => limitChatMessages([...current, { role: "assistant", content: appText.agentExecutionStopped }]));
+        if (cycle.mode !== "review" && !plan.isComplete && !plan.clarifyingQuestion) {
+          await runAgentCycle(prepared);
         }
       }).catch((error) => {
+        agentCycleRef.current = null;
         setAgentPlanProjectPath(null);
         setChatMessages((current) => limitChatMessages([...current, { role: "assistant", content: agentStopRequestedRef.current ? appText.agentPlanningCancelled : appText.agentPlanFailed.replace("{error}", String(error)) }]));
       }).finally(() => {
@@ -842,6 +865,7 @@ function AppContent() {
     setAgentPlan(null);
     setAgentPlanProjectPath(null);
     agentClarificationRef.current = null;
+    agentCycleRef.current = null;
     localStorage.removeItem("laural.chat.v1");
   }
 
@@ -871,11 +895,119 @@ function AppContent() {
     });
   }
 
+  async function requestAgentContinuation(): Promise<AgentPlan | null> {
+    const cycle = agentCycleRef.current;
+    if (!cycle || agentStopRequestedRef.current) return null;
+    if (cycle.actionCount >= MAX_AGENT_CYCLE_ACTIONS) {
+      agentCycleRef.current = null;
+      setAgentPlan((current) => current ? { ...current, cycleLimitReached: true } : current);
+      setChatMessages((current) => limitChatMessages([...current, {
+        role: "assistant",
+        content: appText.agentCycleLimit.replace("{count}", String(MAX_AGENT_CYCLE_ACTIONS)),
+      }]));
+      return null;
+    }
+
+    const requestId = crypto.randomUUID();
+    activeAgentRequestRef.current = requestId;
+    setAgentPlanBusy(true);
+    try {
+      const plan = await invoke<AgentPlan>("plan_agent", {
+        requestId,
+        task: cycle.task,
+        shell: cycle.shell,
+        terminalContext: terminalContextRef.current[cycle.terminalId] ?? "",
+        projectPath: cycle.projectPath,
+        selectedFiles: cycle.selectedFiles,
+        gitDiffContext: cycle.gitDiffContext,
+        executionHistory: cycle.observations,
+      });
+      if (agentStopRequestedRef.current) return null;
+      const prepared: AgentPlan = {
+        ...plan,
+        actions: [
+          ...cycle.completedActions,
+          ...plan.actions.map((action) => ({ ...action, status: "pending" })),
+        ],
+      };
+      setAgentPlanProjectPath(cycle.projectPath);
+      setAgentPlan(prepared);
+      if (plan.clarifyingQuestion) {
+        agentClarificationRef.current = {
+          task: cycle.task,
+          question: plan.clarifyingQuestion,
+          cycle: { ...cycle, observations: [...cycle.observations], completedActions: [...cycle.completedActions] },
+        };
+      } else {
+        agentClarificationRef.current = null;
+      }
+      if (plan.isComplete) agentCycleRef.current = null;
+      const statusMessage = plan.clarifyingQuestion
+        ? appText.agentNeedsClarification.replace("{question}", plan.clarifyingQuestion)
+        : plan.isComplete
+          ? appText.agentGoalComplete.replace("{summary}", plan.summary)
+          : appText.agentPlanPrepared.replace("{count}", String(plan.actions.length));
+      setChatMessages((current) => limitChatMessages([...current, { role: "assistant", content: statusMessage }]));
+      return prepared;
+    } catch (error) {
+      if (agentStopRequestedRef.current) {
+        setChatMessages((current) => limitChatMessages([...current, { role: "assistant", content: appText.agentPlanningCancelled }]));
+      } else {
+        agentCycleRef.current = null;
+        setChatMessages((current) => limitChatMessages([...current, {
+          role: "assistant",
+          content: appText.agentPlanFailed.replace("{error}", String(error)),
+        }]));
+      }
+      return null;
+    } finally {
+      if (activeAgentRequestRef.current === requestId) activeAgentRequestRef.current = null;
+      setAgentPlanBusy(false);
+    }
+  }
+
+  async function runAgentCycle(initialPlan: AgentPlan): Promise<void> {
+    let plan = initialPlan;
+    while (!agentStopRequestedRef.current && !plan.isComplete && !plan.clarifyingQuestion) {
+      const cycle = agentCycleRef.current;
+      const nextIndex = plan.actions.findIndex((action) => !["completed", "applied", "cancelled", "rejected", "submitted"].includes(action.status ?? "pending"));
+      const nextAction = nextIndex >= 0 ? plan.actions[nextIndex] : undefined;
+      if (!cycle || !nextAction || nextAction.type !== "run_command") return;
+      const completed = await executeAgentCommand(nextIndex, false, plan, cycle.terminalId);
+      if (!completed) {
+        if (!agentStopRequestedRef.current) {
+          setChatMessages((current) => limitChatMessages([...current, { role: "assistant", content: appText.agentSequenceStopped }]));
+        }
+        return;
+      }
+      if (agentStopRequestedRef.current) return;
+      const nextPlan = await requestAgentContinuation();
+      if (!nextPlan || nextPlan.isComplete || nextPlan.clarifyingQuestion) return;
+      plan = nextPlan;
+    }
+    if (agentStopRequestedRef.current) {
+      setChatMessages((current) => limitChatMessages([...current, { role: "assistant", content: appText.agentExecutionStopped }]));
+    }
+  }
+
+  async function executeAgentAction(index: number, approved: boolean) {
+    const cycle = agentCycleRef.current;
+    const plan = agentPlan;
+    if (!cycle || !plan) return;
+    const completed = await executeAgentCommand(index, approved, plan, cycle.terminalId);
+    if (!completed || agentStopRequestedRef.current) return;
+    const nextPlan = await requestAgentContinuation();
+    if (nextPlan && cycle.mode !== "review" && !nextPlan.clarifyingQuestion && !nextPlan.isComplete) {
+      await runAgentCycle(nextPlan);
+    }
+  }
+
   async function executeAgentCommand(index: number, approved: boolean, plan = agentPlan, terminalId = activeTabId): Promise<boolean> {
     const action = plan?.actions[index];
     if (!action || action.type !== "run_command") return false;
     setAgentCommandBusy(true);
     activeAgentTerminalRef.current = terminalId;
+    agentCommandOutputRef.current[terminalId] = "";
     startCommandBlock(terminalId, action.command);
     let completionResolve: (exitCode: number | null) => void = () => undefined;
     const completion = new Promise<number | null>((resolve) => { completionResolve = resolve; });
@@ -887,7 +1019,20 @@ function AppContent() {
       await invoke("run_agent_command", { terminalId, command: action.command, approved, completionToken });
       const exitCode = await completion;
       if (agentStopRequestedRef.current) { updateAgentAction(index, { status: "cancelled", result: appText.agentInterrupted }); return false; }
-      if (exitCode === 0) { updateAgentAction(index, { status: "completed", result: appText.agentCommandSuccess }); return true; }
+      if (exitCode === 0) {
+        const cycle = agentCycleRef.current;
+        if (cycle && cycle.terminalId === terminalId) {
+          cycle.observations.push({
+            action: action.command,
+            result: "El comando terminó con código 0.",
+            output: agentCommandOutputRef.current[terminalId] ?? "",
+          });
+          cycle.completedActions.push({ ...action, status: "completed", result: appText.agentCommandSuccess });
+          cycle.actionCount += 1;
+        }
+        updateAgentAction(index, { status: "completed", result: appText.agentCommandSuccess });
+        return true;
+      }
       if (exitCode !== null) { updateAgentAction(index, { status: "error", result: appText.agentCommandExit.replace("{code}", String(exitCode)) }); return false; }
       updateAgentAction(index, { status: "submitted", result: appText.agentCommandSubmitted });
       return false;
@@ -899,6 +1044,7 @@ function AppContent() {
       updateAgentAction(index, { status, result: message });
       return false;
     } finally {
+      delete agentCommandOutputRef.current[terminalId];
       activeAgentTerminalRef.current = null;
       setAgentCommandBusy(false);
     }
@@ -917,6 +1063,20 @@ function AppContent() {
         approved: true,
       });
       updateAgentAction(index, { status: "applied", result });
+      const cycle = agentCycleRef.current;
+      if (cycle) {
+        cycle.observations.push({
+          action: `Escritura de archivo: ${action.path}`,
+          result: "Cambio aplicado tras aprobación del usuario.",
+          output: Array.from(result).slice(-MAX_AGENT_OBSERVATION_OUTPUT_CHARS).join(""),
+        });
+        cycle.completedActions.push({ ...action, status: "applied", result });
+        cycle.actionCount += 1;
+        const nextPlan = await requestAgentContinuation();
+        if (nextPlan && cycle.mode !== "review" && !nextPlan.clarifyingQuestion && !nextPlan.isComplete) {
+          await runAgentCycle(nextPlan);
+        }
+      }
     } catch (error) {
       updateAgentAction(index, { status: "error", result: String(error) });
     }
@@ -1264,14 +1424,15 @@ function AppContent() {
             </div> : <div className="message-thread">
               {chatMessages.map((message, index) => <ChatMessageItem key={message.id ?? `${index}-${message.role}`} message={message} isStreaming={message.id === streamingMessageId} streamingContentRef={message.id === streamingMessageId ? streamingContentRef : undefined} />)}
               {agentPlan && <div className="agent-plan-card">
-                <div className="agent-plan-header"><span className="plan-icon-small"><AgentIcon /></span><strong>{appText.agentPlan}</strong>{agentPlanProjectPath && <span className="agent-plan-root" title={agentPlanProjectPath}>{agentPlanProjectPath}</span>}{!agentPlan.clarifyingQuestion && <span className="agent-plan-count">{appText.actionsCount.replace("{count}", String(agentPlan.actions.length))}</span>}</div>
+                <div className="agent-plan-header"><span className="plan-icon-small"><AgentIcon /></span><strong>{appText.agentPlan}</strong>{agentPlanProjectPath && <span className="agent-plan-root" title={agentPlanProjectPath}>{agentPlanProjectPath}</span>}{agentPlan.isComplete ? <span className="agent-plan-count">{appText.completed}</span> : !agentPlan.clarifyingQuestion && <span className="agent-plan-count">{appText.actionsCount.replace("{count}", String(agentPlan.actions.length))}</span>}</div>
                 <p className="agent-plan-summary">{agentPlan.clarifyingQuestion ?? agentPlan.summary}</p>
+                {agentPlan.cycleLimitReached && <p className="action-result warning">{appText.agentCycleLimit.replace("{count}", String(MAX_AGENT_CYCLE_ACTIONS))}</p>}
                 <div className="agent-action-list">{agentPlan.actions.map((action, index) => <article className={`agent-action ${action.status ?? "pending"}`} key={`${index}-${action.type}`}>
                   <div className="agent-action-top"><span className="action-number">{index + 1}</span><span className="action-type">{action.type === "run_command" ? appText.command : appText.fileChange}</span><span className="action-status">{action.status === "completed" ? appText.completed : action.status === "cancelled" ? appText.stopped : action.status === "submitted" ? appText.sent : action.status === "needs_review" ? appText.review : action.status === "applied" ? appText.applied : action.status === "running" || action.status === "applying" ? appText.running : action.status === "error" ? appText.error : action.status === "rejected" ? appText.discarded : appText.pending}</span></div>
                   <p className="action-reason">{action.reason}</p>
                   {action.type === "run_command" ? <pre className="action-code">{action.command}</pre> : <details className="file-preview"><summary>{action.path}</summary><pre>{action.content}</pre></details>}
                   {action.type === "write_file" && backupVersions[index]?.length ? <div className="backup-controls"><select aria-label={appText.backupVersion} value={selectedBackups[index] ?? ""} onChange={event => setSelectedBackups(current => ({ ...current, [index]: event.currentTarget.value }))}>{backupVersions[index].map(version => <option key={version} value={version}>{version}</option>)}</select><button className="action-quiet" onClick={() => void restoreBackup(index, action.path)}>{appText.restoreBackup}</button><button className="action-quiet" onClick={() => void clearBackups(index, action.path)}>{appText.deleteBackups}</button></div> : null}{action.result && <p className={`action-result ${action.status === "error" || action.status === "needs_review" ? "warning" : ""}`}>{action.result}</p>}
-                  <div className="action-buttons">{action.type === "write_file" && action.status === "applied" ? <button className="action-quiet" onClick={() => void showBackups(index, action.path)}>{appText.backups}</button> : null}{action.type === "run_command" ? !["submitted", "completed", "cancelled", "rejected", "running"].includes(action.status ?? "") && <button className="action-primary" onClick={() => void executeAgentCommand(index, true)}>{action.status === "needs_review" ? appText.approveReviewRun : appText.approveRun}</button> : action.status !== "applied" && action.status !== "rejected" && <button className="action-primary" onClick={() => void applyAgentFile(index)} disabled={!agentPlanProjectPath || action.status === "applying"}>{appText.applyChange}</button>}
+                  <div className="action-buttons">{action.type === "write_file" && action.status === "applied" ? <button className="action-quiet" onClick={() => void showBackups(index, action.path)}>{appText.backups}</button> : null}{action.type === "run_command" ? !["submitted", "completed", "cancelled", "rejected", "running"].includes(action.status ?? "") && <button className="action-primary" onClick={() => void executeAgentAction(index, true)} disabled={agentCommandBusy || agentPlanBusy || index !== firstUnresolvedAgentAction}>{action.status === "needs_review" ? appText.approveReviewRun : appText.approveRun}</button> : action.status !== "applied" && action.status !== "rejected" && <button className="action-primary" onClick={() => void applyAgentFile(index)} disabled={!agentPlanProjectPath || agentCommandBusy || agentPlanBusy || action.status === "applying" || index !== firstUnresolvedAgentAction}>{appText.applyChange}</button>}
                     {!(["submitted", "completed", "cancelled", "applied", "rejected", "running", "applying"].includes(action.status ?? "")) && <button className="action-quiet" onClick={() => updateAgentAction(index, { status: "rejected", result: appText.discardedResult })}>{appText.discard}</button>}</div>
                 </article>)}</div>
               </div>}

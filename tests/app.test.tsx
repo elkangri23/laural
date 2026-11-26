@@ -4,7 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import App from "../src/App";
 
-const mocks = vi.hoisted(() => ({ invoke: vi.fn(), open: vi.fn(), listen: vi.fn(), deferTerminalPaneImport: false, resolveTerminalPaneImport: null as (() => void) | null, terminalPaneRenderCount: 0, terminalRequests: [] as Array<{ terminalId: string; copySequence: number; copyTarget: string; clearSequence: number; clearTarget: string; powerShellPredictionEnabled: boolean }>, agentFinishCallbacks: [] as Array<(terminalId: string, token: string, exitCode: number | null) => void> }));
+const mocks = vi.hoisted(() => ({ invoke: vi.fn(), open: vi.fn(), listen: vi.fn(), deferTerminalPaneImport: false, resolveTerminalPaneImport: null as (() => void) | null, terminalPaneRenderCount: 0, terminalRequests: [] as Array<{ terminalId: string; copySequence: number; copyTarget: string; clearSequence: number; clearTarget: string; powerShellPredictionEnabled: boolean }>, agentFinishCallbacks: [] as Array<(terminalId: string, token: string, exitCode: number | null) => void>, terminalOutputCallbacks: [] as Array<(terminalId: string, text: string) => void> }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: mocks.invoke }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: mocks.listen }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open: mocks.open }));
@@ -16,6 +16,7 @@ vi.mock("../src/components/TerminalPane", async () => {
   const MockTerminalPane = (props: { terminalId: string; copyRequest: { sequence: number; terminalId: string }; clearRequest: { sequence: number; terminalId: string }; powerShellPredictionEnabled: boolean; onTextOutput: (id: string, text: string) => void; onCommandSubmit: (id: string, command: string) => void; onCommandFinish: (id: string, code: number | null) => void; onAgentCommandFinish: (id: string, token: string, code: number | null) => void }) => {
     mocks.terminalPaneRenderCount += 1;
     mocks.agentFinishCallbacks.push(props.onAgentCommandFinish);
+    mocks.terminalOutputCallbacks.push(props.onTextOutput);
     mocks.terminalRequests.push({ terminalId: props.terminalId, copySequence: props.copyRequest.sequence, copyTarget: props.copyRequest.terminalId, clearSequence: props.clearRequest.sequence, clearTarget: props.clearRequest.terminalId, powerShellPredictionEnabled: props.powerShellPredictionEnabled });
     return <div data-testid="terminal-pane">
       <button data-testid="begin-command" onClick={() => props.onCommandSubmit(props.terminalId, "git status")}>Iniciar comando</button>
@@ -94,6 +95,7 @@ beforeEach(() => {
   mocks.terminalPaneRenderCount = 0;
   mocks.terminalRequests.length = 0;
   mocks.agentFinishCallbacks.length = 0;
+  mocks.terminalOutputCallbacks.length = 0;
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -469,11 +471,17 @@ test("usar una receta activa el modo Agente y prepara el compositor sin enviarlo
 });
 
 test("prepara un plan desde la terminal activa y completa el comando aprobado", async () => {
+  let planCount = 0;
   mocks.invoke.mockImplementation(async (command: string) => {
     if (command === "get_provider") return { id: "local", name: "Local", model: "test" };
     if (command === "get_providers") return [{ id: "local", name: "Local", model: "test" }];
     if (command === "get_agent_settings") return { mode: "review", allowedPrefixes: [], backupRetention: null };
-    if (command === "plan_agent") return { summary: "Revisar el estado", actions: [{ type: "run_command", command: "git status", reason: "Consultar cambios" }] };
+    if (command === "plan_agent") {
+      planCount += 1;
+      return planCount === 1
+        ? { summary: "Revisar el estado", actions: [{ type: "run_command", command: "git status", reason: "Consultar cambios" }] }
+        : { summary: "El estado del repositorio está comprobado", isComplete: true, actions: [] };
+    }
     if (command === "run_agent_command") return undefined;
     return undefined;
   });
@@ -539,11 +547,17 @@ test("pide aclaración ante una petición ambigua y conserva el objetivo en la r
 });
 
 test("en CMD el agente espera el código de salida real antes de continuar", async () => {
+  let planCount = 0;
   mocks.invoke.mockImplementation(async (command: string) => {
     if (command === "get_provider") return { id: "local", name: "Local", model: "test" };
     if (command === "get_providers") return [{ id: "local", name: "Local", model: "test" }];
     if (command === "get_agent_settings") return { mode: "review", allowedPrefixes: [], backupRetention: null };
-    if (command === "plan_agent") return { summary: "Comprobar el directorio", actions: [{ type: "run_command", command: "dir", reason: "Listar archivos" }] };
+    if (command === "plan_agent") {
+      planCount += 1;
+      return planCount === 1
+        ? { summary: "Comprobar el directorio", actions: [{ type: "run_command", command: "dir", reason: "Listar archivos" }] }
+        : { summary: "Directorio comprobado", isComplete: true, actions: [] };
+    }
     if (command === "run_agent_command") return undefined;
     return undefined;
   });
@@ -577,13 +591,92 @@ test("en CMD el agente espera el código de salida real antes de continuar", asy
   expect(host.textContent).toContain("El comando terminó correctamente.");
 });
 
+test("el agente automático observa la salida y solicita la validación final", async () => {
+  let planCount = 0;
+  mocks.invoke.mockImplementation(async (command: string) => {
+    if (command === "get_provider") return { id: "local", name: "Local", model: "test" };
+    if (command === "get_providers") return [{ id: "local", name: "Local", model: "test" }];
+    if (command === "get_agent_settings") return { mode: "automatic", allowedPrefixes: [], backupRetention: null };
+    if (command === "plan_agent") {
+      planCount += 1;
+      if (planCount === 1) return { summary: "Buscar imágenes", actions: [{ type: "run_command", command: "dir *.png", reason: "Listar imágenes PNG" }] };
+      return { summary: "Se encontraron dos imágenes PNG", isComplete: true, actions: [] };
+    }
+    if (command === "run_agent_command") return undefined;
+    return undefined;
+  });
+  await act(async () => root!.render(<App />));
+  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Nueva terminal"]')!.click());
+  await act(async () => buttonIncluding("Command Prompt").click());
+  await act(async () => buttonIncluding("Agente").click());
+
+  const composer = host.querySelector<HTMLTextAreaElement>(".composer textarea")!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set?.call(composer, "encuentra las imágenes PNG");
+    composer.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => host.querySelector<HTMLFormElement>(".composer")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+  await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+  const commandCall = mocks.invoke.mock.calls.find(([name]) => name === "run_agent_command");
+  expect(commandCall?.[1]).toMatchObject({ command: "dir *.png", approved: false });
+  const terminalId = commandCall?.[1]?.terminalId as string;
+  const completionToken = commandCall?.[1]?.completionToken as string;
+  await act(async () => mocks.terminalOutputCallbacks.at(-1)?.(terminalId, "imagen-uno.png\r\nimagen-dos.png\r\n"));
+  await act(async () => mocks.agentFinishCallbacks.at(-1)?.(terminalId, completionToken, 0));
+
+  const plans = mocks.invoke.mock.calls.filter(([name]) => name === "plan_agent");
+  expect(plans).toHaveLength(2);
+  expect(plans[1]?.[1]?.executionHistory).toEqual([{
+    action: "dir *.png",
+    result: "El comando terminó con código 0.",
+    output: "imagen-uno.png\r\nimagen-dos.png\r\n",
+  }]);
+  expect(host.textContent).toContain("Objetivo completado según la evidencia: Se encontraron dos imágenes PNG");
+});
+
+test("pausa el ciclo automático al completar ocho acciones", async () => {
+  let planCount = 0;
+  mocks.invoke.mockImplementation(async (command: string) => {
+    if (command === "get_provider") return { id: "local", name: "Local", model: "test" };
+    if (command === "get_providers") return [{ id: "local", name: "Local", model: "test" }];
+    if (command === "get_agent_settings") return { mode: "automatic", allowedPrefixes: [], backupRetention: null };
+    if (command === "plan_agent") {
+      planCount += 1;
+      return { summary: `Paso ${planCount}`, actions: [{ type: "run_command", command: `echo paso-${planCount}`, reason: "Avanzar la tarea" }] };
+    }
+    if (command === "run_agent_command") {
+      const [, args] = mocks.invoke.mock.calls.at(-1)!;
+      queueMicrotask(() => mocks.agentFinishCallbacks.at(-1)?.(args.terminalId, args.completionToken, 0));
+      return undefined;
+    }
+    return undefined;
+  });
+  await act(async () => root!.render(<App />));
+  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Nueva terminal"]')!.click());
+  await act(async () => buttonIncluding("Command Prompt").click());
+  await act(async () => buttonIncluding("Agente").click());
+
+  const composer = host.querySelector<HTMLTextAreaElement>(".composer textarea")!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set?.call(composer, "procesa los datos paso a paso");
+    composer.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => host.querySelector<HTMLFormElement>(".composer")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+
+  expect(mocks.invoke.mock.calls.filter(([name]) => name === "run_agent_command")).toHaveLength(8);
+  expect(mocks.invoke.mock.calls.filter(([name]) => name === "plan_agent")).toHaveLength(8);
+  expect(host.textContent).toContain("Pausa de seguridad: se alcanzó el límite de 8 acciones.");
+});
+
 test("traduce los mensajes de estado del agente al idioma seleccionado", async () => {
   localStorage.setItem("laural.language.v1", "en");
   mocks.invoke.mockImplementation(async (command: string) => {
     if (command === "get_provider") return { id: "local", name: "Local", model: "test" };
     if (command === "get_providers") return [{ id: "local", name: "Local", model: "test" }];
     if (command === "get_agent_settings") return { mode: "review", allowedPrefixes: [], backupRetention: null };
-    if (command === "plan_agent") return { summary: "Plan", actions: [] };
+    if (command === "plan_agent") return { summary: "El objetivo ya se ha cumplido", isComplete: true, actions: [] };
     return undefined;
   });
   await act(async () => root!.render(<App />));
@@ -596,16 +689,22 @@ test("traduce los mensajes de estado del agente al idioma seleccionado", async (
   });
   await act(async () => host.querySelector<HTMLFormElement>(".composer")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
   await act(async () => { await Promise.resolve(); await Promise.resolve(); });
-  expect(host.textContent).toContain("Plan prepared with 0 actions.");
+  expect(host.textContent).toContain("Goal completed based on available evidence: El objetivo ya se ha cumplido");
 });
 
 test("abre un proyecto y gestiona la aplicación y las copias de un cambio de archivo", async () => {
+  let planCount = 0;
   mocks.open.mockResolvedValue("C:/repos/laural");
   mocks.invoke.mockImplementation(async (command: string) => {
     if (command === "get_provider") return { id: "local", name: "Local", model: "test" };
     if (command === "get_providers") return [{ id: "local", name: "Local", model: "test" }];
     if (command === "get_agent_settings") return { mode: "review", allowedPrefixes: [], backupRetention: 5 };
-    if (command === "plan_agent") return { summary: "Actualizar documentación", actions: [{ type: "write_file", path: "README.md", content: "# Laural", reason: "Documentar cambios" }] };
+    if (command === "plan_agent") {
+      planCount += 1;
+      return planCount === 1
+        ? { summary: "Actualizar documentación", actions: [{ type: "write_file", path: "README.md", content: "# Laural", reason: "Documentar cambios" }] }
+        : { summary: "Documentación actualizada", isComplete: true, actions: [] };
+    }
     if (command === "apply_agent_file") return "Archivo aplicado con copia de seguridad.";
     if (command === "list_agent_backups") return ["v2", "v1"];
     if (command === "restore_agent_backup") return "Versión restaurada.";

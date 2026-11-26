@@ -11,6 +11,7 @@ Laural recibe instrucciones de usuario y salida de terminal/proyecto, y puede es
 - Las API keys se guardan en el almacén protegido de Windows; perfiles JSON contienen solo metadatos.
 - HTTP solo se permite para endpoints de loopback; endpoints remotos requieren HTTPS.
 - El usuario decide qué contexto enviar y debe revisar las propuestas del agente.
+- El agente puede enviar la salida reciente de cada acción exitosa al proveedor seleccionado para decidir el siguiente paso. El historial se limita, se marca como dato no confiable y no se guarda localmente; no uses un proveedor externo con salida que no quieras compartir.
 - Las ediciones de archivo requieren aprobación y se limitan a rutas canónicas dentro del proyecto.
 - El agente ejecuta shells con los permisos de la cuenta actual; no existe sandbox.
 - Los filtros de riesgo son heurísticos; no deben describirse como una barrera de seguridad completa.

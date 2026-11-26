@@ -60,6 +60,7 @@ Los ADR registran por qué se eligió una opción y qué costes trae. Un ADR ace
 | [0054](0054-configuracion-idiomas-y-formatos-v2.md) | Idioma portable y snapshots de preferencias v2 | Aceptada; servicio v1/v2 local, despliegue y cliente pendiente |
 | [0055](0055-prediccion-local-psreadline.md) | Sugerencias locales de historial mediante PSReadLine | Aceptada; implementación local, validación manual de Windows pendiente |
 | [0056](0056-proteccion-de-cadena-de-suministro-ci.md) | Fijar acciones CI y restringir tags de publicación firmada | Aceptada; acciones fijadas, reglas de tag activas; protección de `main` pendiente |
+| [0057](0057-ciclo-acotado-de-observacion-del-agente.md) | Observar resultados y replanificar hasta ocho acciones por petición | Aceptada; implementación local, prueba con proveedor real pendiente |
 
 ## Crear un ADR
 

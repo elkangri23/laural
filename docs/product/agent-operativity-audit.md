@@ -2,14 +2,15 @@
 
 - Fecha: 26-11-2026
 - Alcance: petición → contexto → plan → ejecución → resultado.
-- Estado: correcciones principales implementadas; queda pendiente cerrar el ciclo de observación y replanificación.
+- Estado: ciclo acotado de observación y replanificación implementado; pendiente validarlo desde la app con proveedores reales y en los cuatro shells instalados.
 
 ## Cómo funciona
 
 1. La interfaz envía la petición, el shell activo, la salida reciente de esa terminal, el proyecto seleccionado, archivos adjuntos y, si se eligió, el diff Git.
 2. El backend reúne hasta diez archivos de texto del proyecto y valida el JSON que devuelve el proveedor.
 3. El agente presenta como máximo ocho acciones. Los comandos se envían al shell activo; los cambios estructurados de archivo quedan asociados a la raíz del proyecto y requieren aplicación explícita.
-4. En ejecución automática, la interfaz recorre los comandos que ya venían en el plan. Si uno informa un código distinto de cero o no informa estado, la secuencia se detiene.
+4. Tras un comando exitoso o un archivo aplicado con aprobación, la interfaz vuelve a planificar con la acción, el resultado y hasta 1.000 caracteres de salida reciente. Este historial se envía al proveedor configurado como dato no confiable y solo permanece en memoria durante el ciclo; no se guarda en disco.
+5. El ciclo se detiene ante error, código distinto de cero, finalización desconocida, aclaración o cancelación. Como máximo ejecuta ocho acciones exitosas por petición; los cambios de archivo siempre esperan aprobación y backup.
 
 ## Hallazgos y resolución
 
@@ -35,22 +36,24 @@ Las instrucciones ya aislaban el contexto no confiable y limitaban el shell, per
 
 ## Límites que siguen abiertos
 
-- **Sin ciclo de observación:** el modelo prepara las acciones de una vez. La interfaz puede ejecutarlas en orden y detenerse ante un error, pero no devuelve el resultado al modelo para diagnosticarlo, corregir el plan o comprobar el resultado final. Las tareas cuyo siguiente paso depende de lo que descubra el primer comando necesitan otra petición del usuario.
+- **La finalización depende del modelo:** Laural muestra el resumen de finalización junto con el resultado recibido, pero no demuestra que el objetivo externo esté realmente conseguido. El modelo puede equivocarse al interpretar una salida.
+- **Sin reintento automático:** un error detiene el ciclo. El usuario puede revisar el resultado y pedir una corrección explícita; el modelo no vuelve a ejecutar por sí solo una acción fallida.
+- **Límite por petición:** después de ocho acciones el ciclo se pausa y hace falta una nueva petición del usuario.
 - **Contexto parcial:** el escaneo del proyecto proporciona como máximo diez archivos y tiene límites de tamaño y profundidad. La petición debe adjuntar los archivos importantes si no aparecen en el contexto; el modelo ya no debe tratarlos como leídos.
 - **Cambios de archivo:** incluso en modos automáticos, las acciones `write_file` siguen requiriendo revisión y aplicación explícitas. Esto evita aplicar contenido generado sin confirmar.
-- **Validación real:** las pruebas locales cubren el contrato, el estado de la interfaz y la forma de la marca para todos los shells; no sustituyen una comprobación manual del agente con un proveedor real en cada shell.
+- **Validación real:** las pruebas locales cubren el contrato, el estado de la interfaz, los cuatro shells y el ciclo observable; no sustituyen una comprobación manual con un proveedor real en cada shell.
 
 ## Pruebas
 
-- `providers.rs` se clasifica como **Crítico**: las regresiones verifican pregunta válida, rechazo de pregunta mezclada con acciones y rechazo de planes vacíos.
+- `providers.rs` se clasifica como **Crítico**: las regresiones verifican pregunta/finalización válidas, estados incoherentes, límites del historial y rechazo de acciones repetidas.
 - `lib.rs` se clasifica como **Crítico**: las regresiones verifican el código de salida y el token para los cuatro shells admitidos, además del rechazo de tokens inválidos.
 - `TerminalPane.tsx` se clasifica como **Crítico**: las regresiones aceptan una marca OSC 777 numérica válida y rechazan códigos mal formados.
-- `App.tsx` se clasifica como **Estándar**: las regresiones verifican que el turno de aclaración conserve el objetivo original y que la acción no termine antes de recibir el token correcto.
+- `App.tsx` se clasifica como **Estándar**: las regresiones verifican que el turno de aclaración conserve el objetivo original, que no se replanifique antes del token correcto y que la salida/code de un comando entren en la siguiente decisión.
 
-Validación local de esta revisión: UI 290/290; cobertura UI 92,04 % de líneas, con `App.tsx` en 81,77 % y `TerminalPane.tsx` en 100 % de líneas y ramas. La política 100/80/0 pasa: 11 archivos Críticos al 100/100, 14 Estándar con al menos 80 % de líneas y 8 Triviales excluidos. Rust: 263 pruebas pasadas y 2 manuales ignoradas. `cargo fmt --check`, `npm run build`, presupuesto de bundles y `git diff --check` pasan. La cobertura Rust no se pudo medir localmente con MSVC; debe confirmarse en CI Linux.
+Validación local de esta revisión: UI 292/292; cobertura UI 92,05 % de líneas, con `App.tsx` en 82,64 % y `TerminalPane.tsx` en 100 % de líneas y ramas. La política 100/80/0 pasa: 11 archivos Críticos al 100/100, 14 Estándar con al menos 80 % de líneas y 8 Triviales excluidos. Rust: 267 pruebas pasadas y 2 manuales ignoradas. `cargo fmt`, `npm run build`, presupuesto de bundles y `git diff --check` pasan. La cobertura Rust no se pudo medir localmente con MSVC; debe confirmarse en CI Linux.
 
 La cobertura integral por archivo se mide con la política 100/80/0 del proyecto; Windows/MSVC ejecuta Cargo pero no genera los perfiles `llvm-cov`, por lo que la cobertura Rust debe confirmarse en CI Linux.
 
 ## Siguiente trabajo
 
-Diseñar un ciclo acotado de ejecutar → observar salida y código → decidir si continuar, corregir o terminar → validar el resultado. Debe conservar la aprobación actual, limitar iteraciones y evitar repetir comandos con efectos secundarios. No se implementa dentro de esta auditoría porque cambia el modelo de ejecución y seguridad del agente.
+Validar en Windows una tarea inocua de varios pasos con un proveedor local y otro OpenAI-compatible, en PowerShell, CMD, WSL y Git Bash. Confirmar pausa por ocho acciones, cancelación durante replanificación y que los cambios de archivo siguen pidiendo aprobación.

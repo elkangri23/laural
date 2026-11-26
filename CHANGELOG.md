@@ -1,6 +1,7 @@
 # Registro de cambios
 
 ## Próxima versión
+- El agente observa cada acción exitosa y pide un nuevo plan con código y salida acotada, conserva las acciones completadas, se pausa al llegar a ocho pasos y muestra cuándo el modelo considera cumplido el objetivo. Un error detiene el ciclo; los cambios de archivo siguen requiriendo aprobación. ADR-0057.
 - El agente puede pedir una aclaración sin proponer acciones y conserva la petición original al recibir la respuesta; el plan evita cambios ajenos al objetivo y no presume el contenido de archivos ausentes del contexto. PowerShell, CMD, WSL y Git Bash notifican la finalización con código de salida y un identificador único por ejecución. Informe: `docs/product/agent-operativity-audit.md`.
 - El streaming del chat ya no actualiza el estado global de la aplicación cada 200 ms: la respuesta activa se refresca en su propio componente; la app solo publica el primer fragmento y el contenido final. La regresión limita a 7 los commits durante 20 deltas sostenidos y conserva pruebas de cierre y error.
 - Seguridad de la cadena de publicación: workflows fijados a SHA inmutables, permisos de GitHub Actions reducidos y tags de versión restringidos a la cuenta administradora.
