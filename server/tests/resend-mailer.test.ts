@@ -21,6 +21,49 @@ describe("envío transaccional mediante Resend", () => {
     expect(payload.html).toContain("A &lt;B&gt;");
     expect(payload.text).toContain("012345");
     expect(payload.html).toContain("no inicia sesión");
+    // Plantilla única de Laural: marca, tarjeta oscura y PIN destacado.
+    expect(payload.html).toContain("Cuenta y sincronización");
+    expect(payload.html).toContain("bgcolor=\"#19201b\"");
+    expect(payload.html).toContain("letter-spacing:8px");
+    expect(payload.html).toContain("012345");
+  });
+
+  it("todas las plantillas comparten la misma estructura de correo", async () => {
+    const fetch = vi.fn(async () => new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetch);
+    const mailer = new ResendMailer({
+      apiKey: "server-only-key",
+      from: "auth@example.test",
+      recoveryAdminEmail: "admin@example.test",
+      recoveryBaseUrl: "https://sync.example.test/auth/recovery",
+    });
+    await mailer.sendVerification({ email: "user@example.test", displayName: "User", pin: "012345", challengeId: "v1" });
+    await mailer.sendPasswordReset({ email: "user@example.test", displayName: "User", pin: "012345", challengeId: "r1" });
+    await mailer.sendAccountRecoveryPin({ email: "user@example.test", displayName: "User", pin: "012345", challengeId: "p1" });
+    await mailer.sendAccountRecoveryNotice({ caseId: "case-1", accountEmail: "user@example.test", notificationId: "n1" });
+    await mailer.sendAccountRecoveryGrant({ email: "user@example.test", ticket: "t".repeat(43), grantId: "g1" });
+    await mailer.sendSecurityNotice({ email: "user@example.test", eventType: "totp_enabled", notificationId: "s1" });
+
+    expect(fetch).toHaveBeenCalledTimes(6);
+    const headings = [
+      "Verifica tu correo",
+      "Restablece tu contraseña",
+      "Verifica tu solicitud de recuperación",
+      "Solicitud de revisión de recuperación",
+      "Configura tu segundo factor",
+      "Se activó la verificación en dos pasos de Laural",
+    ];
+    for (const [index, [, options]] of (fetch.mock.calls as unknown as [string, RequestInit][]).entries()) {
+      const payload = JSON.parse(String(options.body)) as { html: string };
+      expect(payload.html).toContain("<!doctype html>");
+      expect(payload.html).toContain("Cuenta y sincronización");
+      expect(payload.html).toContain("bgcolor=\"#19201b\"");
+      expect(payload.html).toContain("Laural · Cuenta y sincronización");
+      expect(payload.html).toContain(`<h1 style="margin:0 0 4px 0;color:#edf3ec;font-size:25px;letter-spacing:-0.02em;font-family:'Segoe UI',sans-serif;">${headings[index]}</h1>`);
+    }
+    const adminPayload = JSON.parse(String((fetch.mock.calls[3] as unknown as [string, RequestInit])[1].body)) as { html: string };
+    expect(adminPayload.html).toContain("case-1");
+    expect(adminPayload.html).not.toContain("PIN");
   });
 
   it("envía un PIN de restablecimiento sin convertirlo en acceso ni quitar factores", async () => {
