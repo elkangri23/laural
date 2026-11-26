@@ -583,7 +583,7 @@ describe("API de snapshots de preferencias", () => {
     });
     const response = await app.inject({ method: "GET", url: `/auth/native?${query}` });
     expect(response.statusCode).toBe(200);
-    expect(response.headers["content-security-policy"]).toContain("form-action 'self'");
+    expect(response.headers["content-security-policy"]).toContain("form-action 'self' http://127.0.0.1:*");
     expect(response.headers["set-cookie"]).toContain("HttpOnly; SameSite=Strict");
     expect(response.body).toContain("lang=\"es\"");
     expect(response.body).toContain("name=\"password\"");
@@ -833,6 +833,10 @@ describe("API de snapshots de preferencias", () => {
       payload: new URLSearchParams({ csrf, email: "user@example.test", password }).toString(),
     });
     expect(login.statusCode).toBe(303);
+    // La CSP de la propia 303 es la que decide si Chrome/Safari siguen la
+    // redirección al callback loopback: sin la fuente loopback el navegador
+    // se queda en el formulario y la app nunca recibe el código.
+    expect(login.headers["content-security-policy"]).toContain("form-action 'self' http://127.0.0.1:*");
     const callback = new URL(String(login.headers.location));
     expect(callback.origin).toBe("http://127.0.0.1:49152");
     expect(callback.searchParams.get("state")).toBe("s".repeat(43));
