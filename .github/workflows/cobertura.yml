@@ -58,7 +58,7 @@ jobs:
         with:
           tool: cargo-llvm-cov@0.9.1
       - name: Medir ramas Rust en nightly
-        run: cargo llvm-cov --manifest-path src-tauri/Cargo.toml --lib --branch --json --summary-only --output-path src-tauri/target/critical-rust-branch-coverage.json
+        run: cargo llvm-cov --manifest-path src-tauri/Cargo.toml --lib --branch --json --output-path src-tauri/target/critical-rust-branch-coverage.json
       - name: Exigir cobertura de ramas crítica del 65 %
         run: node scripts/check-critical-rust-coverage.mjs src-tauri/target/critical-rust-branch-coverage.json --branches
       - uses: actions/upload-artifact@v6
