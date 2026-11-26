@@ -420,7 +420,7 @@ mod tests {
         assert!(!snapshots_equivalent(&v2, &other_language));
 
         let mut other_theme = v2.clone();
-        other_theme.preferences.theme_id = "ocean".into();
+        other_theme.preferences.theme_id = "indigo".into();
         assert!(!snapshots_equivalent(&v1, &other_theme));
 
         let mut other_endpoint = v2.clone();

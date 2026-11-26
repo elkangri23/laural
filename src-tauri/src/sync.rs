@@ -297,8 +297,7 @@ pub async fn confirm_remote_preferences(
     let Some(remote_snapshot) = remote.snapshot else {
         return Ok(false);
     };
-    if remote.revision != revision || !snapshot::snapshots_equivalent(&remote_snapshot, &snapshot)
-    {
+    if remote.revision != revision || !snapshot::snapshots_equivalent(&remote_snapshot, &snapshot) {
         return Ok(false);
     }
     record_sync_baseline(&app, snapshot, remote_snapshot, revision)?;
@@ -1388,7 +1387,10 @@ mod tests {
             snapshot: Some(cloud),
             revision: 5,
         };
-        assert_eq!(decide_sync(None, &remote, &local), SyncDecision::AlreadyEqual);
+        assert_eq!(
+            decide_sync(None, &remote, &local),
+            SyncDecision::AlreadyEqual
+        );
 
         let mut other_language = local.clone();
         other_language.preferences.language = Some("en".into());

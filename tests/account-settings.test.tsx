@@ -2,7 +2,7 @@
 import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { AccountSettings } from "../src/components/AccountSettings";
+import { AccountSettings, snapshotsMatch } from "../src/components/AccountSettings";
 import { LanguageProvider } from "../src/i18n";
 
 const mocks = vi.hoisted(() => ({
@@ -622,6 +622,13 @@ test("reconoce una configuración idéntica y detecta si cambió durante la comp
   confirmed = false;
   await act(async () => sync());
   expect(host.textContent).toContain("La nube cambió durante la comparación");
+});
+
+test("detecta cambios de idioma al comparar snapshots v2", () => {
+  const local = { schemaVersion: 2 as const, preferences, activeProviderId: null, providers: [] };
+  const cloud = { ...local, preferences: { ...preferences, language: "en" } };
+
+  expect(snapshotsMatch(local, cloud)).toBe(false);
 });
 
 test("ofrece subir cuando la nube está vacía y maneja conflictos al conservar el equipo", async () => {
