@@ -1,4 +1,9 @@
-use std::{fs, path::PathBuf, sync::OnceLock, time::Duration};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    sync::OnceLock,
+    time::Duration,
+};
 
 use futures_util::StreamExt;
 use reqwest::{Client, Response, redirect::Policy};
@@ -418,6 +423,10 @@ pub fn get_preference_sync_status(app: AppHandle) -> Result<LocalSyncStatus, Str
 pub(crate) async fn forget_local_preference_sync_state(app: &AppHandle) -> Result<(), String> {
     let _guard = lock_sync().await;
     let path = sync_state_path(app)?;
+    forget_sync_state_file(&path)
+}
+
+fn forget_sync_state_file(path: &Path) -> Result<(), String> {
     match fs::remove_file(path) {
         Ok(()) => Ok(()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
@@ -748,6 +757,36 @@ mod tests {
     use std::io::{Read, Write};
     use std::net::TcpListener;
     use std::thread::JoinHandle;
+
+    #[test]
+    fn elimina_el_estado_local_de_sincronizacion() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join(SYNC_STATE_FILE);
+        fs::write(&path, b"estado").unwrap();
+
+        assert_eq!(forget_sync_state_file(&path), Ok(()));
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn acepta_que_el_estado_local_de_sincronizacion_ya_no_exista() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join(SYNC_STATE_FILE);
+
+        assert_eq!(forget_sync_state_file(&path), Ok(()));
+    }
+
+    #[test]
+    fn informa_si_no_puede_borrar_el_estado_local_de_sincronizacion() {
+        let directory = tempfile::tempdir().unwrap();
+
+        let result = forget_sync_state_file(directory.path());
+
+        assert_eq!(
+            result,
+            Err("No se pudo borrar el estado local de sincronización de la cuenta.".into())
+        );
+    }
 
     fn snapshot(theme_id: &str) -> PreferenceSnapshot {
         PreferenceSnapshot {

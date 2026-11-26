@@ -1,6 +1,7 @@
 # Registro de cambios
 
 ## Próxima versión
+- La eliminación del estado local de sincronización queda aislada de Tauri y cubre éxito, archivo ausente y fallo del sistema de archivos. Suite Rust: 247 pasadas, 2 pruebas manuales ignoradas.
 - El agente da ejemplos completos de búsqueda de imágenes para PowerShell, CMD, WSL y Git Bash. PowerShell filtra extensiones explícitamente; Bash usa `find` con patrones agrupados; CMD conserva sus patrones compatibles. La prueba también comprueba que, ante un shell desconocido, el agente no invente sintaxis.
 - El control de riesgo del agente exige revisión antes de crear, borrar (incluido `--delete-merged`), renombrar, copiar o cambiar el seguimiento de ramas Git, incluso con opciones cortas combinadas. Las consultas conocidas se permiten; opciones ambiguas o desconocidas requieren revisión.
 - El backend valida antes de llamar al proveedor los límites de tareas, contexto de terminal, diff y archivos seleccionados, además del shell admitido; regresiones cubren los límites inclusivos y excesos.
