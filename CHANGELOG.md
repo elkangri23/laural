@@ -1,6 +1,7 @@
 # Registro de cambios
 
 ## Próxima versión
+- El cierre de la subida automática trata por separado guardado, conflicto, error remoto y fallo de persistencia local; el conflicto y los errores dejan el estado pendiente. Suite Rust: 257 pasadas, 2 pruebas manuales ignoradas.
 - La decisión final de confirmación remota usa ramas explícitas para coincidencia y rechazo; se mantiene la prueba de error al persistir. Suite Rust: 256 pasadas, 2 pruebas manuales ignoradas.
 - La confirmación remota persiste la línea base únicamente tras una coincidencia exacta; se prueban desajustes, ausencia de snapshot y fallo al guardar. Suite Rust: 256 pasadas, 2 pruebas manuales ignoradas; `sync.rs` alcanza 94,17 % de ramas.
 - El resultado de escritura remota solo actualiza la línea base local si la nube confirma el guardado; los conflictos preservan el estado y los errores locales se propagan. Suite Rust: 256 pasadas, 2 pruebas manuales ignoradas; `sync.rs` alcanza 92,50 % de ramas.

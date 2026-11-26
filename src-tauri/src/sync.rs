@@ -390,21 +390,37 @@ pub async fn sync_local_preferences(
         .as_ref()
         .and_then(|sync_state| sync_state.local_snapshot.as_ref());
     let cloud_snapshot = preserve_unshared_endpoints(&snapshot, &remote.snapshot, previous_local)?;
-    let write_result = match put_remote_preferences(&token, &cloud_snapshot, remote.revision).await
-    {
+    let write_result = put_remote_preferences(&token, &cloud_snapshot, remote.revision).await;
+    complete_sync_upload(
+        write_result,
+        snapshot,
+        cloud_snapshot,
+        |local, cloud, revision| record_sync_baseline(&app, local, cloud, revision),
+        || mark_sync_pending(&app),
+    )
+}
+
+fn complete_sync_upload(
+    write_result: Result<RemoteWriteResult, String>,
+    local_snapshot: PreferenceSnapshot,
+    cloud_snapshot: PreferenceSnapshot,
+    persist_baseline: impl FnOnce(PreferenceSnapshot, PreferenceSnapshot, u64) -> Result<(), String>,
+    mark_pending: impl FnOnce() -> Result<(), String>,
+) -> Result<SyncRunResult, String> {
+    let write_result = match write_result {
         Ok(result) => result,
         Err(_) => {
-            mark_sync_pending(&app)?;
+            mark_pending()?;
             return Ok(SyncRunResult::Pending);
         }
     };
     match write_result {
         RemoteWriteResult::Saved { revision } => {
-            record_sync_baseline(&app, snapshot, cloud_snapshot, revision)?;
+            persist_baseline(local_snapshot, cloud_snapshot, revision)?;
             Ok(SyncRunResult::Synced { revision })
         }
         RemoteWriteResult::Conflict => {
-            mark_sync_pending(&app)?;
+            mark_pending()?;
             Ok(SyncRunResult::Conflict)
         }
     }
@@ -1493,6 +1509,78 @@ mod tests {
                 Err("No se pudo escribir el estado local.".into())
             });
         assert_error_contains(failed, "estado local");
+    }
+
+    #[test]
+    fn completa_la_subida_remota_segun_guardado_conflicto_o_error() {
+        let local = snapshot("ocean");
+        let cloud = snapshot("laurel");
+        let mut persisted = None;
+        let synced = complete_sync_upload(
+            Ok(RemoteWriteResult::Saved { revision: 14 }),
+            local,
+            cloud,
+            |local, cloud, revision| {
+                persisted = Some((
+                    local.preferences.theme_id,
+                    cloud.preferences.theme_id,
+                    revision,
+                ));
+                Ok(())
+            },
+            || panic!("un guardado remoto no debe marcarse como pendiente"),
+        )
+        .unwrap();
+        assert!(matches!(synced, SyncRunResult::Synced { revision: 14 }));
+        assert_eq!(persisted, Some(("ocean".into(), "laurel".into(), 14)));
+
+        let mut conflict_marked_pending = false;
+        let conflict = complete_sync_upload(
+            Ok(RemoteWriteResult::Conflict),
+            snapshot("ocean"),
+            snapshot("laurel"),
+            |_, _, _| panic!("un conflicto no debe reemplazar la línea base"),
+            || {
+                conflict_marked_pending = true;
+                Ok(())
+            },
+        )
+        .unwrap();
+        assert!(matches!(conflict, SyncRunResult::Conflict));
+        assert!(conflict_marked_pending);
+
+        let mut failed_write_marked_pending = false;
+        let pending = complete_sync_upload(
+            Err("transporte no disponible".into()),
+            snapshot("ocean"),
+            snapshot("laurel"),
+            |_, _, _| panic!("un fallo remoto no debe persistir una línea base"),
+            || {
+                failed_write_marked_pending = true;
+                Ok(())
+            },
+        )
+        .unwrap();
+        assert!(matches!(pending, SyncRunResult::Pending));
+        assert!(failed_write_marked_pending);
+
+        let persistence_error = complete_sync_upload(
+            Ok(RemoteWriteResult::Saved { revision: 15 }),
+            snapshot("ocean"),
+            snapshot("laurel"),
+            |_, _, _| Err("fallo de persistencia".into()),
+            || Ok(()),
+        );
+        assert_error_contains(persistence_error, "persistencia");
+
+        let pending_error = complete_sync_upload(
+            Err("transporte no disponible".into()),
+            snapshot("ocean"),
+            snapshot("laurel"),
+            |_, _, _| Ok(()),
+            || Err("fallo al marcar pendiente".into()),
+        );
+        assert_error_contains(pending_error, "marcar pendiente");
     }
 
     #[test]
