@@ -3,6 +3,7 @@
 ## Próxima versión
 - El agente da ejemplos completos de búsqueda de imágenes para PowerShell, CMD, WSL y Git Bash. PowerShell filtra extensiones explícitamente; Bash usa `find` con patrones agrupados; CMD conserva sus patrones compatibles. La prueba también comprueba que, ante un shell desconocido, el agente no invente sintaxis.
 - El control de riesgo del agente exige revisión antes de crear, borrar (incluido `--delete-merged`), renombrar, copiar o cambiar el seguimiento de ramas Git, incluso con opciones cortas combinadas. Las consultas conocidas se permiten; opciones ambiguas o desconocidas requieren revisión.
+- La sincronización ya no dice que local y nube difieren cuando son el mismo ajuste: un snapshot v1 en la nube (sin idioma) y el snapshot v2 local se comparan por su contenido, no por la versión del esquema, así que descargar la nube deja de pedirlo otra vez inmediatamente.
 
 ## 0.1.0-alpha.19 · 2026-11-26
 - El agente propone comandos según el shell de la pestaña activa: PowerShell, CMD, WSL o Git Bash. Para PowerShell muestra `Get-ChildItem` y prohíbe opciones de CMD como `dir /b`.
