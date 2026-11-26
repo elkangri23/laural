@@ -1,6 +1,7 @@
 # Registro de cambios
 
 ## Próxima versión
+- `sync.rs` (Crítico): una regresión comprueba que el servicio puede devolver correctamente una revisión todavía vacía (`snapshot: null`). Suite Rust local: 257 pasadas y 2 manuales ignoradas; el test focalizado, formato y diff pasan. La CI de `697074f` completó con 83,94 % de líneas y 94,07 % de ramas en `sync.rs`; la nueva prueba se medirá en la ejecución del siguiente commit.
 - El cierre de la subida automática trata por separado guardado, conflicto, error remoto y fallo de persistencia local; el conflicto y los errores dejan el estado pendiente. Suite Rust: 257 pasadas, 2 pruebas manuales ignoradas.
 - La decisión final de confirmación remota usa ramas explícitas para coincidencia y rechazo; se mantiene la prueba de error al persistir. Suite Rust: 256 pasadas, 2 pruebas manuales ignoradas.
 - La confirmación remota persiste la línea base únicamente tras una coincidencia exacta; se prueban desajustes, ausencia de snapshot y fallo al guardar. Suite Rust: 256 pasadas, 2 pruebas manuales ignoradas; `sync.rs` alcanza 94,17 % de ramas.

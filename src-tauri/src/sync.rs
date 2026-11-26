@@ -1167,6 +1167,18 @@ mod tests {
         assert!(request.starts_with("get /v1/preferences/current http/1.1"));
         assert!(request.contains("authorization: bearer test-session"));
 
+        let empty_remote = RemoteSnapshot {
+            snapshot: None,
+            revision: 7,
+        };
+        let (result, _) = fetch_with_response(
+            "200 OK",
+            "ETag: \"7\"\r\n".into(),
+            serde_json::to_vec(&empty_remote).unwrap(),
+        )
+        .await;
+        assert_eq!(result.unwrap().snapshot, None);
+
         let (result, _) = fetch_with_response("401 Unauthorized", String::new(), Vec::new()).await;
         assert_error_contains(result, "Inicia sesión de nuevo");
 
