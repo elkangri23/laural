@@ -1388,6 +1388,66 @@ mod tests {
     }
 
     #[test]
+    fn exige_eleccion_si_falta_cualquier_parte_de_la_linea_base_local() {
+        let local = snapshot("laurel");
+        let remote = RemoteSnapshot {
+            snapshot: Some(snapshot("ocean")),
+            revision: 5,
+        };
+        let mut incomplete_states = Vec::new();
+
+        let mut missing_revision = state(5, local.clone());
+        missing_revision.revision = None;
+        incomplete_states.push(missing_revision);
+
+        let mut missing_local_snapshot = state(5, local.clone());
+        missing_local_snapshot.local_snapshot = None;
+        incomplete_states.push(missing_local_snapshot);
+
+        let mut missing_cloud_snapshot = state(5, local);
+        missing_cloud_snapshot.cloud_snapshot = None;
+        incomplete_states.push(missing_cloud_snapshot);
+
+        for incomplete in incomplete_states {
+            assert_eq!(
+                decide_sync(Some(&incomplete), &remote, &snapshot("laurel")),
+                SyncDecision::NeedsChoice
+            );
+        }
+    }
+
+    #[test]
+    fn detecta_un_cambio_remoto_aunque_la_revision_no_haya_cambiado() {
+        let baseline = snapshot("laurel");
+        let remote = RemoteSnapshot {
+            snapshot: None,
+            revision: 8,
+        };
+
+        assert_eq!(
+            decide_sync(
+                Some(&state(8, baseline.clone())),
+                &remote,
+                &snapshot("ocean")
+            ),
+            SyncDecision::Conflict
+        );
+
+        let changed_remote = RemoteSnapshot {
+            snapshot: Some(snapshot("ocean")),
+            revision: 8,
+        };
+        assert_eq!(
+            decide_sync(
+                Some(&state(8, baseline)),
+                &changed_remote,
+                &snapshot("laurel")
+            ),
+            SyncDecision::Conflict
+        );
+    }
+
+    #[test]
     fn solo_sube_cambios_locales_si_la_revision_remota_sigue_en_su_linea_base() {
         let baseline = snapshot("laurel");
         let local = snapshot("ocean");
