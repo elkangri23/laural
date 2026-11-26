@@ -2194,6 +2194,138 @@ fn shell_state_change_or_evaluation_is_high_risk(
     }
 }
 
+fn git_branch_mutation_flag(argument: &str) -> bool {
+    matches!(
+        argument,
+        "-d" | "-D"
+            | "--delete"
+            | "--delete-merged"
+            | "-m"
+            | "-M"
+            | "--move"
+            | "-c"
+            | "-C"
+            | "--copy"
+            | "-f"
+            | "--force"
+            | "-u"
+            | "--set-upstream-to"
+            | "--unset-upstream"
+            | "--edit-description"
+            | "-t"
+            | "--track"
+            | "--no-track"
+    ) || argument.starts_with("--set-upstream-to=")
+        || argument.starts_with("--delete-merged=")
+        || argument
+            .strip_prefix('-')
+            .filter(|flags| !flags.is_empty() && !flags.starts_with('-'))
+            .is_some_and(|flags| {
+                flags.chars().all(|flag| {
+                    matches!(
+                        flag,
+                        'a' | 'r' | 'v' | 'i' | 'l' | 'q' | 'd' | 'm' | 'c' | 'f' | 'u' | 't'
+                    )
+                }) && flags
+                    .chars()
+                    .any(|flag| matches!(flag, 'd' | 'm' | 'c' | 'f' | 'u' | 't'))
+            })
+}
+
+fn git_branch_read_only_option(argument: &str) -> bool {
+    matches!(
+        argument,
+        "-a" | "-r"
+            | "-v"
+            | "-vv"
+            | "-i"
+            | "-q"
+            | "-l"
+            | "--all"
+            | "--remotes"
+            | "--verbose"
+            | "--ignore-case"
+            | "--quiet"
+            | "--list"
+            | "--show-current"
+            | "--no-color"
+            | "--no-column"
+            | "--no-abbrev"
+            | "--color"
+            | "--column"
+    ) || argument
+        .strip_prefix('-')
+        .filter(|flags| !flags.is_empty() && !flags.starts_with('-'))
+        .is_some_and(|flags| {
+            flags
+                .chars()
+                .all(|flag| matches!(flag, 'a' | 'r' | 'v' | 'i' | 'l' | 'q'))
+        })
+}
+
+fn git_branch_option_takes_value(argument: &str) -> bool {
+    matches!(
+        argument,
+        "--contains"
+            | "--no-contains"
+            | "--merged"
+            | "--no-merged"
+            | "--points-at"
+            | "--sort"
+            | "--format"
+            | "--abbrev"
+    )
+}
+
+fn git_branch_option_has_inline_value(argument: &str) -> bool {
+    [
+        "--color=",
+        "--column=",
+        "--abbrev=",
+        "--contains=",
+        "--no-contains=",
+        "--merged=",
+        "--no-merged=",
+        "--points-at=",
+        "--sort=",
+        "--format=",
+    ]
+    .iter()
+    .any(|option| argument.starts_with(option))
+}
+
+fn git_branch_is_high_risk(arguments: &[&str]) -> bool {
+    let list_only = arguments
+        .iter()
+        .any(|argument| matches!(*argument, "-l" | "--list"));
+    let mut expects_value = false;
+    for argument in arguments {
+        if expects_value && !argument.starts_with('-') {
+            expects_value = false;
+            continue;
+        }
+        expects_value = false;
+        if git_branch_mutation_flag(argument) {
+            return true;
+        }
+        if list_only && !argument.starts_with('-') {
+            continue;
+        }
+        if git_branch_read_only_option(argument) {
+            continue;
+        }
+        if git_branch_option_takes_value(argument) {
+            expects_value = true;
+            continue;
+        }
+        if git_branch_option_has_inline_value(argument) {
+            continue;
+        }
+        return true;
+    }
+    false
+}
+
 fn git_command_is_high_risk(command: &str) -> bool {
     if !first_command_name(command).eq_ignore_ascii_case("git") {
         return false;
@@ -2238,39 +2370,7 @@ fn git_command_is_high_risk(command: &str) -> bool {
     match subcommand {
         "clean" | "reset" | "push" | "checkout" | "switch" | "restore" | "rm" | "rebase"
         | "merge" | "cherry-pick" | "config" => true,
-        "branch" => {
-            let arguments: Vec<_> = tokens.collect();
-            arguments.iter().any(|argument| {
-                matches!(
-                    *argument,
-                    "-d" | "-D"
-                        | "--delete"
-                        | "-m"
-                        | "-M"
-                        | "--move"
-                        | "-c"
-                        | "-C"
-                        | "--copy"
-                        | "-f"
-                        | "--force"
-                        | "-u"
-                        | "--set-upstream-to"
-                        | "--unset-upstream"
-                        | "--edit-description"
-                        | "-t"
-                        | "--track"
-                        | "--no-track"
-                ) || argument.starts_with("--set-upstream-to=")
-                    || (argument.starts_with('-')
-                        && !argument.starts_with("--")
-                        && argument
-                            .chars()
-                            .skip(1)
-                            .any(|flag| matches!(flag, 'd' | 'm' | 'c' | 'f' | 'u' | 't')))
-            }) || arguments
-                .first()
-                .is_some_and(|argument| !argument.starts_with('-'))
-        }
+        "branch" => git_branch_is_high_risk(&tokens.collect::<Vec<_>>()),
         _ => false,
     }
 }
@@ -4621,7 +4721,10 @@ mod tests {
             "git branch -vf nueva",
             "git branch --force nueva",
             "git branch -d antigua",
+            "git branch -dv antigua",
             "git branch --delete antigua",
+            "git branch --delete-merged",
+            "git branch --delete-merged=feature/*",
             "git branch -m antigua nueva",
             "git branch --move antigua nueva",
             "git branch -M antigua nueva",
@@ -4635,6 +4738,8 @@ mod tests {
             "git branch --unset-upstream nueva",
             "git branch --edit-description nueva",
             "git branch --track nueva origin/main",
+            "git branch --color=always nueva",
+            "git branch --unknown-option",
         ] {
             assert!(command_is_high_risk("git-bash", command), "{command}");
         }
@@ -4647,6 +4752,9 @@ mod tests {
             "git branch -rv",
             "git branch --show-current",
             "git branch --contains principal",
+            "git branch --merged principal",
+            "git branch --sort=-committerdate --list",
+            "git branch --format %(refname) --list",
         ] {
             assert!(!command_is_high_risk("git-bash", command), "{command}");
         }
