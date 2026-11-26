@@ -243,9 +243,22 @@ fn valid_account_deletion_confirmation(value: &str) -> bool {
 pub async fn list_account_sessions() -> Result<Vec<AccountSession>, String> {
     let token = session_token()?;
     let client = account_api_client()?;
+    request_account_sessions(
+        &client,
+        &format!("{SYNC_ORIGIN}/v1/auth/sessions"),
+        token.as_str(),
+    )
+    .await
+}
+
+async fn request_account_sessions(
+    client: &Client,
+    endpoint: &str,
+    token: &str,
+) -> Result<Vec<AccountSession>, String> {
     let response = client
-        .get(format!("{SYNC_ORIGIN}/v1/auth/sessions"))
-        .bearer_auth(token.as_str())
+        .get(endpoint)
+        .bearer_auth(token)
         .send()
         .await
         .map_err(|_| "No se pudieron consultar las sesiones de la cuenta.".to_string())?;
@@ -833,6 +846,27 @@ mod tests {
         response
     }
 
+    async fn local_account_sessions_request(
+        raw_response: String,
+    ) -> (Result<Vec<AccountSession>, String>, String) {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = [0; 2048];
+            let count = stream.read(&mut request).unwrap();
+            stream.write_all(raw_response.as_bytes()).unwrap();
+            String::from_utf8_lossy(&request[..count]).into_owned()
+        });
+        let result = request_account_sessions(
+            &Client::new(),
+            &format!("http://{address}/v1/auth/sessions"),
+            "token-de-prueba",
+        )
+        .await;
+        (result, server.join().unwrap())
+    }
+
     fn request(target: &str) -> Vec<u8> {
         format!("GET {target} HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n").into_bytes()
     }
@@ -1222,6 +1256,60 @@ mod tests {
                 .await
                 .unwrap_err(),
             "El identificador de sesión no es válido."
+        );
+    }
+
+    #[tokio::test]
+    async fn consulta_sesiones_autenticadas_y_rechaza_respuestas_no_validas() {
+        let body = r#"{"sessions":[{"id":"d5363ea7-f6cb-4cca-8e03-85aa33089e7a","createdAt":"2026-11-26T12:00:00Z","expiresAt":"2026-12-26T12:00:00Z","current":true}]}"#;
+        let (sessions, request) = local_account_sessions_request(format!(
+            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        ))
+        .await;
+        let sessions = sessions.unwrap();
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].id, "d5363ea7-f6cb-4cca-8e03-85aa33089e7a");
+        assert!(sessions[0].current);
+        let request = request.to_ascii_lowercase();
+        assert!(request.contains("get /v1/auth/sessions http/1.1"));
+        assert!(request.contains("authorization: bearer token-de-prueba"));
+
+        let (denied, _) = local_account_sessions_request(
+            "HTTP/1.1 401 Unauthorized\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}".into(),
+        )
+        .await;
+        assert_eq!(
+            denied.err().unwrap(),
+            "No se pudieron consultar las sesiones de la cuenta."
+        );
+
+        let (malformed, _) = local_account_sessions_request(
+            "HTTP/1.1 200 OK\r\nContent-Length: 11\r\nConnection: close\r\n\r\n{\"sessions\""
+                .into(),
+        )
+        .await;
+        assert_eq!(
+            malformed.err().unwrap(),
+            "La respuesta de sesiones no tiene un formato válido."
+        );
+
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let (stream, _) = listener.accept().unwrap();
+            drop(stream);
+        });
+        let unavailable = request_account_sessions(
+            &Client::new(),
+            &format!("http://{address}/v1/auth/sessions"),
+            "token-de-prueba",
+        )
+        .await;
+        server.join().unwrap();
+        assert_eq!(
+            unavailable.err().unwrap(),
+            "No se pudieron consultar las sesiones de la cuenta."
         );
     }
 
