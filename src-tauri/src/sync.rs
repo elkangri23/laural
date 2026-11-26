@@ -316,10 +316,21 @@ pub async fn confirm_remote_preferences(
     let _guard = lock_sync().await;
     let token = account::session_token()?;
     let remote = fetch_remote_preferences(&token).await?;
-    let Some(remote_snapshot) = confirmed_cloud_snapshot(remote, &snapshot, revision) else {
+    finalize_remote_confirmation(remote, snapshot, revision, |local, cloud, revision| {
+        record_sync_baseline(&app, local, cloud, revision)
+    })
+}
+
+fn finalize_remote_confirmation(
+    remote: RemoteSnapshot,
+    expected: PreferenceSnapshot,
+    revision: u64,
+    persist_baseline: impl FnOnce(PreferenceSnapshot, PreferenceSnapshot, u64) -> Result<(), String>,
+) -> Result<bool, String> {
+    let Some(remote_snapshot) = confirmed_cloud_snapshot(remote, &expected, revision) else {
         return Ok(false);
     };
-    record_sync_baseline(&app, snapshot, remote_snapshot, revision)?;
+    persist_baseline(expected, remote_snapshot, revision)?;
     Ok(true)
 }
 
@@ -1634,36 +1645,68 @@ mod tests {
     #[test]
     fn solo_confirma_la_nube_si_revision_y_preferencias_coinciden() {
         let expected = snapshot("laurel");
-        let confirmed = confirmed_cloud_snapshot(
+        let mut persisted = None;
+        let confirmed = finalize_remote_confirmation(
             RemoteSnapshot {
                 snapshot: Some(expected.clone()),
                 revision: 8,
             },
-            &expected,
+            expected.clone(),
             8,
+            |local, cloud, revision| {
+                persisted = Some((
+                    local.preferences.theme_id,
+                    cloud.preferences.theme_id,
+                    revision,
+                ));
+                Ok(())
+            },
+        )
+        .unwrap();
+        assert!(confirmed);
+        assert_eq!(persisted, Some(("laurel".into(), "laurel".into(), 8)));
+
+        for (remote, revision) in [
+            (
+                RemoteSnapshot {
+                    snapshot: Some(expected.clone()),
+                    revision: 7,
+                },
+                8,
+            ),
+            (
+                RemoteSnapshot {
+                    snapshot: None,
+                    revision: 8,
+                },
+                8,
+            ),
+            (
+                RemoteSnapshot {
+                    snapshot: Some(snapshot("ocean")),
+                    revision: 8,
+                },
+                8,
+            ),
+        ] {
+            assert_eq!(
+                finalize_remote_confirmation(remote, expected.clone(), revision, |_, _, _| {
+                    panic!("no debe persistir una confirmación remota inválida")
+                }),
+                Ok(false)
+            );
+        }
+
+        let failed_persistence = finalize_remote_confirmation(
+            RemoteSnapshot {
+                snapshot: Some(expected.clone()),
+                revision: 8,
+            },
+            expected,
+            8,
+            |_, _, _| Err("No se pudo guardar la línea base.".into()),
         );
-        assert_eq!(
-            confirmed.unwrap().preferences.theme_id,
-            expected.preferences.theme_id
-        );
-
-        let stale_revision = RemoteSnapshot {
-            snapshot: Some(expected.clone()),
-            revision: 7,
-        };
-        assert!(confirmed_cloud_snapshot(stale_revision, &expected, 8).is_none());
-
-        let absent_snapshot = RemoteSnapshot {
-            snapshot: None,
-            revision: 8,
-        };
-        assert!(confirmed_cloud_snapshot(absent_snapshot, &expected, 8).is_none());
-
-        let changed_snapshot = RemoteSnapshot {
-            snapshot: Some(snapshot("ocean")),
-            revision: 8,
-        };
-        assert!(confirmed_cloud_snapshot(changed_snapshot, &expected, 8).is_none());
+        assert_error_contains(failed_persistence, "línea base");
     }
 
     #[test]
