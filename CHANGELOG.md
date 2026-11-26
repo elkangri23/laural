@@ -1,6 +1,7 @@
 # Registro de cambios
 
 ## Próxima versión
+- La verificación previa a restaurar preferencias se extrae a una comparación probada: exige que coincidan revisión y contenido y rechaza snapshots ausentes o modificados. Suite Rust: 250 pasadas, 2 pruebas manuales ignoradas.
 - La decisión de sincronización exige elegir si falta cualquier dato de la línea base y detecta cambios de contenido remoto aunque la revisión sea la misma. Suite Rust: 249 pasadas, 2 pruebas manuales ignoradas.
 - La medición CI de `sync.rs` queda en 79,59 % de líneas y 81,45 % de ramas; los jobs de cobertura y servicio terminaron correctamente.
 - La eliminación del estado local de sincronización queda aislada de Tauri y cubre éxito, archivo ausente y fallo del sistema de archivos. Suite Rust: 247 pasadas, 2 pruebas manuales ignoradas.

@@ -440,17 +440,24 @@ pub(crate) async fn verify_remote_snapshot(
 ) -> Result<(), String> {
     let token = account::session_token()?;
     let remote = fetch_remote_preferences(&token).await?;
-    let matches = remote.revision == revision
-        && remote
-            .snapshot
-            .as_ref()
-            .is_some_and(|remote| snapshot::snapshots_equivalent(remote, snapshot));
-    if !matches {
+    if !remote_snapshot_matches(&remote, snapshot, revision) {
         return Err(
             "La nube cambió desde la comparación. Vuelve a sincronizar antes de aplicar.".into(),
         );
     }
     Ok(())
+}
+
+fn remote_snapshot_matches(
+    remote: &RemoteSnapshot,
+    expected: &PreferenceSnapshot,
+    revision: u64,
+) -> bool {
+    remote.revision == revision
+        && remote
+            .snapshot
+            .as_ref()
+            .is_some_and(|snapshot| snapshot::snapshots_equivalent(snapshot, expected))
 }
 
 pub(crate) fn record_sync_baseline(
@@ -1445,6 +1452,34 @@ mod tests {
             ),
             SyncDecision::Conflict
         );
+    }
+
+    #[test]
+    fn verifica_la_revision_y_el_contenido_antes_de_aplicar_un_snapshot_remoto() {
+        let expected = snapshot("laurel");
+        let matching_remote = RemoteSnapshot {
+            snapshot: Some(expected.clone()),
+            revision: 8,
+        };
+        assert!(remote_snapshot_matches(&matching_remote, &expected, 8));
+
+        assert!(!remote_snapshot_matches(&matching_remote, &expected, 9));
+        assert!(!remote_snapshot_matches(
+            &RemoteSnapshot {
+                snapshot: None,
+                revision: 8,
+            },
+            &expected,
+            8
+        ));
+        assert!(!remote_snapshot_matches(
+            &RemoteSnapshot {
+                snapshot: Some(snapshot("ocean")),
+                revision: 8,
+            },
+            &expected,
+            8
+        ));
     }
 
     #[test]
