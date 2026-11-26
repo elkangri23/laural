@@ -1702,21 +1702,13 @@ pub async fn plan_agent(
     let cancelled = Arc::new(AtomicBool::new(false));
     register_ai_request(&registry, &request_id, cancelled.clone())?;
     let result = async {
-        let task = task.trim();
-        if task.is_empty() { return Err("Describe la tarea que quieres que prepare el agente.".to_string()); }
-        if task.len() > 12_000 {
-            return Err("La tarea del agente supera el límite de 12 KB.".to_string());
-        }
-        if terminal_context.len() > MAX_CONTEXT_INPUT_BYTES
-            || selected_files.len() > 12
-            || selected_files.iter().any(|path| path.len() > 4_096)
-            || git_diff_context.len() > MAX_GIT_DIFF_CONTEXT_BYTES
-        {
-            return Err("El contexto del agente supera los límites permitidos.".into());
-        }
-        if !matches!(shell.as_str(), "cmd" | "powershell" | "git-bash" | "wsl") {
-            return Err("El shell seleccionado no es válido.".to_string());
-        }
+        let task = validate_agent_plan_input(
+            &task,
+            &shell,
+            &terminal_context,
+            &selected_files,
+            &git_diff_context,
+        )?;
         let store = read_provider_store(&app)?;
         let provider = active_provider(&store).cloned().ok_or_else(|| "Configura un proveedor de modelos antes de usar el agente.".to_string())?;
         let key = read_api_key(&provider.id)?;
@@ -1760,6 +1752,33 @@ pub async fn plan_agent(
         .map_err(|_| "No se pudo cerrar la consulta del agente.".to_string())?
         .remove(&request_id);
     result
+}
+
+fn validate_agent_plan_input<'a>(
+    task: &'a str,
+    shell: &str,
+    terminal_context: &str,
+    selected_files: &[String],
+    git_diff_context: &str,
+) -> Result<&'a str, String> {
+    let task = task.trim();
+    if task.is_empty() {
+        return Err("Describe la tarea que quieres que prepare el agente.".to_string());
+    }
+    if task.len() > 12_000 {
+        return Err("La tarea del agente supera el límite de 12 KB.".to_string());
+    }
+    if terminal_context.len() > MAX_CONTEXT_INPUT_BYTES
+        || selected_files.len() > 12
+        || selected_files.iter().any(|path| path.len() > 4_096)
+        || git_diff_context.len() > MAX_GIT_DIFF_CONTEXT_BYTES
+    {
+        return Err("El contexto del agente supera los límites permitidos.".into());
+    }
+    if !matches!(shell, "cmd" | "powershell" | "git-bash" | "wsl") {
+        return Err("El shell seleccionado no es válido.".to_string());
+    }
+    Ok(task)
 }
 
 pub fn authorize_agent_command(
@@ -4325,6 +4344,64 @@ mod tests {
 
         let unknown = agent_system_prompt("shell-desconocido", true);
         assert!(unknown.contains("pregunta en vez de mezclar sintaxis"));
+    }
+
+    #[test]
+    fn valida_entradas_del_plan_del_agente_y_sus_limites_inclusivos() {
+        let task = "x".repeat(12_000);
+        let terminal = "x".repeat(MAX_CONTEXT_INPUT_BYTES);
+        let diff = "x".repeat(MAX_GIT_DIFF_CONTEXT_BYTES);
+        let selected_files = vec!["x".repeat(4_096)];
+
+        assert_eq!(
+            validate_agent_plan_input(
+                &format!("  {task}  "),
+                "powershell",
+                &terminal,
+                &selected_files,
+                &diff,
+            ),
+            Ok(task.as_str())
+        );
+        assert!(
+            validate_agent_plan_input(" \n\t", "cmd", "", &[], "")
+                .unwrap_err()
+                .contains("Describe la tarea")
+        );
+        assert!(
+            validate_agent_plan_input(&format!("{task}x"), "cmd", "", &[], "")
+                .unwrap_err()
+                .contains("12 KB")
+        );
+        assert!(
+            validate_agent_plan_input("tarea", "cmd", &format!("{terminal}x"), &[], "")
+                .unwrap_err()
+                .contains("contexto")
+        );
+        assert!(
+            validate_agent_plan_input("tarea", "cmd", "", &vec!["archivo".into(); 13], "")
+                .unwrap_err()
+                .contains("contexto")
+        );
+        assert!(
+            validate_agent_plan_input("tarea", "cmd", "", &["x".repeat(4_097)], "")
+                .unwrap_err()
+                .contains("contexto")
+        );
+        assert!(
+            validate_agent_plan_input("tarea", "cmd", "", &[], &format!("{diff}x"))
+                .unwrap_err()
+                .contains("contexto")
+        );
+        assert!(
+            validate_agent_plan_input("tarea", "fish", "", &[], "")
+                .unwrap_err()
+                .contains("shell")
+        );
+
+        for shell in ["cmd", "powershell", "git-bash", "wsl"] {
+            assert!(validate_agent_plan_input("tarea", shell, "", &[], "").is_ok());
+        }
     }
 
     #[test]
