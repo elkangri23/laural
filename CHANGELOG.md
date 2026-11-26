@@ -1,6 +1,7 @@
 # Registro de cambios
 
 ## Próxima versión
+- El streaming del chat ya no actualiza el estado global de la aplicación cada 200 ms: la respuesta activa se refresca en su propio componente; la app solo publica el primer fragmento y el contenido final. La regresión limita a 7 los commits durante 20 deltas sostenidos y conserva pruebas de cierre y error.
 - Seguridad de la cadena de publicación: workflows fijados a SHA inmutables, permisos de GitHub Actions reducidos y tags de versión restringidos a la cuenta administradora.
 - `sync.rs` (Crítico): el estado local de sincronización se calcula en una función pura y cubre los casos sin estado, configurado, pendiente sin base y pendiente con base. Suite Rust: 258 pasadas y 2 manuales ignoradas. CI verde del commit `14b60c3`: 84,53 % de líneas (1453/1719) y 95,61 % de ramas (109/114).
 - `sync.rs` (Crítico): cubre respuestas remotas con `snapshot: null` y valida claves generadas mediante decodificación Base64 URL-safe determinista. CI de `a053b9b` completó en verde: 84,11 % de líneas (1429/1699) y 95,61 % de ramas (109/114). Las cinco ramas restantes corresponden a lecturas parciales/EOF del servidor HTTP simulado de los tests. Suite Rust local: 257 pasadas y 2 manuales ignoradas.

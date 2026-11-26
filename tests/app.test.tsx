@@ -789,7 +789,7 @@ test("agrupa deltas del chat y conserva el contenido final", async () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(50); });
   }
   await act(async () => { await vi.advanceTimersByTimeAsync(200); });
-  expect(appCommits).toBeLessThanOrEqual(14);
+  expect(appCommits).toBeLessThanOrEqual(7);
   expect(assistantMessages[assistantMessages.length - 1]?.textContent).toContain("x".repeat(20));
   await act(async () => { finishRequest?.(); await Promise.resolve(); });
   expect(host.querySelectorAll(".chat-message.assistant").item(0)?.textContent).toContain(`Hola mundo y más${"x".repeat(20)}`);
