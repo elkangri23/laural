@@ -2238,7 +2238,39 @@ fn git_command_is_high_risk(command: &str) -> bool {
     match subcommand {
         "clean" | "reset" | "push" | "checkout" | "switch" | "restore" | "rm" | "rebase"
         | "merge" | "cherry-pick" | "config" => true,
-        "branch" => tokens.any(|argument| matches!(argument, "-d" | "-D" | "--delete")),
+        "branch" => {
+            let arguments: Vec<_> = tokens.collect();
+            arguments.iter().any(|argument| {
+                matches!(
+                    *argument,
+                    "-d" | "-D"
+                        | "--delete"
+                        | "-m"
+                        | "-M"
+                        | "--move"
+                        | "-c"
+                        | "-C"
+                        | "--copy"
+                        | "-f"
+                        | "--force"
+                        | "-u"
+                        | "--set-upstream-to"
+                        | "--unset-upstream"
+                        | "--edit-description"
+                        | "-t"
+                        | "--track"
+                        | "--no-track"
+                ) || argument.starts_with("--set-upstream-to=")
+                    || (argument.starts_with('-')
+                        && !argument.starts_with("--")
+                        && argument
+                            .chars()
+                            .skip(1)
+                            .any(|flag| matches!(flag, 'd' | 'm' | 'c' | 'f' | 'u' | 't')))
+            }) || arguments
+                .first()
+                .is_some_and(|argument| !argument.starts_with('-'))
+        }
         _ => false,
     }
 }
@@ -4578,6 +4610,45 @@ mod tests {
             "docker compose config --output docker-resuelto.yml",
         ] {
             assert!(command_is_high_risk("git-bash", command), "{command}");
+        }
+    }
+
+    #[test]
+    fn git_exige_revision_para_mutaciones_de_ramas_y_permite_consultas() {
+        for command in [
+            "git branch nueva",
+            "git branch -f nueva",
+            "git branch -vf nueva",
+            "git branch --force nueva",
+            "git branch -d antigua",
+            "git branch --delete antigua",
+            "git branch -m antigua nueva",
+            "git branch --move antigua nueva",
+            "git branch -M antigua nueva",
+            "git branch -c principal copia",
+            "git branch --copy principal copia",
+            "git branch -C principal copia",
+            "git branch --set-upstream-to=origin/main nueva",
+            "git branch --set-upstream-to origin/main nueva",
+            "git branch -u origin/main nueva",
+            "git branch -ft nueva origin/main",
+            "git branch --unset-upstream nueva",
+            "git branch --edit-description nueva",
+            "git branch --track nueva origin/main",
+        ] {
+            assert!(command_is_high_risk("git-bash", command), "{command}");
+        }
+
+        for command in [
+            "git branch",
+            "git branch --list",
+            "git branch --list principal",
+            "git branch --all",
+            "git branch -rv",
+            "git branch --show-current",
+            "git branch --contains principal",
+        ] {
+            assert!(!command_is_high_risk("git-bash", command), "{command}");
         }
     }
 

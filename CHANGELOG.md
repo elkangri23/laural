@@ -2,6 +2,7 @@
 
 ## Próxima versión
 - El agente da ejemplos completos de búsqueda de imágenes para PowerShell, CMD, WSL y Git Bash. PowerShell filtra extensiones explícitamente; Bash usa `find` con patrones agrupados; CMD conserva sus patrones compatibles. La prueba también comprueba que, ante un shell desconocido, el agente no invente sintaxis.
+- El control de riesgo del agente exige revisión antes de crear, borrar, renombrar, copiar o cambiar el seguimiento de ramas Git, incluso con opciones cortas combinadas; mantiene las consultas de listado como lectura.
 
 ## 0.1.0-alpha.19 · 2026-11-26
 - El agente propone comandos según el shell de la pestaña activa: PowerShell, CMD, WSL o Git Bash. Para PowerShell muestra `Get-ChildItem` y prohíbe opciones de CMD como `dir /b`.
