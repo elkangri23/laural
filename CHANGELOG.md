@@ -1,6 +1,7 @@
 # Registro de cambios
 
 ## Próxima versión
+- El agente puede pedir una aclaración sin proponer acciones y conserva la petición original al recibir la respuesta; el plan evita cambios ajenos al objetivo y no presume el contenido de archivos ausentes del contexto. PowerShell, CMD, WSL y Git Bash notifican la finalización con código de salida y un identificador único por ejecución. Informe: `docs/product/agent-operativity-audit.md`.
 - El streaming del chat ya no actualiza el estado global de la aplicación cada 200 ms: la respuesta activa se refresca en su propio componente; la app solo publica el primer fragmento y el contenido final. La regresión limita a 7 los commits durante 20 deltas sostenidos y conserva pruebas de cierre y error.
 - Seguridad de la cadena de publicación: workflows fijados a SHA inmutables, permisos de GitHub Actions reducidos y tags de versión restringidos a la cuenta administradora.
 - `sync.rs` (Crítico): el estado local de sincronización se calcula en una función pura y cubre los casos sin estado, configurado, pendiente sin base y pendiente con base. Suite Rust: 258 pasadas y 2 manuales ignoradas. CI verde del commit `14b60c3`: 84,53 % de líneas (1453/1719) y 95,61 % de ramas (109/114).

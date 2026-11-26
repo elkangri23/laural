@@ -4,7 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import App from "../src/App";
 
-const mocks = vi.hoisted(() => ({ invoke: vi.fn(), open: vi.fn(), listen: vi.fn(), deferTerminalPaneImport: false, resolveTerminalPaneImport: null as (() => void) | null, terminalPaneRenderCount: 0, terminalRequests: [] as Array<{ terminalId: string; copySequence: number; copyTarget: string; clearSequence: number; clearTarget: string; powerShellPredictionEnabled: boolean }> }));
+const mocks = vi.hoisted(() => ({ invoke: vi.fn(), open: vi.fn(), listen: vi.fn(), deferTerminalPaneImport: false, resolveTerminalPaneImport: null as (() => void) | null, terminalPaneRenderCount: 0, terminalRequests: [] as Array<{ terminalId: string; copySequence: number; copyTarget: string; clearSequence: number; clearTarget: string; powerShellPredictionEnabled: boolean }>, agentFinishCallbacks: [] as Array<(terminalId: string, token: string, exitCode: number | null) => void> }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: mocks.invoke }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: mocks.listen }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open: mocks.open }));
@@ -13,8 +13,9 @@ vi.mock("../src/components/TerminalPane", async () => {
     await new Promise<void>((resolve) => { mocks.resolveTerminalPaneImport = resolve; });
   }
   const { memo } = await import("react");
-  const MockTerminalPane = (props: { terminalId: string; copyRequest: { sequence: number; terminalId: string }; clearRequest: { sequence: number; terminalId: string }; powerShellPredictionEnabled: boolean; onTextOutput: (id: string, text: string) => void; onCommandSubmit: (id: string, command: string) => void; onCommandFinish: (id: string, code: number) => void }) => {
+  const MockTerminalPane = (props: { terminalId: string; copyRequest: { sequence: number; terminalId: string }; clearRequest: { sequence: number; terminalId: string }; powerShellPredictionEnabled: boolean; onTextOutput: (id: string, text: string) => void; onCommandSubmit: (id: string, command: string) => void; onCommandFinish: (id: string, code: number | null) => void; onAgentCommandFinish: (id: string, token: string, code: number | null) => void }) => {
     mocks.terminalPaneRenderCount += 1;
+    mocks.agentFinishCallbacks.push(props.onAgentCommandFinish);
     mocks.terminalRequests.push({ terminalId: props.terminalId, copySequence: props.copyRequest.sequence, copyTarget: props.copyRequest.terminalId, clearSequence: props.clearRequest.sequence, clearTarget: props.clearRequest.terminalId, powerShellPredictionEnabled: props.powerShellPredictionEnabled });
     return <div data-testid="terminal-pane">
       <button data-testid="begin-command" onClick={() => props.onCommandSubmit(props.terminalId, "git status")}>Iniciar comando</button>
@@ -22,6 +23,7 @@ vi.mock("../src/components/TerminalPane", async () => {
       <button data-testid="output-two" onClick={() => props.onTextOutput(props.terminalId, "segunda")}>Salida dos</button>
       <button data-testid="output-final" onClick={() => props.onTextOutput(props.terminalId, " final")}>Salida final</button>
       <button data-testid="finish-command" onClick={() => props.onCommandFinish(props.terminalId, 0)}>Terminar comando</button>
+      <button data-testid="finish-command-unknown" onClick={() => props.onCommandFinish(props.terminalId, null)}>Finalizar sin código</button>
     </div>;
   };
   return { default: memo(MockTerminalPane) };
@@ -91,6 +93,7 @@ beforeEach(() => {
   mocks.resolveTerminalPaneImport = null;
   mocks.terminalPaneRenderCount = 0;
   mocks.terminalRequests.length = 0;
+  mocks.agentFinishCallbacks.length = 0;
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -488,9 +491,89 @@ test("prepara un plan desde la terminal activa y completa el comando aprobado", 
   expect(mocks.invoke).toHaveBeenCalledWith("plan_agent", expect.objectContaining({ task: "revisa el estado del repositorio", projectPath: null, shell: "powershell" }));
   expect(host.textContent).toContain("Revisar el estado");
   await act(async () => buttonIncluding("Aprobar y ejecutar").click());
-  expect(mocks.invoke).toHaveBeenCalledWith("run_agent_command", expect.objectContaining({ command: "git status", approved: true }));
+  const commandCall = mocks.invoke.mock.calls.find(([name]) => name === "run_agent_command");
+  expect(commandCall?.[1]).toMatchObject({ command: "git status", approved: true });
   await act(async () => host.querySelector<HTMLButtonElement>('[data-testid="finish-command"]')!.click());
+  expect(host.querySelector(".agent-action")?.classList.contains("running")).toBe(true);
+  await act(async () => mocks.agentFinishCallbacks.at(-1)?.(commandCall?.[1]?.terminalId as string, commandCall?.[1]?.completionToken as string, 0));
   expect(host.textContent).toContain("COMPLETADO");
+  expect(host.textContent).toContain("El comando terminó correctamente.");
+});
+
+test("pide aclaración ante una petición ambigua y conserva el objetivo en la respuesta", async () => {
+  let planCount = 0;
+  mocks.invoke.mockImplementation(async (command: string) => {
+    if (command === "get_provider") return { id: "local", name: "Local", model: "test" };
+    if (command === "get_providers") return [{ id: "local", name: "Local", model: "test" }];
+    if (command === "get_agent_settings") return { mode: "review", allowedPrefixes: [], backupRetention: null };
+    if (command === "plan_agent") {
+      planCount += 1;
+      if (planCount === 1) return { summary: "Aclarar el destino", clarifyingQuestion: "¿Qué carpeta quieres revisar?", actions: [] };
+      return { summary: "Listar imágenes de Descargas", actions: [{ type: "run_command", command: 'Get-ChildItem "$HOME\\Downloads" -File', reason: "Revisar la carpeta solicitada" }] };
+    }
+    return undefined;
+  });
+  await act(async () => root!.render(<App />));
+  await act(async () => buttonIncluding("Agente").click());
+  const composer = host.querySelector<HTMLTextAreaElement>(".composer textarea")!;
+  const submit = async (value: string) => {
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set?.call(composer, value);
+      composer.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => host.querySelector<HTMLFormElement>(".composer")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+  };
+
+  await submit("busca las imágenes de la carpeta que tengo en mente");
+  expect(host.textContent).toContain("¿Qué carpeta quieres revisar?");
+  expect(host.querySelector(".agent-plan-count")).toBeNull();
+  expect(mocks.invoke).not.toHaveBeenCalledWith("run_agent_command", expect.anything());
+
+  await submit("Descargas del usuario");
+  const planCalls = mocks.invoke.mock.calls.filter(([name]) => name === "plan_agent");
+  expect(planCalls[1]?.[1]?.task).toContain("Tarea original: busca las imágenes de la carpeta que tengo en mente");
+  expect(planCalls[1]?.[1]?.task).toContain("Aclaración solicitada: ¿Qué carpeta quieres revisar?");
+  expect(planCalls[1]?.[1]?.task).toContain("Respuesta del usuario: Descargas del usuario");
+  expect(host.textContent).toContain('Get-ChildItem "$HOME\\Downloads" -File');
+});
+
+test("en CMD el agente espera el código de salida real antes de continuar", async () => {
+  mocks.invoke.mockImplementation(async (command: string) => {
+    if (command === "get_provider") return { id: "local", name: "Local", model: "test" };
+    if (command === "get_providers") return [{ id: "local", name: "Local", model: "test" }];
+    if (command === "get_agent_settings") return { mode: "review", allowedPrefixes: [], backupRetention: null };
+    if (command === "plan_agent") return { summary: "Comprobar el directorio", actions: [{ type: "run_command", command: "dir", reason: "Listar archivos" }] };
+    if (command === "run_agent_command") return undefined;
+    return undefined;
+  });
+  await act(async () => root!.render(<App />));
+  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Nueva terminal"]')!.click());
+  await act(async () => buttonIncluding("Command Prompt").click());
+  await act(async () => buttonIncluding("Agente").click());
+
+  const composer = host.querySelector<HTMLTextAreaElement>(".composer textarea")!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set?.call(composer, "lista los archivos");
+    composer.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => host.querySelector<HTMLFormElement>(".composer")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+  await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+  await act(async () => buttonIncluding("Aprobar y ejecutar").click());
+  const commandCall = mocks.invoke.mock.calls.find(([name]) => name === "run_agent_command");
+  const completionToken = commandCall?.[1]?.completionToken as string;
+  expect(completionToken).toMatch(/^[0-9a-f-]{36}$/i);
+
+  await act(async () => [...host.querySelectorAll<HTMLButtonElement>('[data-testid="finish-command-unknown"]')].at(-1)!.click());
+  expect(host.querySelector(".agent-action")?.classList.contains("running")).toBe(true);
+  await act(async () => [...host.querySelectorAll<HTMLButtonElement>('[data-testid="finish-command"]')].at(-1)!.click());
+  expect(host.querySelector(".agent-action")?.classList.contains("running")).toBe(true);
+  await act(async () => mocks.agentFinishCallbacks.at(-1)?.("terminal-cmd", "550e8400-e29b-41d4-a716-446655440001", 0));
+  expect(host.querySelector(".agent-action")?.classList.contains("running")).toBe(true);
+
+  const terminalId = commandCall?.[1]?.terminalId as string;
+  await act(async () => mocks.agentFinishCallbacks.at(-1)?.(terminalId, completionToken, 0));
+  expect(host.querySelector(".agent-action")?.classList.contains("completed")).toBe(true);
   expect(host.textContent).toContain("El comando terminó correctamente.");
 });
 

@@ -99,8 +99,7 @@ fn git_bash_path() -> Option<PathBuf> {
     candidates.into_iter().flatten().find(|path| path.is_file())
 }
 
-const BASH_PROMPT_COMMAND: &str =
-    r#"__laural_status=$?; printf '\033]133;D;%s\007' "$__laural_status""#;
+const BASH_PROMPT_COMMAND: &str = r#"__laural_status=$?; __laural_last_status=$__laural_status; printf '\033]133;D;%s\007' "$__laural_status""#;
 
 fn shell_command(
     shell: &str,
@@ -119,6 +118,7 @@ fn shell_command(
                     $success = $?
                     $last = Get-History -Count 1
                     $code = if ($success) { 0 } elseif ($global:LASTEXITCODE) { $global:LASTEXITCODE } else { 1 }
+                    $global:__lauralLastExitCode = $code
                     $out = ''
                     if ($null -ne $global:__lauralLastHistoryId) {
                         if ($last -and $last.Id -ne $global:__lauralLastHistoryId) { $out += "$([char]27)]133;D;$code`a" }
@@ -382,6 +382,41 @@ fn close_terminal(state: State<'_, PtyStore>, terminal_id: String) -> Result<(),
     Ok(())
 }
 
+fn valid_agent_completion_token(token: &str) -> bool {
+    token.len() == 36
+        && token.bytes().enumerate().all(|(index, byte)| {
+            if matches!(index, 8 | 13 | 18 | 23) {
+                byte == b'-'
+            } else {
+                byte.is_ascii_hexdigit()
+            }
+        })
+}
+
+fn agent_command_input(
+    shell: &str,
+    command: &str,
+    completion_token: Option<&str>,
+) -> Result<String, &'static str> {
+    let token = completion_token
+        .filter(|token| valid_agent_completion_token(token))
+        .ok_or("No se pudo crear una marca segura para completar el comando.")?;
+    let mut input = command.trim().to_string();
+    input.push('\r');
+    let marker = match shell {
+        "cmd" => format!("echo \u{1b}]777;{token};%ERRORLEVEL%\u{7}\r"),
+        "powershell" => format!(
+            "[Console]::Write(([char]27).ToString() + ']777;{token};' + [string]$global:__lauralLastExitCode + [char]7)\r"
+        ),
+        "wsl" | "git-bash" => {
+            format!("printf '\\033]777;{token};%s\\007' \"$__laural_last_status\"\r")
+        }
+        _ => return Err("El shell no está admitido para completar el comando del agente."),
+    };
+    input.push_str(&marker);
+    Ok(input)
+}
+
 #[tauri::command]
 fn run_agent_command(
     app: AppHandle,
@@ -389,6 +424,7 @@ fn run_agent_command(
     terminal_id: String,
     command: String,
     approved: bool,
+    completion_token: Option<String>,
 ) -> Result<(), String> {
     let sessions = state
         .state
@@ -409,12 +445,12 @@ fn run_agent_command(
         return Err(error);
     }
     let session = Arc::clone(&terminal.io);
+    let shell = terminal.shell.clone();
     drop(sessions);
+    let input = agent_command_input(&shell, &command, completion_token.as_deref())?;
     let mut session = session
         .lock()
         .map_err(|_| "No se pudo escribir en la terminal.".to_string())?;
-    let mut input = command.trim().to_string();
-    input.push('\r');
     let result = session
         .writer
         .write_all(input.as_bytes())
@@ -610,6 +646,60 @@ mod terminal_policy_tests {
     fn keeps_a_fixed_limit_on_open_terminal_sessions() {
         assert!(MAX_TERMINAL_SESSIONS > 0);
         assert_eq!(MAX_TERMINAL_SESSIONS, 16);
+    }
+
+    #[test]
+    fn cmd_agent_command_reports_the_real_exit_code_with_a_nonce() {
+        let token = "550e8400-e29b-41d4-a716-446655440000";
+        let input = agent_command_input("cmd", "ver", Some(token)).unwrap();
+        assert_eq!(
+            input,
+            format!("ver\recho \u{1b}]777;{token};%ERRORLEVEL%\u{7}\r")
+        );
+    }
+
+    #[test]
+    fn agent_shells_emit_their_own_exit_code_marker() {
+        let token = "550e8400-e29b-41d4-a716-446655440000";
+        assert!(
+            agent_command_input("powershell", "Get-Location", Some(token))
+                .unwrap()
+                .contains("$global:__lauralLastExitCode")
+        );
+        assert!(
+            agent_command_input("wsl", "pwd", Some(token))
+                .unwrap()
+                .contains("$__laural_last_status")
+        );
+        assert!(
+            agent_command_input("git-bash", "pwd", Some(token))
+                .unwrap()
+                .contains("$__laural_last_status")
+        );
+    }
+
+    #[test]
+    fn cmd_completion_token_must_be_a_uuid_before_entering_the_shell() {
+        for token in [
+            "",
+            "550e8400-e29b-41d4-a716-44665544000!",
+            "550e8400e29b41d4a716446655440000",
+        ] {
+            assert!(!valid_agent_completion_token(token));
+            assert!(agent_command_input("cmd", "ver", Some(token)).is_err());
+        }
+        assert!(valid_agent_completion_token(
+            "550e8400-e29b-41d4-a716-446655440000"
+        ));
+        assert!(agent_command_input("cmd", "ver", None).is_err());
+        assert!(
+            agent_command_input(
+                "unknown",
+                "pwd",
+                Some("550e8400-e29b-41d4-a716-446655440000")
+            )
+            .is_err()
+        );
     }
 }
 

@@ -26,14 +26,14 @@ vi.mock("@xterm/xterm", () => ({
 
 let root: Root | undefined;
 let host: HTMLDivElement;
-const finished = vi.fn(), restart = vi.fn(), output = vi.fn(), submit = vi.fn();
+const finished = vi.fn(), agentFinished = vi.fn(), restart = vi.fn(), output = vi.fn(), submit = vi.fn();
 const actionNotice = vi.fn();
 const handlers = new Map<string, (event: { payload: unknown }) => void>();
 const removeOutput = vi.fn(), removeExit = vi.fn();
 function pane(visible = true, copyRequest = { sequence: 0, terminalId: "" }, clearRequest = { sequence: 0, terminalId: "" }, onActionNotice = actionNotice, shell: "powershell" | "cmd" | "wsl" | "git-bash" = "cmd", powerShellPredictionEnabled = false) {
   return <LanguageProvider><TerminalPane terminalId="uno" shell={shell} cwd={null} powerShellPredictionEnabled={powerShellPredictionEnabled} visible={visible} active={visible}
     copyRequest={copyRequest} clearRequest={clearRequest} onActionNotice={onActionNotice}
-    appearance="dark" theme={themes[0]} onCommandFinish={finished} onRestart={restart}
+    appearance="dark" theme={themes[0]} onCommandFinish={finished} onAgentCommandFinish={agentFinished} onRestart={restart}
     onTextOutput={output} onCommandSubmit={submit} /></LanguageProvider>;
 }
 const outputEvent = (data: number[]) => ({ payload: { dataBase64: btoa(String.fromCharCode(...data)) } });
@@ -98,6 +98,18 @@ test("localiza los avisos de terminal al inglés sin modificar el shell", async 
   await act(async () => handlers.get("terminal-exit-uno")!({ payload: undefined }));
   expect(host.textContent).toContain("Session ended");
   expect(host.textContent).toContain("Restart terminal");
+});
+
+test("reconoce solo marcas numéricas OSC 777 del agente CMD", async () => {
+  await act(async () => root!.render(pane()));
+  const handler = registerOscHandler.mock.calls.find(([code]) => code === 777)?.[1] as ((payload: string) => boolean) | undefined;
+  expect(handler).toBeDefined();
+  expect(handler!("550e8400-e29b-41d4-a716-446655440000;%ERRORLEVEL%")).toBe(true);
+  expect(handler!("550e8400-e29b-41d4-a716-446655440000;0extra")).toBe(true);
+  expect(agentFinished).not.toHaveBeenCalled();
+
+  await act(async () => handler!("550e8400-e29b-41d4-a716-446655440000;7"));
+  expect(agentFinished).toHaveBeenCalledWith("uno", "550e8400-e29b-41d4-a716-446655440000", 7);
 });
 
 test("redimensiona el PTY si cambia el tamaño después del arranque", async () => {

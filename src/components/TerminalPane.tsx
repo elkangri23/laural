@@ -14,9 +14,9 @@ const TERMINAL_SCROLLBACK_LINES = 2_500;
 const UNTRACKED_LINE_EDIT_KEYS = /[\u0001-\u0002\u0004-\u0007\u0009\u000b\u000c\u000e-\u001f]/;
 type OutputEvent = { dataBase64: string };
 type TerminalRequest = { sequence: number; terminalId: string };
-type TerminalPaneProps = { terminalId: string; shell: Shell; cwd: string | null; powerShellPredictionEnabled: boolean; visible: boolean; active: boolean; copyRequest: TerminalRequest; clearRequest: TerminalRequest; onActionNotice: (message: string) => void; onRestart: (terminalId: string) => void; theme: ThemeDefinition; appearance: AppearanceMode; onTextOutput: (terminalId: string, text: string) => void; onCommandSubmit: (terminalId: string, command: string) => void; onCommandFinish: (terminalId: string, exitCode: number | null) => void };
+type TerminalPaneProps = { terminalId: string; shell: Shell; cwd: string | null; powerShellPredictionEnabled: boolean; visible: boolean; active: boolean; copyRequest: TerminalRequest; clearRequest: TerminalRequest; onActionNotice: (message: string) => void; onRestart: (terminalId: string) => void; theme: ThemeDefinition; appearance: AppearanceMode; onTextOutput: (terminalId: string, text: string) => void; onCommandSubmit: (terminalId: string, command: string) => void; onCommandFinish: (terminalId: string, exitCode: number | null) => void; onAgentCommandFinish: (terminalId: string, token: string, exitCode: number | null) => void };
 
-function TerminalPane({ terminalId, shell, cwd, powerShellPredictionEnabled, visible, active, copyRequest, clearRequest, onActionNotice, onRestart, theme, appearance, onTextOutput, onCommandSubmit, onCommandFinish }: TerminalPaneProps) {
+function TerminalPane({ terminalId, shell, cwd, powerShellPredictionEnabled, visible, active, copyRequest, clearRequest, onActionNotice, onRestart, theme, appearance, onTextOutput, onCommandSubmit, onCommandFinish, onAgentCommandFinish }: TerminalPaneProps) {
   const { messages } = useLanguage();
   const terminalText = messages.terminal;
   const [ended, setEnded] = useState(false);
@@ -68,6 +68,12 @@ function TerminalPane({ terminalId, shell, cwd, powerShellPredictionEnabled, vis
         return true;
       }
       return mark === "A" || mark === "B" || mark === "C";
+    });
+    const agentCommandOsc = terminal.parser.registerOscHandler(777, (payload) => {
+      const [token, rawCode] = payload.split(";", 2);
+      if (!token || !rawCode || !/^\d{1,10}$/.test(rawCode)) return true;
+      onAgentCommandFinish(terminalId, token, Number(rawCode));
+      return true;
     });
     const onOutput = (event: { payload: OutputEvent }) => {
       if (!disposed) {
@@ -164,6 +170,7 @@ function TerminalPane({ terminalId, shell, cwd, powerShellPredictionEnabled, vis
       observer.disconnect();
       inputSubscription.dispose();
       commandOsc.dispose();
+      agentCommandOsc.dispose();
       subscriptions.forEach(unlisten => unlisten());
       terminal.dispose();
       void startup.then(() => {

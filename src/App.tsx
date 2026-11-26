@@ -37,7 +37,7 @@ type Provider = { id: string; providerKind: string; name: string; baseUrl: strin
 type PlanAction =
   | { type: "run_command"; command: string; reason: string; status?: string; result?: string }
   | { type: "write_file"; path: string; content: string; reason: string; status?: string; result?: string };
-type AgentPlan = { summary: string; actions: PlanAction[] };
+type AgentPlan = { summary: string; clarifyingQuestion?: string | null; actions: PlanAction[] };
 const COMMAND_OUTPUT_BATCH_MS = 50;
 const MAX_COMMAND_BLOCKS = 80;
 const MAX_COMMAND_HISTORY = 100;
@@ -149,9 +149,10 @@ function AppContent() {
   const activeChatRequestRef = useRef<string | null>(null);
   const activeCommandBlockRef = useRef<Record<string, string>>({});
   const activeAgentRequestRef = useRef<string | null>(null);
+  const agentClarificationRef = useRef<{ task: string; question: string } | null>(null);
   const agentStopRequestedRef = useRef(false);
   const activeAgentTerminalRef = useRef<string | null>(null);
-  const commandCompletionRef = useRef<Record<string, { resolve: (exitCode: number | null) => void; timer: ReturnType<typeof setTimeout> }>>({});
+  const commandCompletionRef = useRef<Record<string, { resolve: (exitCode: number | null) => void; timer: ReturnType<typeof setTimeout>; requiresAgentToken?: boolean; token?: string }>>({});
   const syncTimerRef = useRef<number | null>(null);
   const workspaceMenuRef = useRef<HTMLDivElement>(null);
   const profileMenuRef = useRef<HTMLDivElement>(null);
@@ -388,19 +389,26 @@ function AppContent() {
     ].slice(-MAX_COMMAND_BLOCKS));
   }, [flushCommandOutput, tabs]);
 
-  const finishCommandBlock = useCallback((terminalId: string, exitCode: number | null) => {
+  const finishCommandBlock = useCallback((terminalId: string, exitCode: number | null, force = false) => {
+    const completion = commandCompletionRef.current[terminalId];
+    if (completion?.requiresAgentToken && !force) return;
     flushCommandOutput();
     const id = activeCommandBlockRef.current[terminalId];
     if (!id) return;
     setCommandBlocks((blocks) => blocks.map((block) => block.id === id ? { ...block, status: "finished", exitCode } : block));
     delete activeCommandBlockRef.current[terminalId];
-    const completion = commandCompletionRef.current[terminalId];
     if (completion) {
       clearTimeout(completion.timer);
       delete commandCompletionRef.current[terminalId];
       completion.resolve(exitCode);
     }
   }, [flushCommandOutput]);
+
+  const finishAgentCommand = useCallback((terminalId: string, token: string, exitCode: number | null) => {
+    const completion = commandCompletionRef.current[terminalId];
+    if (!completion?.requiresAgentToken || !completion.token || completion.token !== token || exitCode === null) return;
+    finishCommandBlock(terminalId, exitCode, true);
+  }, [finishCommandBlock]);
 
   const activeTab = useMemo(
     () => tabs.find((tab) => tab.id === activeTabId) ?? tabs[0],
@@ -686,6 +694,11 @@ function AppContent() {
       return;
     }
     if (agentMode) {
+      const clarification = agentClarificationRef.current;
+      agentClarificationRef.current = null;
+      const agentTask = clarification
+        ? `Tarea original: ${clarification.task}\n\nAclaración solicitada: ${clarification.question}\n\nRespuesta del usuario: ${question}`
+        : question;
       setPrompt("");
       setAgentPlan(null);
       setAgentPlanProjectPath(projectPath);
@@ -698,7 +711,7 @@ function AppContent() {
       const shell = activeTab?.shell ?? "powershell";
       void invoke<AgentPlan>("plan_agent", {
         requestId,
-        task: question,
+        task: agentTask,
         shell,
         terminalContext: terminalContextRef.current[planTerminalId] ?? "",
         projectPath,
@@ -710,8 +723,12 @@ function AppContent() {
           return;
         }
         const prepared: AgentPlan = { ...plan, actions: plan.actions.map((action) => ({ ...action, status: "pending" })) };
+        agentClarificationRef.current = plan.clarifyingQuestion ? { task: agentTask, question: plan.clarifyingQuestion } : null;
         setAgentPlan(prepared);
-        setChatMessages((current) => limitChatMessages([...current, { role: "assistant", content: appText.agentPlanPrepared.replace("{count}", String(plan.actions.length)) }]));
+        const statusMessage = plan.clarifyingQuestion
+          ? appText.agentNeedsClarification.replace("{question}", plan.clarifyingQuestion)
+          : appText.agentPlanPrepared.replace("{count}", String(plan.actions.length));
+        setChatMessages((current) => limitChatMessages([...current, { role: "assistant", content: statusMessage }]));
         if (executionMode !== "review") {
           for (let index = 0; index < prepared.actions.length; index += 1) {
             if (agentStopRequestedRef.current) break;
@@ -824,6 +841,7 @@ function AppContent() {
     setChatMessages([]);
     setAgentPlan(null);
     setAgentPlanProjectPath(null);
+    agentClarificationRef.current = null;
     localStorage.removeItem("laural.chat.v1");
   }
 
@@ -861,11 +879,12 @@ function AppContent() {
     startCommandBlock(terminalId, action.command);
     let completionResolve: (exitCode: number | null) => void = () => undefined;
     const completion = new Promise<number | null>((resolve) => { completionResolve = resolve; });
-    const timer = setTimeout(() => finishCommandBlock(terminalId, null), 120_000);
-    commandCompletionRef.current[terminalId] = { resolve: completionResolve, timer };
+    const completionToken = crypto.randomUUID();
+    const timer = setTimeout(() => finishCommandBlock(terminalId, null, true), 120_000);
+    commandCompletionRef.current[terminalId] = { resolve: completionResolve, timer, requiresAgentToken: true, token: completionToken };
     updateAgentAction(index, { status: "running", result: undefined });
     try {
-      await invoke("run_agent_command", { terminalId, command: action.command, approved });
+      await invoke("run_agent_command", { terminalId, command: action.command, approved, completionToken });
       const exitCode = await completion;
       if (agentStopRequestedRef.current) { updateAgentAction(index, { status: "cancelled", result: appText.agentInterrupted }); return false; }
       if (exitCode === 0) { updateAgentAction(index, { status: "completed", result: appText.agentCommandSuccess }); return true; }
@@ -1213,7 +1232,7 @@ function AppContent() {
             </div>
             <div className={`terminal-frame ${blocksOpen ? "with-blocks" : ""} ${splitTabId ? `is-split split-${splitOrientation}` : ""}`}>
               <Suspense fallback={<div className="terminal-loading" role="status">{appText.terminalLoading}</div>}>
-                {tabs.map((tab) => <TerminalPane key={tab.id} terminalId={tab.id} active={tab.id === activeTabId} copyRequest={terminalCopyRequest} clearRequest={terminalClearRequest} onActionNotice={setTerminalActionNotice} onRestart={restartTab} shell={tab.shell} cwd={tab.cwd} powerShellPredictionEnabled={powerShellPredictionEnabled} visible={tab.id === activeTabId || tab.id === splitTabId} theme={activeTheme} appearance={appearance} onTextOutput={captureTerminalOutput} onCommandSubmit={startCommandBlock} onCommandFinish={finishCommandBlock} />)}
+                {tabs.map((tab) => <TerminalPane key={tab.id} terminalId={tab.id} active={tab.id === activeTabId} copyRequest={terminalCopyRequest} clearRequest={terminalClearRequest} onActionNotice={setTerminalActionNotice} onRestart={restartTab} shell={tab.shell} cwd={tab.cwd} powerShellPredictionEnabled={powerShellPredictionEnabled} visible={tab.id === activeTabId || tab.id === splitTabId} theme={activeTheme} appearance={appearance} onTextOutput={captureTerminalOutput} onCommandSubmit={startCommandBlock} onCommandFinish={finishCommandBlock} onAgentCommandFinish={finishAgentCommand} />)}
               </Suspense>
               <div className="terminal-caption"><span className="shortcut-hint"><kbd>Ctrl</kbd> + <kbd>`</kbd> {appText.toggleTerminal}</span><span><span className="activity-pulse" /> {appText.shellConnected}</span></div>
             </div>
@@ -1228,7 +1247,7 @@ function AppContent() {
           {assistantVisible && <aside className="assistant-panel">
             <div className="assistant-header"><div className="assistant-heading"><div className="assistant-avatar"><SparkIcon /></div><div><strong>{appText.assistant}</strong><span>{appText.terminalContext}</span></div></div><button className="action-quiet" onClick={clearChat} disabled={chatBusy || agentPlanBusy || agentCommandBusy}>{appText.clearChat}</button></div>
             <div className="mode-switch" role="tablist" aria-label={appText.aiMode}>
-              <button className={!agentMode ? "active" : ""} onClick={() => setAgentMode(false)} role="tab" aria-selected={!agentMode}><MessageIcon /> {appText.chat}</button>
+              <button className={!agentMode ? "active" : ""} onClick={() => { setAgentMode(false); agentClarificationRef.current = null; }} role="tab" aria-selected={!agentMode}><MessageIcon /> {appText.chat}</button>
               <button className={agentMode ? "active" : ""} onClick={() => setAgentMode(true)} role="tab" aria-selected={agentMode}><AgentIcon /> {appText.agent} <span className="mode-beta">{appText.preview}</span></button>
             </div>
             {agentMode && <div className="agent-mode-actions"><button className="action-quiet" onClick={() => setTaskRecipesOpen(true)}>{appText.recipes}</button><button className="action-quiet" onClick={() => { setSettingsCategory("agent"); openSettings(); }}>{appText.agentPermissions}</button></div>}
@@ -1245,8 +1264,8 @@ function AppContent() {
             </div> : <div className="message-thread">
               {chatMessages.map((message, index) => <ChatMessageItem key={message.id ?? `${index}-${message.role}`} message={message} isStreaming={message.id === streamingMessageId} streamingContentRef={message.id === streamingMessageId ? streamingContentRef : undefined} />)}
               {agentPlan && <div className="agent-plan-card">
-                <div className="agent-plan-header"><span className="plan-icon-small"><AgentIcon /></span><strong>{appText.agentPlan}</strong>{agentPlanProjectPath && <span className="agent-plan-root" title={agentPlanProjectPath}>{agentPlanProjectPath}</span>}<span className="agent-plan-count">{appText.actionsCount.replace("{count}", String(agentPlan.actions.length))}</span></div>
-                <p className="agent-plan-summary">{agentPlan.summary}</p>
+                <div className="agent-plan-header"><span className="plan-icon-small"><AgentIcon /></span><strong>{appText.agentPlan}</strong>{agentPlanProjectPath && <span className="agent-plan-root" title={agentPlanProjectPath}>{agentPlanProjectPath}</span>}{!agentPlan.clarifyingQuestion && <span className="agent-plan-count">{appText.actionsCount.replace("{count}", String(agentPlan.actions.length))}</span>}</div>
+                <p className="agent-plan-summary">{agentPlan.clarifyingQuestion ?? agentPlan.summary}</p>
                 <div className="agent-action-list">{agentPlan.actions.map((action, index) => <article className={`agent-action ${action.status ?? "pending"}`} key={`${index}-${action.type}`}>
                   <div className="agent-action-top"><span className="action-number">{index + 1}</span><span className="action-type">{action.type === "run_command" ? appText.command : appText.fileChange}</span><span className="action-status">{action.status === "completed" ? appText.completed : action.status === "cancelled" ? appText.stopped : action.status === "submitted" ? appText.sent : action.status === "needs_review" ? appText.review : action.status === "applied" ? appText.applied : action.status === "running" || action.status === "applying" ? appText.running : action.status === "error" ? appText.error : action.status === "rejected" ? appText.discarded : appText.pending}</span></div>
                   <p className="action-reason">{action.reason}</p>
