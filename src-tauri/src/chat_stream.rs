@@ -152,6 +152,14 @@ mod tests {
     }
 
     #[test]
+    fn accepts_done_without_final_newline_and_rejects_empty_finished_choice() {
+        assert_eq!(parse(&[TEXT.as_bytes(), b"data: [DONE]"]).unwrap(), "¡Sí!");
+
+        let empty_finished_choice = b"data: {\"choices\":[{\"finish_reason\":\"stop\"}]}";
+        assert!(parse(&[empty_finished_choice]).is_err());
+    }
+
+    #[test]
     fn accepts_data_field_without_optional_space() {
         let input =
             b"data:{\"choices\":[{\"delta\":{\"content\":\"sin espacio\"}}]}\n\ndata: [DONE]\n\n";
