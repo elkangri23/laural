@@ -531,7 +531,33 @@ fn run_callback(
     verifier: Zeroizing<String>,
     app: AppHandle,
 ) {
-    let deadline = Instant::now() + LOGIN_TIMEOUT;
+    match receive_login_callback(listener, &expected_state, LOGIN_TIMEOUT) {
+        Ok(code) => exchange_code(app, code, verifier),
+        Err(CallbackFailure::Listener) => {
+            emit_status(&app, "error", "Falló el callback de autenticación.");
+        }
+        Err(CallbackFailure::Expired) => {
+            emit_status(
+                &app,
+                "error",
+                "El inicio de sesión caducó. Vuelve a intentarlo.",
+            );
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum CallbackFailure {
+    Listener,
+    Expired,
+}
+
+fn receive_login_callback(
+    listener: TcpListener,
+    expected_state: &str,
+    timeout: Duration,
+) -> Result<String, CallbackFailure> {
+    let deadline = Instant::now() + timeout;
     let mut invalid_requests = 0;
 
     while Instant::now() < deadline && invalid_requests < 5 {
@@ -545,8 +571,7 @@ fn run_callback(
                         if constant_time_equal(state.as_bytes(), expected_state.as_bytes()) =>
                     {
                         write_callback_response(&mut stream, true);
-                        exchange_code(app, code, verifier);
-                        return;
+                        return Ok(code);
                     }
                     _ => {
                         invalid_requests += 1;
@@ -557,17 +582,10 @@ fn run_callback(
             Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
                 thread::sleep(Duration::from_millis(100));
             }
-            Err(_) => {
-                emit_status(&app, "error", "Falló el callback de autenticación.");
-                return;
-            }
+            Err(_) => return Err(CallbackFailure::Listener),
         }
     }
-    emit_status(
-        &app,
-        "error",
-        "El inicio de sesión caducó. Vuelve a intentarlo.",
-    );
+    Err(CallbackFailure::Expired)
 }
 
 fn read_callback_request(stream: &mut TcpStream) -> Result<Vec<u8>, ()> {
@@ -904,6 +922,66 @@ mod tests {
         assert!(LoginGuard::acquire().is_err());
         drop(guard);
         assert!(LoginGuard::acquire().is_ok());
+    }
+
+    #[test]
+    fn callback_de_login_acepta_state_correcto_y_responde_con_exito() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let address = listener.local_addr().unwrap();
+        let code = "a".repeat(43);
+        let state = "b".repeat(43);
+        let server = thread::spawn(move || {
+            let mut stream = TcpStream::connect(address).unwrap();
+            stream
+                .write_all(&request(&format!("/callback?code={code}&state={state}")))
+                .unwrap();
+            let mut response = String::new();
+            stream.read_to_string(&mut response).unwrap();
+            response
+        });
+
+        let accepted = receive_login_callback(listener, &"b".repeat(43), Duration::from_secs(2));
+
+        assert_eq!(accepted.unwrap(), "a".repeat(43));
+        assert!(server.join().unwrap().starts_with("HTTP/1.1 200 OK"));
+    }
+
+    #[test]
+    fn callback_de_login_rechaza_cinco_state_distintos_y_caduca() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            for _ in 0..5 {
+                let mut stream = TcpStream::connect(address).unwrap();
+                stream
+                    .write_all(&request(&format!(
+                        "/callback?code={}&state={}",
+                        "a".repeat(43),
+                        "c".repeat(43)
+                    )))
+                    .unwrap();
+                let mut response = String::new();
+                stream.read_to_string(&mut response).unwrap();
+                assert!(response.starts_with("HTTP/1.1 400 Bad Request"));
+            }
+        });
+
+        let result = receive_login_callback(listener, &"b".repeat(43), Duration::from_secs(2));
+
+        assert_eq!(result, Err(CallbackFailure::Expired));
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn callback_de_login_caduca_si_no_llega_ninguna_peticion() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        listener.set_nonblocking(true).unwrap();
+
+        let result = receive_login_callback(listener, &"b".repeat(43), Duration::from_millis(10));
+
+        assert_eq!(result, Err(CallbackFailure::Expired));
     }
 
     #[test]
