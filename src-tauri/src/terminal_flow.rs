@@ -20,12 +20,9 @@ impl TerminalOutputFlow {
             return false;
         }
 
-        let mut state = self.state.lock().unwrap_or_else(|error| error.into_inner());
+        let mut state = recover_poisoned(self.state.lock());
         while !state.closed && state.pending_bytes + bytes > TERMINAL_OUTPUT_WINDOW_BYTES {
-            state = self
-                .available
-                .wait(state)
-                .unwrap_or_else(|error| error.into_inner());
+            state = recover_poisoned(self.available.wait(state));
         }
         if state.closed {
             return false;
@@ -35,7 +32,7 @@ impl TerminalOutputFlow {
     }
 
     pub(crate) fn acknowledge(&self, bytes: usize) -> bool {
-        let mut state = self.state.lock().unwrap_or_else(|error| error.into_inner());
+        let mut state = recover_poisoned(self.state.lock());
         if state.closed || bytes == 0 || bytes > state.pending_bytes {
             return false;
         }
@@ -45,11 +42,15 @@ impl TerminalOutputFlow {
     }
 
     pub(crate) fn close(&self) {
-        let mut state = self.state.lock().unwrap_or_else(|error| error.into_inner());
+        let mut state = recover_poisoned(self.state.lock());
         state.closed = true;
         state.pending_bytes = 0;
         self.available.notify_all();
     }
+}
+
+fn recover_poisoned<T>(result: std::sync::LockResult<T>) -> T {
+    result.unwrap_or_else(|error| error.into_inner())
 }
 
 #[cfg(test)]
@@ -91,6 +92,49 @@ mod tests {
         assert!(!flow.acknowledge(0));
         assert!(!flow.acknowledge(6));
         assert!(flow.acknowledge(5));
+    }
+
+    #[test]
+    fn libera_solo_los_bytes_confirmados_y_respeta_el_limite() {
+        let flow = TerminalOutputFlow::default();
+        assert!(flow.reserve(10));
+        assert!(flow.acknowledge(4));
+        assert!(flow.reserve(TERMINAL_OUTPUT_WINDOW_BYTES - 6));
+        assert!(flow.acknowledge(TERMINAL_OUTPUT_WINDOW_BYTES));
+        assert!(!flow.acknowledge(1));
+    }
+
+    #[test]
+    fn recupera_el_valor_de_un_mutex_envenenado() {
+        let mutex = Arc::new(Mutex::new(42));
+        let poisoned_mutex = Arc::clone(&mutex);
+        assert!(
+            thread::spawn(move || {
+                let _guard = poisoned_mutex.lock().unwrap();
+                panic!("envenenamiento aislado de prueba");
+            })
+            .join()
+            .is_err()
+        );
+
+        assert_eq!(*recover_poisoned(mutex.lock()), 42);
+    }
+
+    #[test]
+    fn recupera_el_flujo_si_una_panica_envenena_el_estado_compartido() {
+        let flow = Arc::new(TerminalOutputFlow::default());
+        let poisoned_flow = Arc::clone(&flow);
+        let panic = thread::spawn(move || {
+            let _state = poisoned_flow.state.lock().unwrap();
+            panic!("fallo simulado mientras se conserva el estado del flujo");
+        })
+        .join();
+
+        assert!(panic.is_err());
+        assert!(flow.reserve(5));
+        assert!(flow.acknowledge(5));
+        flow.close();
+        assert!(!flow.reserve(1));
     }
 
     #[test]

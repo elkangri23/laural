@@ -4,6 +4,19 @@
   en `https://sync.laurafernandezenfermeria.com` (commit
   `f74dff8`, que incluye el ajuste de `TRUST_PROXY` y los ficheros
   de despliegue). Decisiones aprobadas el 2026-11-23 por Antonio Moles.
+- **Comprobación externa:** 24-11-2026, status HTML/JSON y health live/ready
+  respondieron 200; `/` redirige a `/status`, HTTP redirige a HTTPS, TLS 1.3
+  negoció correctamente y la página mostró API, sincronización y correo
+  operativos. CSS/JS/JSON cargaron sin errores de consola. El status se publica
+  manualmente; el documento llevaba sello `2026-11-24T07:55:19Z`, así que no
+  acredita salud continua. HTML/CSS/JS sirvieron CSP restrictiva, `nosniff`,
+  `X-Frame-Options: DENY`, `no-referrer` y `Cache-Control: no-store`.
+- **Revalidación:** 25-11-2026, `/health/live`, `/health/ready` y
+  `/status.json` respondieron 200. El JSON seguía mostrando todos los
+  componentes operativos y mantenía el sello `2026-11-24T07:55:19Z`;
+  la comprobación confirma respuesta pública en ese instante, no salud continua
+  ni compatibilidad v2 del cliente. La sincronización autenticada v2 queda
+  pendiente de una prueba integrada desde Laural.
 - **Servicio:** backend TypeScript + Fastify + PostgreSQL en `server/`,
   en `https://sync.laurafernandezenfermeria.com`.
 - **Alcance:** solo sincronización opcional de preferencias y perfiles

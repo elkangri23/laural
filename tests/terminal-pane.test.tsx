@@ -4,17 +4,18 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import TerminalPane from "../src/components/TerminalPane";
 import { themes } from "../src/themes";
+import { LanguageProvider } from "../src/i18n";
 
-const { invoke, listen, write, onData, registerOscHandler, terminalOptions, clear, getSelection } = vi.hoisted(() => ({
-  invoke: vi.fn(), listen: vi.fn(), write: vi.fn(), onData: vi.fn(), registerOscHandler: vi.fn(), terminalOptions: vi.fn(), clear: vi.fn(), getSelection: vi.fn(),
+const { invoke, listen, write, onData, registerOscHandler, terminalOptions, clear, getSelection, observeResize, terminalSize, fitAddonFit } = vi.hoisted(() => ({
+  invoke: vi.fn(), listen: vi.fn(), write: vi.fn(), onData: vi.fn(), registerOscHandler: vi.fn(), terminalOptions: vi.fn(), clear: vi.fn(), getSelection: vi.fn(), observeResize: vi.fn<(callback: () => void) => void>(), terminalSize: { rows: 28, cols: 100 }, fitAddonFit: vi.fn<() => void>(),
 }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 vi.mock("@tauri-apps/api/event", () => ({ listen }));
-vi.mock("@xterm/addon-fit", () => ({ FitAddon: class { fit() {} } }));
+vi.mock("@xterm/addon-fit", () => ({ FitAddon: class { fit = fitAddonFit; } }));
 vi.mock("@xterm/xterm", () => ({
   Terminal: class {
     options: { cursorBlink?: boolean; theme?: unknown } = {}; parser = { registerOscHandler };
-    rows = 28; cols = 100;
+    get rows() { return terminalSize.rows; } get cols() { return terminalSize.cols; }
     constructor(options: { cursorBlink?: boolean; theme?: unknown }) { this.options = options; terminalOptions(options); }
     write = write; writeln = write;
     loadAddon() {} open() {} focus() {} dispose() {}
@@ -29,18 +30,21 @@ const finished = vi.fn(), restart = vi.fn(), output = vi.fn(), submit = vi.fn();
 const actionNotice = vi.fn();
 const handlers = new Map<string, (event: { payload: unknown }) => void>();
 const removeOutput = vi.fn(), removeExit = vi.fn();
-function pane(visible = true, copyRequest = { sequence: 0, terminalId: "" }, clearRequest = { sequence: 0, terminalId: "" }, onActionNotice = actionNotice) {
-  return <TerminalPane terminalId="uno" shell="cmd" cwd={null} visible={visible} active={visible}
+function pane(visible = true, copyRequest = { sequence: 0, terminalId: "" }, clearRequest = { sequence: 0, terminalId: "" }, onActionNotice = actionNotice, shell: "powershell" | "cmd" | "wsl" | "git-bash" = "cmd", powerShellPredictionEnabled = false) {
+  return <LanguageProvider><TerminalPane terminalId="uno" shell={shell} cwd={null} powerShellPredictionEnabled={powerShellPredictionEnabled} visible={visible} active={visible}
     copyRequest={copyRequest} clearRequest={clearRequest} onActionNotice={onActionNotice}
     appearance="dark" theme={themes[0]} onCommandFinish={finished} onRestart={restart}
-    onTextOutput={output} onCommandSubmit={submit} />;
+    onTextOutput={output} onCommandSubmit={submit} /></LanguageProvider>;
 }
 const outputEvent = (data: number[]) => ({ payload: { dataBase64: btoa(String.fromCharCode(...data)) } });
 beforeEach(() => {
+  localStorage.setItem("laural.language.v1", "es");
   vi.resetAllMocks();
+  terminalSize.rows = 28;
+  terminalSize.cols = 100;
   handlers.clear();
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+  vi.stubGlobal("ResizeObserver", class { constructor(callback: () => void) { observeResize(callback); } observe() {} disconnect() {} });
   host = document.createElement("div");
   root = createRoot(host);
   listen.mockImplementation(async (name, fn) => {
@@ -74,6 +78,84 @@ test("no repite el IPC de resize con el tamaño usado al crear la terminal", asy
     if (height) Object.defineProperty(HTMLElement.prototype, "clientHeight", height);
     else delete (HTMLElement.prototype as { clientHeight?: number }).clientHeight;
   }
+});
+
+test("localiza los avisos de terminal al inglés sin modificar el shell", async () => {
+  localStorage.setItem("laural.language.v1", "en");
+  const clearRequest = { sequence: 1, terminalId: "uno" };
+  await act(async () => root!.render(pane(true, { sequence: 0, terminalId: "" }, clearRequest)));
+  expect(invoke).toHaveBeenCalledWith("create_terminal", expect.objectContaining({ shell: "cmd" }));
+  expect(actionNotice).toHaveBeenCalledWith("Terminal screen cleared.");
+
+  const input = onData.mock.calls[0][0];
+  await act(async () => {
+    input("original command");
+    input("\x1b[A");
+    input("edited command\r");
+  });
+  expect(submit).toHaveBeenCalledWith("uno", "Shell command edited; command text not captured");
+
+  await act(async () => handlers.get("terminal-exit-uno")!({ payload: undefined }));
+  expect(host.textContent).toContain("Session ended");
+  expect(host.textContent).toContain("Restart terminal");
+});
+
+test("redimensiona el PTY si cambia el tamaño después del arranque", async () => {
+  const width = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientWidth");
+  const height = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientHeight");
+  Object.defineProperty(HTMLElement.prototype, "clientWidth", { configurable: true, value: 800 });
+  Object.defineProperty(HTMLElement.prototype, "clientHeight", { configurable: true, value: 600 });
+  try {
+    await act(async () => root!.render(pane()));
+    const resize = observeResize.mock.calls[0]?.[0];
+    expect(resize).toBeDefined();
+    terminalSize.rows = 32;
+    terminalSize.cols = 120;
+    await act(async () => resize?.());
+    expect(invoke).toHaveBeenCalledWith("resize_terminal", { terminalId: "uno", rows: 32, cols: 120 });
+  } finally {
+    await unmount();
+    if (width) Object.defineProperty(HTMLElement.prototype, "clientWidth", width);
+    else delete (HTMLElement.prototype as { clientWidth?: number }).clientWidth;
+    if (height) Object.defineProperty(HTMLElement.prototype, "clientHeight", height);
+    else delete (HTMLElement.prototype as { clientHeight?: number }).clientHeight;
+  }
+});
+
+test("tolera el error de layout temporal de xterm", async () => {
+  fitAddonFit.mockImplementationOnce(() => { throw new Error("layout not ready"); });
+  await act(async () => root!.render(pane()));
+  await act(async () => new Promise(resolve => setTimeout(resolve, 20)));
+
+  expect(host.querySelector(".terminal-pane")).not.toBeNull();
+});
+
+test("usa el tamaño base cuando xterm aún no informa filas ni columnas", async () => {
+  terminalSize.rows = 0;
+  terminalSize.cols = 0;
+  await act(async () => root!.render(pane()));
+
+  expect(invoke).toHaveBeenCalledWith("create_terminal", expect.objectContaining({ rows: 28, cols: 100 }));
+});
+
+test("pasa predicción solo a una sesión PowerShell nueva y no reinicia la sesión activa", async () => {
+  await act(async () => root!.render(pane(true, undefined, undefined, actionNotice, "powershell", false)));
+  expect(invoke).toHaveBeenCalledWith("create_terminal", expect.objectContaining({ shell: "powershell", powerShellPredictionEnabled: false }));
+
+  await act(async () => root!.render(pane(true, undefined, undefined, actionNotice, "powershell", true)));
+  expect(invoke.mock.calls.filter(([command]) => command === "create_terminal")).toHaveLength(1);
+
+  await act(async () => root!.unmount());
+  root = createRoot(host);
+  invoke.mockClear();
+  await act(async () => root!.render(pane(true, undefined, undefined, actionNotice, "powershell", true)));
+  expect(invoke).toHaveBeenCalledWith("create_terminal", expect.objectContaining({ shell: "powershell", powerShellPredictionEnabled: true }));
+
+  await act(async () => root!.unmount());
+  root = createRoot(host);
+  invoke.mockClear();
+  await act(async () => root!.render(pane(true, undefined, undefined, actionNotice, "cmd", true)));
+  expect(invoke).toHaveBeenCalledWith("create_terminal", expect.objectContaining({ shell: "cmd", powerShellPredictionEnabled: false }));
 });
 
 test("ocultar la pestaña conserva el proceso y su salida; salir permite reiniciar", async () => {
@@ -195,6 +277,15 @@ test("copiar con portapapeles no disponible muestra aviso y no rompe la terminal
   expect(host.querySelector(".terminal-pane")).not.toBeNull();
 });
 
+test("avisa cuando el portapapeles rechaza la escritura", async () => {
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: vi.fn().mockRejectedValue(new Error("permission denied")) } });
+  getSelection.mockReturnValue("texto seleccionado");
+  await act(async () => root!.render(pane(true, { sequence: 1, terminalId: "uno" })));
+  await act(async () => Promise.resolve());
+
+  expect(actionNotice).toHaveBeenCalledWith("No se pudo acceder al portapapeles.");
+});
+
 test("una petición de terminal dirigida a otra pestaña no altera esta sesión", async () => {
   await act(async () => root!.render(pane(true, { sequence: 1, terminalId: "otra" }, { sequence: 1, terminalId: "otra" })));
   expect(getSelection).not.toHaveBeenCalled();
@@ -212,6 +303,20 @@ test("cerrar mientras se registra la salida evita arrancar el proceso", async ()
   expect(invoke).not.toHaveBeenCalled();
 });
 
+test("cierra la suscripción de salida si el componente se desmonta al registrarla", async () => {
+  let finishExitRegistration!: (remove: () => void) => void;
+  listen.mockImplementation(async (name) => name === "terminal-output-uno"
+    ? removeOutput
+    : new Promise(resolve => { finishExitRegistration = resolve; }));
+  await act(async () => root!.render(pane()));
+  await act(async () => Promise.resolve());
+  await unmount();
+  await act(async () => finishExitRegistration(removeExit));
+
+  expect(removeExit).toHaveBeenCalledOnce();
+  expect(invoke).not.toHaveBeenCalledWith("create_terminal", expect.anything());
+});
+
 test("cerrar durante el arranque espera al proceso y después lo cierra", async () => {
   let started!: () => void;
   invoke.mockImplementationOnce(() => new Promise<void>(resolve => { started = resolve; }));
@@ -220,6 +325,66 @@ test("cerrar durante el arranque espera al proceso y después lo cierra", async 
   expect(invoke.mock.calls.map(([name]) => name)).toEqual(["create_terminal"]);
   await act(async () => started());
   expect(invoke.mock.calls.map(([name]) => name)).toEqual(["create_terminal", "close_terminal"]);
+});
+
+test("muestra el error del shell si falla el arranque", async () => {
+  invoke.mockRejectedValueOnce(new Error("shell unavailable"));
+  await act(async () => root!.render(pane()));
+  await act(async () => new Promise(resolve => setTimeout(resolve, 0)));
+
+  expect(write).toHaveBeenCalledWith("No se pudo iniciar cmd: Error: shell unavailable");
+  expect(host.querySelector("button")?.textContent).toBe("Reiniciar terminal");
+});
+
+test("no muestra un error de arranque si la terminal ya se desmontó", async () => {
+  let rejectStart!: (error: Error) => void;
+  invoke.mockImplementationOnce(() => new Promise<void>((_resolve, reject) => { rejectStart = reject; }));
+  await act(async () => root!.render(pane()));
+  await act(async () => Promise.resolve());
+  await unmount();
+  await act(async () => rejectStart(new Error("startup cancelled")));
+
+  expect(write).not.toHaveBeenCalled();
+});
+
+test("no envía entrada si la shell termina antes de completar el arranque", async () => {
+  let finishStart!: () => void;
+  invoke.mockImplementationOnce(() => new Promise<void>(resolve => { finishStart = resolve; }));
+  await act(async () => root!.render(pane()));
+  const input = onData.mock.calls[0][0];
+  input("echo demasiado pronto");
+  await act(async () => handlers.get("terminal-exit-uno")!({ payload: undefined }));
+  await act(async () => finishStart());
+  await act(async () => new Promise(resolve => setTimeout(resolve, 0)));
+
+  expect(invoke).not.toHaveBeenCalledWith("write_terminal", expect.anything());
+});
+
+test("ignora el error al cerrar una sesión durante el desmontaje", async () => {
+  invoke.mockImplementation(async (command: string) => {
+    if (command === "close_terminal") throw new Error("already closed");
+    return undefined;
+  });
+  await act(async () => root!.render(pane()));
+  await unmount();
+  await act(async () => Promise.resolve());
+
+  expect(invoke).toHaveBeenCalledWith("close_terminal", { terminalId: "uno" });
+});
+
+test("mantiene la terminal abierta si falla el envío de entrada al PTY", async () => {
+  invoke.mockImplementation(async (command: string) => {
+    if (command === "write_terminal") throw new Error("pty unavailable");
+    return undefined;
+  });
+  await act(async () => root!.render(pane()));
+  await act(async () => {
+    onData.mock.calls[0][0]("echo listo");
+    await new Promise(resolve => setTimeout(resolve, 0));
+  });
+
+  expect(write).toHaveBeenCalledWith("\r\n\x1b[31mLaural: Error: pty unavailable\x1b[0m\r\n");
+  expect(host.querySelector(".terminal-pane")).not.toBeNull();
 });
 
 test("entrega la respuesta del cursor cuando termina el arranque", async () => {
@@ -287,6 +452,66 @@ test("captura el texto corregido con ambos códigos de Retroceso", async () => {
   ]);
 });
 
+test("ignora Retroceso sobre una línea vacía y conserva salida OSC sin código válido", async () => {
+  await act(async () => root!.render(pane()));
+  const input = onData.mock.calls[0][0];
+  const oscHandler = registerOscHandler.mock.calls[0][1];
+
+  await act(async () => {
+    input("\x7f");
+    input("\b");
+    input("\n");
+    oscHandler("D");
+  });
+
+  expect(submit).not.toHaveBeenCalled();
+  expect(finished).toHaveBeenCalledWith("uno", null);
+  expect(oscHandler("Z;0")).toBe(false);
+});
+
+test("ignora eventos de salida mal codificados", async () => {
+  await act(async () => root!.render(pane()));
+  handlers.get("terminal-output-uno")!({ payload: { dataBase64: "%%%" } });
+  await act(async () => new Promise(resolve => setTimeout(resolve, 20)));
+
+  expect(write).not.toHaveBeenCalled();
+  expect(output).not.toHaveBeenCalled();
+});
+
+test("ignora callbacks tardíos de salida, salida de shell y teclado tras cerrar", async () => {
+  await act(async () => root!.render(pane()));
+  const outputHandler = handlers.get("terminal-output-uno")!;
+  const exitHandler = handlers.get("terminal-exit-uno")!;
+  const input = onData.mock.calls[0][0];
+  await unmount();
+
+  await act(async () => {
+    outputHandler(outputEvent([65]));
+    exitHandler({ payload: undefined });
+    input("echo tardío");
+  });
+
+  expect(output).not.toHaveBeenCalled();
+  expect(finished).not.toHaveBeenCalled();
+  expect(invoke).not.toHaveBeenCalledWith("write_terminal", expect.anything());
+});
+
+test("no escribe un error en xterm si un envío falla después del desmontaje", async () => {
+  let rejectWrite!: (error: Error) => void;
+  invoke.mockImplementation(async (command: string) => command === "write_terminal"
+    ? new Promise<void>((_resolve, reject) => { rejectWrite = reject; })
+    : undefined);
+  await act(async () => root!.render(pane()));
+  await act(async () => {
+    onData.mock.calls[0][0]("echo listo");
+    await new Promise(resolve => setTimeout(resolve, 0));
+  });
+  await unmount();
+  await act(async () => rejectWrite(new Error("terminal closed")));
+
+  expect(write).not.toHaveBeenCalledWith(expect.stringContaining("Laural:"));
+});
+
 test("no atribuye un comando incorrecto tras controles de edición, historial y autocompletado", async () => {
   await act(async () => root!.render(pane()));
   const input = onData.mock.calls[0][0];
@@ -317,4 +542,21 @@ test("marca como editada la línea que el usuario modifica dentro del shell", as
 
   expect(submit).toHaveBeenCalledOnce();
   expect(submit).toHaveBeenCalledWith("uno", "Comando editado en el shell; texto no capturado");
+});
+
+test("captura Enter enviado con LF y no registra líneas vacías", async () => {
+  await act(async () => root!.render(pane()));
+  const input = onData.mock.calls[0][0];
+
+  await act(async () => {
+    input("echo desde LF\n");
+    input("\n");
+    input("\x1b[A");
+    input("comando editado con LF\n");
+  });
+
+  expect(submit.mock.calls).toEqual([
+    ["uno", "echo desde LF"],
+    ["uno", "Comando editado en el shell; texto no capturado"],
+  ]);
 });

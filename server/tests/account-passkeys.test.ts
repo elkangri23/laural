@@ -263,4 +263,150 @@ describe("gestión y login de passkeys", () => {
     expect(pool.queries.at(-1)?.sql).toBe("ROLLBACK");
     expect(pool.client.release).toHaveBeenCalledOnce();
   });
+
+  it("rechaza tickets usados o caducados y revierte fallos del canje", async () => {
+    const expired = createPool(() => ({ rows: [] }));
+    await expect(new AccountPasskeyService(expired.pool, config).consumeManagementTicket(cookie)).resolves.toBeNull();
+    expect(expired.queries).toContainEqual(expect.objectContaining({ sql: "ROLLBACK" }));
+    expect(expired.client.release).toHaveBeenCalledOnce();
+
+    const broken = createPool((sql) => {
+      if (sql.includes("UPDATE passkey_management_tickets")) throw new Error("ticket storage unavailable");
+      return { rows: [] };
+    });
+    await expect(new AccountPasskeyService(broken.pool, config).consumeManagementTicket(cookie)).rejects.toThrow("ticket storage unavailable");
+    expect(broken.queries).toContainEqual(expect.objectContaining({ sql: "ROLLBACK" }));
+    expect(broken.client.release).toHaveBeenCalledOnce();
+  });
+
+  it("no genera opciones ni autentica cuando el flujo o reto ya no existe", async () => {
+    const pool = createPool(() => ({ rows: [] }));
+    const service = new AccountPasskeyService(pool.pool, config);
+    await expect(service.createLoginOptions(cookie, csrf)).resolves.toBeNull();
+    await expect(service.verifyLogin(cookie, csrf, credentialResponse)).resolves.toBeNull();
+    expect(pool.queries).toContainEqual(expect.objectContaining({ sql: "ROLLBACK" }));
+    expect(webauthn.generateAuthenticationOptions).not.toHaveBeenCalled();
+    expect(webauthn.verifyAuthenticationResponse).not.toHaveBeenCalled();
+  });
+
+  it("excluye credenciales registradas al preparar otra passkey", async () => {
+    const existing = [{ credential_id: "existing-key", transports: ["internal", "hybrid"] }];
+    const pool = createPool((sql) => sql.includes("SELECT account_id FROM passkey_management_sessions")
+      ? { rows: [{ account_id: accountId }] }
+      : sql.includes("SELECT a.id, a.email") ? { rows: [{ id: accountId, email: "user@example.test" }] }
+        : sql.includes("SELECT credential_id, transports") ? { rows: existing }
+          : { rows: [] });
+    await new AccountPasskeyService(pool.pool, config).createRegistrationOptions(cookie, csrf, "Llave secundaria");
+    expect(webauthn.generateRegistrationOptions).toHaveBeenCalledWith(expect.objectContaining({
+      excludeCredentials: [{ id: "existing-key", transports: ["internal", "hybrid"] }],
+    }));
+  });
+
+  it("revierte login al fallar la consulta del reto", async () => {
+    const pool = createPool((sql) => {
+      if (sql.includes("UPDATE passkey_login_challenges")) throw new Error("challenge storage unavailable");
+      return { rows: [] };
+    });
+    await expect(new AccountPasskeyService(pool.pool, config).verifyLogin(cookie, csrf, credentialResponse))
+      .rejects.toThrow("challenge storage unavailable");
+    expect(pool.queries).toContainEqual(expect.objectContaining({ sql: "ROLLBACK" }));
+    expect(pool.client.release).toHaveBeenCalledOnce();
+  });
+
+  it("rechaza el alta si la cuenta desapareció o expiró la sesión de administración", async () => {
+    const accountMissing = createPool((sql) => sql.includes("SELECT account_id FROM passkey_management_sessions")
+      ? { rows: [{ account_id: accountId }] }
+      : sql.includes("SELECT a.id, a.email") ? { rows: [] }
+        : { rows: [] });
+    await expect(new AccountPasskeyService(accountMissing.pool, config).createRegistrationOptions(cookie, csrf, "Portátil"))
+      .resolves.toBeNull();
+    expect(webauthn.generateRegistrationOptions).not.toHaveBeenCalled();
+
+    const sessionExpired = createPool(() => ({ rows: [] }));
+    await expect(new AccountPasskeyService(sessionExpired.pool, config).createRegistrationOptions(cookie, csrf, "Portátil"))
+      .resolves.toBeNull();
+    expect(sessionExpired.query).toHaveBeenCalledOnce();
+  });
+
+  it("rechaza retos de registro inexistentes y excepciones de verificación sin persistir credenciales", async () => {
+    const registration = {
+      id: "YQ", rawId: "YQ", type: "public-key",
+      response: { attestationObject: "YQ", clientDataJSON: "YQ" },
+    } as never;
+    const absent = createPool(() => ({ rows: [] }));
+    await expect(new AccountPasskeyService(absent.pool, config).verifyRegistration(cookie, csrf, registration)).resolves.toBe(false);
+    expect(absent.queries).toContainEqual(expect.objectContaining({ sql: "ROLLBACK" }));
+
+    const thrown = createPool((sql) => sql.includes("UPDATE passkey_management_challenges")
+      ? { rows: [{ account_id: accountId, challenge: "challenge", display_name: "Portátil" }] }
+      : { rows: [] });
+    webauthn.verifyRegistrationResponse.mockRejectedValueOnce(new Error("invalid attestation"));
+    await expect(new AccountPasskeyService(thrown.pool, config).verifyRegistration(cookie, csrf, registration)).resolves.toBe(false);
+    expect(thrown.queries).toContainEqual(expect.objectContaining({ sql: "COMMIT" }));
+    expect(thrown.queries.some(({ sql }) => sql.includes("INSERT INTO account_passkeys"))).toBe(false);
+    expect(thrown.client.release).toHaveBeenCalledOnce();
+  });
+
+  it("no registra una passkey si la cuenta se borra antes de bloquearla", async () => {
+    const pool = createPool((sql) => {
+      if (sql.includes("UPDATE passkey_management_challenges")) return { rows: [{ account_id: accountId, challenge: "challenge", display_name: "Portátil" }] };
+      if (sql.includes("SELECT id FROM accounts")) return { rows: [] };
+      if (sql.includes("SELECT count(*)")) return { rows: [{ count: "0" }] };
+      return { rows: [], rowCount: 1 };
+    });
+    await expect(new AccountPasskeyService(pool.pool, config).verifyRegistration(cookie, csrf, {
+      id: "YQ", rawId: "YQ", type: "public-key", response: { attestationObject: "YQ", clientDataJSON: "YQ" },
+    } as never)).resolves.toBe(false);
+    expect(pool.queries).toContainEqual(expect.objectContaining({ sql: "COMMIT" }));
+    expect(pool.queries.some(({ sql }) => sql.includes("INSERT INTO account_passkeys"))).toBe(false);
+  });
+
+  it("trata un resultado de conteo vacío como cero durante el alta serializada", async () => {
+    const pool = createPool((sql) => {
+      if (sql.includes("UPDATE passkey_management_challenges")) return { rows: [{ account_id: accountId, challenge: "challenge", display_name: "Portátil" }] };
+      if (sql.includes("SELECT id FROM accounts")) return { rows: [{ id: accountId }] };
+      if (sql.includes("SELECT count(*)")) return { rows: [] };
+      if (sql.includes("INSERT INTO account_security_email_outbox")) return { rows: [{ account_id: accountId }], rowCount: 1 };
+      return { rows: [], rowCount: 1 };
+    });
+    await expect(new AccountPasskeyService(pool.pool, config).verifyRegistration(cookie, csrf, {
+      id: "YQ", rawId: "YQ", type: "public-key", response: { attestationObject: "YQ", clientDataJSON: "YQ" },
+    } as never)).resolves.toBe(true);
+    expect(pool.queries.some(({ sql }) => sql.includes("INSERT INTO account_passkeys"))).toBe(true);
+  });
+
+  it("propaga fallos inesperados de persistencia del registro tras revertir", async () => {
+    const pool = createPool((sql) => {
+      if (sql.includes("UPDATE passkey_management_challenges")) return { rows: [{ account_id: accountId, challenge: "challenge", display_name: "Portátil" }] };
+      if (sql.includes("SELECT id FROM accounts")) return { rows: [{ id: accountId }] };
+      if (sql.includes("SELECT count(*)")) return { rows: [{ count: "0" }] };
+      if (sql.includes("INSERT INTO account_passkeys")) throw new Error("disk failure");
+      return { rows: [], rowCount: 1 };
+    });
+    await expect(new AccountPasskeyService(pool.pool, config).verifyRegistration(cookie, csrf, {
+      id: "YQ", rawId: "YQ", type: "public-key", response: { attestationObject: "YQ", clientDataJSON: "YQ" },
+    } as never)).rejects.toThrow("disk failure");
+    expect(pool.queries).toContainEqual(expect.objectContaining({ sql: "ROLLBACK" }));
+    expect(pool.client.release).toHaveBeenCalledOnce();
+  });
+
+  it("no elimina una passkey si la sesión expiró o la credencial no pertenece a la cuenta", async () => {
+    const expired = createPool(() => ({ rows: [] }));
+    const service = new AccountPasskeyService(expired.pool, config);
+    await expect(service.removeManagementPasskey(cookie, csrf, "00000000-0000-4000-8000-000000000001")).resolves.toBe(false);
+    expect(expired.queries).toContainEqual(expect.objectContaining({ sql: "ROLLBACK" }));
+
+    const notOwned = createPool((sql) => sql.includes("SELECT account_id FROM passkey_management_sessions")
+      ? { rows: [{ account_id: accountId }] }
+      : sql.startsWith("DELETE FROM account_passkeys") ? { rows: [] }
+        : { rows: [] });
+    await expect(new AccountPasskeyService(notOwned.pool, config).removeManagementPasskey(cookie, csrf, "00000000-0000-4000-8000-000000000001"))
+      .resolves.toBe(false);
+    expect(notOwned.queries.some(({ sql }) => sql.includes("INSERT INTO account_security_email_outbox"))).toBe(false);
+    expect(notOwned.queries).toContainEqual(expect.objectContaining({ sql: "ROLLBACK" }));
+
+    await expect(service.removeManagementPasskey("bad", csrf, "00000000-0000-4000-8000-000000000001"))
+      .resolves.toBe(false);
+    await expect(service.listManagementPasskeys("bad", csrf)).resolves.toBeNull();
+  });
 });

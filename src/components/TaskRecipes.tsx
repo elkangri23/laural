@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useLanguage } from "../i18n";
 
 export type TaskRecipe = { id: string; name: string; objective: string; steps: string[] };
 
@@ -38,9 +39,20 @@ function loadRecipes(): TaskRecipe[] {
   }
 }
 
-function recipePrompt(recipe: TaskRecipe): string {
+type RecipePromptCopy = { intro: string; objective: string; steps: string; safety: string };
+type RecipeDefaults = Record<string, Pick<TaskRecipe, "name" | "objective"> & { steps: readonly string[] }>;
+
+function recipePrompt(recipe: TaskRecipe, copy: RecipePromptCopy): string {
   const steps = recipe.steps.map((step, index) => `${index + 1}. ${step}`).join("\n");
-  return `Usa esta receta como guía para preparar un plan de trabajo.\n\nObjetivo: ${recipe.objective}\n\nPasos a considerar:\n${steps}\n\nAnaliza el proyecto antes de proponer cambios. Presenta acciones pequeñas, con su motivo, y espera la aprobación de cada acción según los permisos configurados en Laural. No apliques cambios de archivo ni ejecutes operaciones con efectos sin aprobación.`;
+  return `${copy.intro}\n\n${copy.objective}: ${recipe.objective}\n\n${copy.steps}:\n${steps}\n\n${copy.safety}`;
+}
+
+function localizeDefaultRecipe(recipe: TaskRecipe, defaults: RecipeDefaults): TaskRecipe {
+  const original = DEFAULT_RECIPES.find((candidate) => candidate.id === recipe.id);
+  const localized = defaults[recipe.id];
+  const isUneditedDefault = original && recipe.name === original.name && recipe.objective === original.objective
+    && recipe.steps.length === original.steps.length && recipe.steps.every((step, index) => step === original.steps[index]);
+  return isUneditedDefault && localized ? { id: recipe.id, ...localized, steps: [...localized.steps] } : recipe;
 }
 
 function newId(): string {
@@ -48,6 +60,7 @@ function newId(): string {
 }
 
 export function TaskRecipes({ onClose, onUse }: { onClose: () => void; onUse: (prompt: string) => void }) {
+  const { messages } = useLanguage();
   const [recipes, setRecipes] = useState(loadRecipes);
   const [selectedId, setSelectedId] = useState(recipes[0]?.id ?? "");
   const [editing, setEditing] = useState<TaskRecipe | null>(null);
@@ -55,7 +68,8 @@ export function TaskRecipes({ onClose, onUse }: { onClose: () => void; onUse: (p
   const dialogRef = useRef<HTMLElement>(null);
   const openerRef = useRef<HTMLElement | null>(null);
   const isEditing = editing !== null;
-  const selected = useMemo(() => recipes.find((recipe) => recipe.id === selectedId) ?? recipes[0], [recipes, selectedId]);
+  const displayedRecipes = useMemo(() => recipes.map((recipe) => localizeDefaultRecipe(recipe, messages.recipes.defaults)), [recipes, messages.recipes.defaults]);
+  const selected = useMemo(() => displayedRecipes.find((recipe) => recipe.id === selectedId) ?? displayedRecipes[0], [displayedRecipes, selectedId]);
 
   useEffect(() => {
     openerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -101,7 +115,7 @@ export function TaskRecipes({ onClose, onUse }: { onClose: () => void; onUse: (p
       setError("");
       return true;
     } catch {
-      setError("No se pudo guardar la receta en este equipo. Comprueba el espacio disponible.");
+      setError(messages.recipes.saveError);
       return false;
     }
   }
@@ -112,7 +126,7 @@ export function TaskRecipes({ onClose, onUse }: { onClose: () => void; onUse: (p
     const objective = editing.objective.trim();
     const steps = editing.steps.map((step) => step.trim()).filter(Boolean);
     if (!name || name.length > 60 || !objective || objective.length > 1200 || steps.length < 1 || steps.length > 12 || steps.some((step) => step.length > 240)) {
-      setError("Completa nombre, objetivo y entre 1 y 12 pasos. Respeta los límites indicados.");
+      setError(messages.recipes.validationError);
       return;
     }
     const nextRecipe = { ...editing, name, objective, steps };
@@ -120,7 +134,7 @@ export function TaskRecipes({ onClose, onUse }: { onClose: () => void; onUse: (p
       ? recipes.map((recipe) => recipe.id === nextRecipe.id ? nextRecipe : recipe)
       : [...recipes, nextRecipe];
     if (next.length > MAX_RECIPES) {
-      setError(`Puedes guardar hasta ${MAX_RECIPES} recetas.`);
+      setError(messages.recipes.maxError.replace("{count}", String(MAX_RECIPES)));
       return;
     }
     if (persist(next)) {
@@ -130,34 +144,34 @@ export function TaskRecipes({ onClose, onUse }: { onClose: () => void; onUse: (p
   }
 
   function deleteRecipe() {
-    if (!selected || !window.confirm(`¿Eliminar la receta «${selected.name}» de este equipo?`)) return;
+    if (!selected || !window.confirm(messages.recipes.deleteConfirm.replace("{name}", selected.name))) return;
     const next = recipes.filter((recipe) => recipe.id !== selected.id);
     if (persist(next)) setSelectedId(next[0]?.id ?? "");
   }
 
   return <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <section ref={dialogRef} className="recipes-dialog" role="dialog" aria-modal="true" aria-labelledby="recipes-title" tabIndex={-1} onKeyDown={handleDialogKeyDown}>
-      <button className="dialog-close" onClick={onClose} aria-label="Cerrar recetas">×</button>
-      <p className="eyebrow">AGENTE · SOLO EN ESTE EQUIPO</p><h2 id="recipes-title">Recetas de tareas</h2>
-      <p className="dialog-copy">Plantillas para preparar planes repetibles. La receta no ejecuta acciones; cada cambio sigue sujeto a los permisos del agente.</p>
+      <button className="dialog-close" onClick={onClose} aria-label={messages.recipes.close}>×</button>
+      <p className="eyebrow">{messages.recipes.eyebrow}</p><h2 id="recipes-title">{messages.recipes.title}</h2>
+      <p className="dialog-copy">{messages.recipes.description}</p>
       <div className="recipes-layout">
-        <nav className="recipes-list" aria-label="Recetas guardadas">
-          {recipes.map((recipe) => <button aria-pressed={recipe.id === selected?.id} className={recipe.id === selected?.id ? "selected" : ""} key={recipe.id} onClick={() => { setSelectedId(recipe.id); setEditing(null); setError(""); }}>{recipe.name}</button>)}
-          <button className="recipes-add" onClick={() => { setEditing({ id: newId(), name: "", objective: "", steps: [""] }); setError(""); }}>＋ Crear receta</button>
+        <nav className="recipes-list" aria-label={messages.recipes.saved}>
+          {displayedRecipes.map((recipe) => <button aria-pressed={recipe.id === selected?.id} className={recipe.id === selected?.id ? "selected" : ""} key={recipe.id} onClick={() => { setSelectedId(recipe.id); setEditing(null); setError(""); }}>{recipe.name}</button>)}
+          <button className="recipes-add" onClick={() => { setEditing({ id: newId(), name: "", objective: "", steps: [""] }); setError(""); }}>{messages.recipes.create}</button>
         </nav>
         {editing ? <div className="recipe-editor">
-          <label className="form-label">Nombre <span id="recipe-name-limit" className="optional-label">máximo 60 caracteres</span><input aria-describedby="recipe-name-limit" value={editing.name} onChange={(event) => setEditing({ ...editing, name: event.currentTarget.value })} /></label>
-          <label className="form-label">Objetivo <span id="recipe-objective-limit" className="optional-label">máximo 1.200 caracteres</span><textarea aria-describedby="recipe-objective-limit" rows={3} value={editing.objective} onChange={(event) => setEditing({ ...editing, objective: event.currentTarget.value })} /></label>
-          <label className="form-label">Pasos <span id="recipe-steps-limit" className="optional-label">uno por línea, hasta 12 pasos y 240 caracteres por paso</span><textarea aria-describedby="recipe-steps-limit" rows={7} value={editing.steps.join("\n")} onChange={(event) => setEditing({ ...editing, steps: event.currentTarget.value.split("\n") })} /></label>
-          <div className="recipes-actions"><button className="secondary-button" onClick={() => { setEditing(null); setError(""); }}>Cancelar</button><button className="primary-button" onClick={saveRecipe}>Guardar receta</button></div>
+          <label className="form-label">{messages.recipes.name} <span id="recipe-name-limit" className="optional-label">{messages.recipes.nameLimit}</span><input aria-describedby="recipe-name-limit" value={editing.name} onChange={(event) => setEditing({ ...editing, name: event.currentTarget.value })} /></label>
+          <label className="form-label">{messages.recipes.objective} <span id="recipe-objective-limit" className="optional-label">{messages.recipes.objectiveLimit}</span><textarea aria-describedby="recipe-objective-limit" rows={3} value={editing.objective} onChange={(event) => setEditing({ ...editing, objective: event.currentTarget.value })} /></label>
+          <label className="form-label">{messages.recipes.steps} <span id="recipe-steps-limit" className="optional-label">{messages.recipes.stepsLimit}</span><textarea aria-describedby="recipe-steps-limit" rows={7} value={editing.steps.join("\n")} onChange={(event) => setEditing({ ...editing, steps: event.currentTarget.value.split("\n") })} /></label>
+          <div className="recipes-actions"><button className="secondary-button" onClick={() => { setEditing(null); setError(""); }}>{messages.recipes.cancel}</button><button className="primary-button" onClick={saveRecipe}>{messages.recipes.save}</button></div>
         </div> : selected ? <div className="recipe-preview">
           <h3>{selected.name}</h3><p>{selected.objective}</p><ol>{selected.steps.map((step, index) => <li key={`${selected.id}-${index}`}>{step}</li>)}</ol>
-          <div className="recipe-preview-warning"><strong>Revisión obligatoria</strong><span>Laural mostrará el plan antes de aplicar archivos o ejecutar operaciones con efectos.</span></div>
-          <div className="recipes-actions"><button className="secondary-button" onClick={deleteRecipe}>Eliminar</button><button className="secondary-button" onClick={() => setEditing({ ...selected })}>Editar</button><button className="primary-button" onClick={() => { onUse(recipePrompt(selected)); onClose(); }}>Usar receta</button></div>
-        </div> : <p className="git-empty">No hay recetas guardadas. Crea una para empezar.</p>}
+          <div className="recipe-preview-warning"><strong>{messages.recipes.review}</strong><span>{messages.recipes.reviewInfo}</span></div>
+          <div className="recipes-actions"><button className="secondary-button" onClick={deleteRecipe}>{messages.recipes.delete}</button><button className="secondary-button" onClick={() => setEditing({ ...selected })}>{messages.recipes.edit}</button><button className="primary-button" onClick={() => { onUse(recipePrompt(selected, messages.recipes.planPrompt)); onClose(); }}>{messages.recipes.use}</button></div>
+        </div> : <p className="git-empty">{messages.recipes.empty}</p>}
       </div>
       {error && <p className="recipes-error" role="alert">{error}</p>}
-      <p className="recipes-privacy">Las recetas se guardan en este equipo. No se exportan ni se sincronizan.</p>
+      <p className="recipes-privacy">{messages.recipes.privacy}</p>
     </section>
   </div>;
 }

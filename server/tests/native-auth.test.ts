@@ -36,6 +36,7 @@ describe("autenticación nativa con navegador y PKCE", () => {
     ]) expect(validateNativeFlowParameters({ ...parameters, redirectUri })).toBe(false);
     expect(validateNativeFlowParameters({ ...parameters, state: "short" })).toBe(false);
     expect(validateNativeFlowParameters({ ...parameters, codeChallenge: "not-a-challenge" })).toBe(false);
+    expect(validateNativeFlowParameters({ ...parameters, redirectUri: "http://[::1" })).toBe(false);
   });
 
   it("crea cookie y token CSRF aleatorios, guardando solo sus hashes", async () => {
@@ -52,6 +53,15 @@ describe("autenticación nativa con navegador y PKCE", () => {
     });
     await expect(service.isBrowserFlowValid(credentials.cookieToken, credentials.csrfToken)).resolves.toBe(true);
     expect(await service.isBrowserFlowValid(undefined, credentials.csrfToken)).toBe(false);
+  });
+
+  it("rechaza tokens y correos inválidos sin consultar ni penalizar un flujo", async () => {
+    const store = fakeStore();
+    const service = new NativeAuthService(store);
+    expect(await service.login({ cookieToken: "short", csrfToken: "b".repeat(43), email: "user@example.test", password: "password" })).toBeNull();
+    expect(await service.login({ cookieToken: "a".repeat(43), csrfToken: "b".repeat(43), email: "sin-correo", password: "password" })).toBeNull();
+    expect(store.findLoginCandidate).not.toHaveBeenCalled();
+    expect(store.failLogin).toHaveBeenCalledOnce();
   });
 
   it("autentica usuario verificado y devuelve un código opaco ligado al flujo", async () => {
@@ -124,6 +134,14 @@ describe("autenticación nativa con navegador y PKCE", () => {
     expect(result).toMatchObject({ kind: "authorized", redirectUri: parameters.redirectUri, state: parameters.state });
     expect(result?.kind === "authorized" && result.code).toMatch(/^[A-Za-z0-9_-]{43}$/);
     expect(verifier.completeMfaLogin).toHaveBeenCalledWith(expect.objectContaining({ email: "user@example.test", proof: "123456" }));
+
+    store.requireMfa = vi.fn(async () => false);
+    await expect(service.login({ ...credentials, email: "user@example.test", password })).resolves.toBeNull();
+    await expect(service.completeMfa({ ...credentials, email: "user@example.test", proof: "incorrect" })).resolves.toMatchObject({ kind: "authorized" });
+    await expect(new NativeAuthService(store).completeMfa({ ...credentials, email: "user@example.test", proof: "123456" })).resolves.toBeNull();
+    await expect(service.completeMfa({ cookieToken: "short", csrfToken: credentials.csrfToken, email: "user@example.test", proof: "123456" })).resolves.toBeNull();
+    verifier.completeMfaLogin = vi.fn(async () => null);
+    await expect(service.completeMfa({ ...credentials, email: "user@example.test", proof: "123456" })).resolves.toBeNull();
   });
 
   it("permite login passwordless con passkey y añade TOTP si la cuenta lo exige", async () => {
@@ -145,6 +163,20 @@ describe("autenticación nativa con navegador y PKCE", () => {
     const mfaLogin = await service.completePasskeyLogin({ ...credentials, accountId: "account-1" });
     expect(mfaLogin).toEqual({ kind: "mfa_required", email: "user@example.test" });
     expect(store.requireMfa).toHaveBeenCalledWith(expect.objectContaining({ accountId: "account-1" }));
+
+    store.requireMfa = vi.fn(async () => false);
+    await expect(service.completePasskeyLogin({ ...credentials, accountId: "account-1" })).resolves.toBeNull();
+    store.findPasskeyLoginCandidate = vi.fn(async () => ({ ...candidate, mfaEnabled: true, email: undefined }));
+    store.requireMfa = vi.fn(async () => true);
+    await expect(service.completePasskeyLogin({ ...credentials, accountId: "account-1" })).resolves.toEqual({ kind: "mfa_required" });
+    store.findPasskeyLoginCandidate = vi.fn(async () => null);
+    await expect(service.completePasskeyLogin({ ...credentials, accountId: "account-1" })).resolves.toBeNull();
+    store.findPasskeyLoginCandidate = vi.fn(async () => candidate);
+    store.completeLogin = vi.fn(async () => null);
+    await expect(service.completePasskeyLogin({ ...credentials, accountId: "account-1" })).resolves.toBeNull();
+    await expect(service.completePasskeyLogin({ cookieToken: "short", csrfToken: credentials.csrfToken, accountId: "account-1" })).resolves.toBeNull();
+    store.findPasskeyLoginCandidate = undefined;
+    await expect(service.completePasskeyLogin({ ...credentials, accountId: "account-1" })).resolves.toBeNull();
   });
 
   it("rota el CSRF tras Google y conserva el challenge TOTP de la cuenta", async () => {
@@ -165,6 +197,43 @@ describe("autenticación nativa con navegador y PKCE", () => {
     expect(store.rotateFlowCsrf).toHaveBeenCalledWith("a".repeat(64), "b".repeat(64), sha256(result!.csrfToken));
     expect(store.requireMfa).toHaveBeenCalledWith(expect.objectContaining({ accountId: "account-google" }));
     expect(store.completeLogin).not.toHaveBeenCalled();
+
+    store.findPasskeyLoginCandidate = vi.fn(async () => ({ ...candidate, mfaEnabled: false, email: undefined }));
+    await expect(service.completeFederatedLogin({ cookieDigest: "a".repeat(64), csrfDigest: "b".repeat(64), accountId: "x" })).resolves.toMatchObject({ login: { kind: "authorized" } });
+    store.findPasskeyLoginCandidate = vi.fn(async () => ({ ...candidate, mfaEnabled: true, email: undefined }));
+    store.requireMfa = vi.fn(async () => true);
+    await expect(service.completeFederatedLogin({ cookieDigest: "a".repeat(64), csrfDigest: "b".repeat(64), accountId: "x" })).resolves.toMatchObject({ login: { kind: "mfa_required" } });
+    store.requireMfa = vi.fn(async () => false);
+    await expect(service.completeFederatedLogin({ cookieDigest: "a".repeat(64), csrfDigest: "b".repeat(64), accountId: "x" })).resolves.toBeNull();
+
+    await expect(service.completeFederatedLogin({ cookieDigest: "invalid", csrfDigest: "b".repeat(64), accountId: "x" })).resolves.toBeNull();
+    store.rotateFlowCsrf = vi.fn(async () => false);
+    await expect(service.completeFederatedLogin({ cookieDigest: "a".repeat(64), csrfDigest: "b".repeat(64), accountId: "x" })).resolves.toBeNull();
+    store.rotateFlowCsrf = vi.fn(async () => true);
+    store.findPasskeyLoginCandidate = vi.fn(async () => null);
+    await expect(service.completeFederatedLogin({ cookieDigest: "a".repeat(64), csrfDigest: "b".repeat(64), accountId: "x" })).resolves.toBeNull();
+    store.findPasskeyLoginCandidate = vi.fn(async () => ({ ...candidate, mfaEnabled: false }));
+    store.completeLogin = vi.fn(async () => null);
+    await expect(service.completeFederatedLogin({ cookieDigest: "a".repeat(64), csrfDigest: "b".repeat(64), accountId: "x" })).resolves.toBeNull();
+  });
+
+  it("penaliza intentos de passkey solo con tokens opacos y procesa login federado sin MFA", async () => {
+    const store = fakeStore();
+    const service = new NativeAuthService(store);
+    await service.failPasskeyLogin("short", "b".repeat(43));
+    await service.failPasskeyLogin("a".repeat(43), "short");
+    expect(store.failLogin).not.toHaveBeenCalled();
+    await service.failPasskeyLogin("a".repeat(43), "b".repeat(43));
+    expect(store.failLogin).toHaveBeenCalledOnce();
+
+    store.rotateFlowCsrf = vi.fn(async () => true);
+    store.findPasskeyLoginCandidate = vi.fn(async () => ({
+      flowId: "federated", redirectUri: parameters.redirectUri, state: parameters.state,
+      codeChallenge: parameters.codeChallenge, accountId: "account-1", passwordHash: null,
+      emailVerified: true, mfaEnabled: false,
+    }));
+    const result = await service.completeFederatedLogin({ cookieDigest: "a".repeat(64), csrfDigest: "b".repeat(64), accountId: "account-1" });
+    expect(result?.login).toMatchObject({ kind: "authorized" });
   });
 
   it("intercambia el código una sola vez usando el verificador PKCE y crea token de sesión opaco", async () => {
@@ -182,6 +251,8 @@ describe("autenticación nativa con navegador y PKCE", () => {
     );
     await expect(service.exchange("short", verifier)).resolves.toBeNull();
     await expect(service.exchange(code, "bad")).resolves.toBeNull();
+    store.exchangeCode = vi.fn(async () => null);
+    await expect(service.exchange(code, verifier)).resolves.toBeNull();
     expect(store.exchangeCode).toHaveBeenCalledOnce();
   });
 });

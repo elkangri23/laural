@@ -1,11 +1,17 @@
 // @vitest-environment jsdom
-import { act } from "react";
+import { act, type ReactNode } from "react";
+import { LanguageProvider } from "../src/i18n";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
 import { BackupRetentionControl } from "../src/components/BackupRetentionControl";
 
 let root: Root | undefined;
 let host: HTMLDivElement;
+
+function renderWithLanguage(children: ReactNode) {
+  localStorage.setItem("laural.language.v1", "es");
+  return root!.render(<LanguageProvider>{children}</LanguageProvider>);
+}
 const change = vi.fn();
 
 afterEach(async () => {
@@ -19,7 +25,7 @@ test("muestra sin límite por defecto y publica la selección", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   host = document.createElement("div");
   root = createRoot(host);
-  await act(async () => root!.render(<BackupRetentionControl value={null} onChange={change} />));
+  await act(async () => renderWithLanguage(<BackupRetentionControl value={null} onChange={change} />));
 
   const select = host.querySelector("select")!;
   expect(select.value).toBe("none");

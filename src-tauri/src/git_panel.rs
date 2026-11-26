@@ -153,7 +153,9 @@ fn parse_status(root: &Path, bytes: &[u8]) -> Result<GitStatus, String> {
         let has_second_path = code.contains('R') || code.contains('C');
         changes.push(GitChange { code, path });
         if has_second_path {
-            records.next();
+            if records.next().is_none_or(|path| path.is_empty()) {
+                return Err("Git devolvió un cambio que no se pudo interpretar.".into());
+            }
         }
     }
     Ok(GitStatus {
@@ -304,15 +306,17 @@ mod tests {
 
     #[test]
     fn interpreta_rama_y_cambios_porcelain_sin_invocar_shell() {
-        let status = b"## feature/panel...origin/feature/panel [ahead 1]\0 M src/App.tsx\0A  tests/git-panel.test.tsx\0?? docs/git/\0R  nuevo nombre.txt\0nombre anterior.txt\0";
+        let status = b"## feature/panel...origin/feature/panel [ahead 1]\0 M src/App.tsx\0A  tests/git-panel.test.tsx\0?? docs/git/\0R  nuevo nombre.txt\0nombre anterior.txt\0C  copia con espacio.txt\0origen.txt\0";
         let parsed = parse_status(Path::new("C:/proyecto"), status).unwrap();
         assert_eq!(parsed.branch, "feature/panel");
-        assert_eq!(parsed.changes.len(), 4);
+        assert_eq!(parsed.changes.len(), 5);
         assert_eq!(parsed.changes[0].code, "M");
         assert_eq!(parsed.changes[0].path, "src/App.tsx");
         assert_eq!(parsed.changes[2].code, "??");
         assert_eq!(parsed.changes[3].code, "R");
         assert_eq!(parsed.changes[3].path, "nuevo nombre.txt");
+        assert_eq!(parsed.changes[4].code, "C");
+        assert_eq!(parsed.changes[4].path, "copia con espacio.txt");
     }
 
     #[test]
@@ -329,6 +333,18 @@ mod tests {
     fn no_acepta_salida_de_estado_sin_cabecera_de_rama() {
         assert!(parse_status(Path::new("."), b" M src/App.tsx\0").is_err());
         assert!(parse_status(Path::new("."), b"## main\0x\0").is_err());
+        assert!(parse_status(Path::new("."), b"## \xff\0").is_err());
+        assert!(parse_status(Path::new("."), b"## main\0 M: ruta.txt\0").is_err());
+    }
+
+    #[test]
+    fn rechaza_registros_de_renombrado_o_copia_sin_segunda_ruta() {
+        for status in [
+            b"## main\0R  nuevo.txt\0".as_slice(),
+            b"## main\0C  copia.txt\0\0",
+        ] {
+            assert!(parse_status(Path::new("."), status).is_err());
+        }
     }
 
     #[test]
@@ -373,6 +389,52 @@ mod tests {
 
         assert!(!status.branch.is_empty());
         assert!(status.changes.is_empty());
+    }
+
+    #[test]
+    fn informa_por_separado_cambios_preparados_y_sin_preparar() {
+        let directory = tempfile::tempdir().unwrap();
+        let repository = directory.path();
+        init_test_repository(repository);
+        fs::write(repository.join("preparado.txt"), "base preparado\n").unwrap();
+        fs::write(repository.join("sin_preparar.txt"), "base sin preparar\n").unwrap();
+        commit_test_repository(repository, "base");
+
+        fs::write(repository.join("preparado.txt"), "cambio preparado\n").unwrap();
+        assert!(
+            run_test_git(repository, &["add", "preparado.txt"])
+                .status
+                .success()
+        );
+        fs::write(repository.join("sin_preparar.txt"), "cambio sin preparar\n").unwrap();
+
+        let diff = get_git_diff(repository.to_string_lossy().into_owned()).unwrap();
+
+        assert!(diff.content.starts_with("# Cambios preparados\n"));
+        assert!(diff.content.contains("# Cambios sin preparar\n"));
+        assert!(diff.content.contains("+cambio preparado"));
+        assert!(diff.content.contains("+cambio sin preparar"));
+        assert!(!diff.truncated);
+    }
+
+    #[test]
+    fn rechaza_rutas_que_no_son_carpetas_o_repositorios() {
+        let directory = tempfile::tempdir().unwrap();
+        let file = directory.path().join("archivo.txt");
+        fs::write(&file, "contenido").unwrap();
+
+        assert_eq!(
+            repository_root(&file).unwrap_err(),
+            "Selecciona una carpeta de proyecto válida."
+        );
+        assert_eq!(
+            repository_root(&directory.path().to_path_buf()).unwrap_err(),
+            "La carpeta seleccionada no contiene un repositorio Git."
+        );
+        assert_eq!(
+            repository_root(&directory.path().join("inexistente")).unwrap_err(),
+            "La carpeta seleccionada ya no está disponible."
+        );
     }
 
     #[test]

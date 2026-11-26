@@ -611,6 +611,7 @@ paths:
                   snapshot:
                     oneOf:
                       - $ref: ../shared/preference-snapshot-v1.schema.json
+                      - $ref: ../shared/preference-snapshot-v2.schema.json
                       - type: 'null'
                   revision: { type: integer, minimum: 0 }
                 required: [snapshot, revision]
@@ -634,7 +635,9 @@ paths:
         content:
           application/json:
             schema:
-              $ref: ../shared/preference-snapshot-v1.schema.json
+              oneOf:
+                - $ref: ../shared/preference-snapshot-v1.schema.json
+                - $ref: ../shared/preference-snapshot-v2.schema.json
       responses:
         '200': { description: Snapshot guardado; respuesta repetida también es idempotente }
         '400': { description: Cabecera o snapshot inválido }

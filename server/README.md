@@ -2,6 +2,8 @@
 
 Backend TypeScript con Fastify y PostgreSQL para snapshots permitidos de preferencias. Incluye API privada, registro/verificación por correo, login web por contraseña, passkey y Google OIDC con PKCE, TOTP, códigos de recuperación, recuperación administrativa y avisos transaccionales de seguridad. La app permite consultar las 100 sesiones activas más recientes, revocar una sesión ajena o revocarlas todas sin cerrar la actual. La integración nativa usa HTTPS y Credential Manager. Caddy sirve la página pública `/status` y un documento editable solo por SSH, fuera del proceso Fastify para que siga disponible si la API se cae. **Google requiere credenciales y ensayo VPS; Resend real y despliegue endurecido siguen pendientes. No publicar todavía en Internet.**
 
+La API de preferencias acepta snapshots v1 y v2 mediante esquemas cerrados. v2 añade únicamente `preferences.language` (`es` o `en`); ningún esquema admite claves, tokens u otros campos no incluidos en su allowlist. El servidor y la migración de contrato están implementados localmente; antes de habilitar un cliente que escriba v2 hay que desplegar y validar esta versión en el VPS.
+
 ## Requisitos
 
 - Node.js 22.13 o posterior.
@@ -52,7 +54,7 @@ En desarrollo se puede usar `npm run dev`; las tablas deben existir antes de arr
 - `POST /v1/auth/native/exchange`: canjea código + `codeVerifier`; devuelve un token aleatorio de sesión de 30 días solo al cliente que presenta el verificador PKCE. En PostgreSQL se almacena únicamente el SHA-256 del token.
 - `DELETE /v1/auth/account`: requiere bearer, sesión emitida hace menos de diez minutos y JSON exacto `{ "confirmation": "ELIMINAR" }`; borra la cuenta y sus datos asociados por FK cascade. Limitado a tres intentos por IP/ruta cada quince minutos.
 - La pantalla de navegador también permite registro, reenvío/verificación y restablecimiento de contraseña por PIN; el PIN nunca crea sesión.
-- El body usa el schema canónico [snapshot v1](../shared/preference-snapshot-v1.schema.json), está limitado a 256 KiB y rechaza claves y propiedades desconocidas.
+- El body acepta snapshots v1 y v2 mediante schemas compartidos cerrados ([v1](../shared/preference-snapshot-v1.schema.json), [v2](../shared/preference-snapshot-v2.schema.json)); v2 añade solo `preferences.language` (`es` o `en`). El límite sigue siendo 256 KiB y se rechazan claves, propiedades desconocidas, idiomas inválidos y versiones futuras. Esta compatibilidad está implementada localmente, pero aún no se ha desplegado en el VPS.
 - Los endpoints personalizados remotos deben usar HTTPS; HTTP solo se admite para loopback. No se permiten credenciales, query string ni fragmento en la URL.
 
 ### Rutas públicas de Caddy

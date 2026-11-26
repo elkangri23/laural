@@ -8,7 +8,8 @@ use serde::{Deserialize, Serialize};
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 const FORMAT: &str = "laural-configuration";
-const VERSION: u32 = 1;
+const LEGACY_VERSION: u32 = 1;
+const VERSION: u32 = 2;
 const MAX_FILE_BYTES: usize = 4 * 1024 * 1024;
 const MAX_PROVIDERS: usize = 100;
 const MAX_PASSWORD_BYTES: usize = 1024;
@@ -19,7 +20,8 @@ const ALLOWED_THEMES: &[&str] = &[
 const SALT_BYTES: usize = 16;
 const NONCE_BYTES: usize = 12;
 const KEY_BYTES: usize = 32;
-const AAD: &[u8] = b"laural-configuration/1/encrypted-keys";
+const AAD_V1: &[u8] = b"laural-configuration/1/encrypted-keys";
+const AAD_V2: &[u8] = b"laural-configuration/2/encrypted-keys";
 const KDF_ID: &str = "argon2id-v=19,m=19456,t=2,p=1";
 
 #[derive(Clone, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
@@ -28,6 +30,8 @@ pub(crate) struct TransferPreferences {
     pub theme_id: String,
     pub appearance: String,
     pub update_mode: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
@@ -114,6 +118,9 @@ pub(crate) fn encode(
     password: Option<&str>,
 ) -> Result<Vec<u8>, String> {
     validate_data(&data, &api_keys)?;
+    if !matches!(data.preferences.language.as_deref(), Some("es" | "en")) {
+        return Err("El idioma de la configuración no es válido.".into());
+    }
     let exported_at = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|_| "No se pudo obtener la fecha de exportación.".to_string())?
@@ -153,7 +160,7 @@ pub(crate) fn encode(
                 &nonce,
                 Payload {
                     msg: plaintext.as_slice(),
-                    aad: AAD,
+                    aad: AAD_V2,
                 },
             )
             .map_err(|_| "No se pudo cifrar la exportación.".to_string())?;
@@ -187,7 +194,7 @@ pub(crate) fn decode(bytes: &[u8], password: Option<&str>) -> Result<DecodedExpo
     }
     let file: ExportFile = serde_json::from_slice(bytes)
         .map_err(|_| "El archivo no es una exportación válida de Laural.".to_string())?;
-    if file.format != FORMAT || file.version != VERSION {
+    if file.format != FORMAT || !matches!(file.version, LEGACY_VERSION | VERSION) {
         return Err("El formato o la versión del archivo no son compatibles.".into());
     }
 
@@ -218,7 +225,11 @@ pub(crate) fn decode(bytes: &[u8], password: Option<&str>) -> Result<DecodedExpo
                         &nonce,
                         Payload {
                             msg: ciphertext.as_slice(),
-                            aad: AAD,
+                            aad: if file.version == LEGACY_VERSION {
+                                AAD_V1
+                            } else {
+                                AAD_V2
+                            },
                         },
                     )
                     .map_err(|_| {
@@ -231,6 +242,11 @@ pub(crate) fn decode(bytes: &[u8], password: Option<&str>) -> Result<DecodedExpo
         }
         _ => return Err("El archivo contiene secciones incompatibles o incompletas.".into()),
     };
+    match (file.version, data.preferences.language.as_deref()) {
+        (LEGACY_VERSION, None) => {}
+        (VERSION, Some(language)) if matches!(language, "es" | "en") => {}
+        _ => return Err("El idioma o la versión del archivo no son compatibles.".into()),
+    }
     validate_data(&data, &api_keys)?;
     Ok(DecodedExport {
         data,
@@ -283,6 +299,14 @@ fn validate_data(data: &TransferData, api_keys: &[ApiKeyEntry]) -> Result<(), St
     {
         return Err("Las preferencias de apariencia o actualización no son válidas.".into());
     }
+    if data
+        .preferences
+        .language
+        .as_deref()
+        .is_some_and(|language| !matches!(language, "es" | "en"))
+    {
+        return Err("El idioma de la configuración no es válido.".into());
+    }
 
     let mut ids = std::collections::HashSet::with_capacity(data.providers.len());
     for provider in &data.providers {
@@ -326,6 +350,20 @@ fn validate_data(data: &TransferData, api_keys: &[ApiKeyEntry]) -> Result<(), St
     Ok(())
 }
 
+pub(crate) fn resolve_import_language(
+    imported: Option<String>,
+    local: Option<&str>,
+) -> Result<String, String> {
+    match imported {
+        Some(language) if matches!(language.as_str(), "es" | "en") => Ok(language),
+        Some(_) => Err("El idioma de la configuración no es válido.".into()),
+        None => match local {
+            Some(language) if matches!(language, "es" | "en") => Ok(language.to_string()),
+            _ => Err("El idioma local actual no es válido; no se importó el archivo.".into()),
+        },
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -337,6 +375,7 @@ mod tests {
                     theme_id: "laurel".into(),
                     appearance: "dark".into(),
                     update_mode: "manual".into(),
+                    language: Some("es".into()),
                 },
                 active_provider_id: Some("provider-1".into()),
                 providers: vec![TransferProvider {
@@ -353,6 +392,41 @@ mod tests {
                 api_key: "secret-key".into(),
             }],
         )
+    }
+
+    fn legacy_encrypted_export() -> Vec<u8> {
+        let (mut data, api_keys) = sample();
+        data.preferences.language = None;
+        let plaintext =
+            Zeroizing::new(serde_json::to_vec(&EncryptedData { data, api_keys }).unwrap());
+        let salt = [7_u8; SALT_BYTES];
+        let nonce_bytes = [9_u8; NONCE_BYTES];
+        let key = derive_key("clave segura de prueba", &salt).unwrap();
+        let cipher = Aes256Gcm::new_from_slice(&key[..]).unwrap();
+        let ciphertext = cipher
+            .encrypt(
+                &Nonce::from(nonce_bytes),
+                Payload {
+                    msg: plaintext.as_slice(),
+                    aad: AAD_V1,
+                },
+            )
+            .unwrap();
+        serde_json::to_vec(&ExportFile {
+            format: FORMAT.into(),
+            version: LEGACY_VERSION,
+            exported_at: 1,
+            mode: "encrypted".into(),
+            data: None,
+            encrypted: Some(EncryptedPayload {
+                algorithm: "aes-256-gcm".into(),
+                kdf: KDF_ID.into(),
+                salt: BASE64.encode(salt),
+                nonce: BASE64.encode(nonce_bytes),
+                ciphertext: BASE64.encode(ciphertext),
+            }),
+        })
+        .unwrap()
     }
 
     #[test]
@@ -374,6 +448,11 @@ mod tests {
         let (data, _) = sample();
         let bytes = encode(data, Vec::new(), None).unwrap();
         let mut value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        value["version"] = LEGACY_VERSION.into();
+        value["data"]["preferences"]
+            .as_object_mut()
+            .unwrap()
+            .remove("language");
         let provider = value["data"]["providers"][0].as_object_mut().unwrap();
         provider.remove("providerKind");
         provider.remove("shareCustomEndpoint");
@@ -386,6 +465,64 @@ mod tests {
             "custom"
         );
         assert!(!decoded.data.providers[0].share_custom_endpoint);
+        assert_eq!(decoded.data.preferences.language, None);
+    }
+
+    #[test]
+    fn exporta_v2_con_idioma_y_rechaza_idiomas_ausentes_o_invalidos() {
+        let (data, _) = sample();
+        let bytes = encode(data, Vec::new(), None).unwrap();
+        let file: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(file["version"], VERSION);
+        assert_eq!(file["data"]["preferences"]["language"], "es");
+        assert_eq!(
+            decode(&bytes, None)
+                .unwrap()
+                .data
+                .preferences
+                .language
+                .as_deref(),
+            Some("es")
+        );
+
+        let (mut missing, _) = sample();
+        missing.preferences.language = None;
+        assert!(encode(missing, Vec::new(), None).is_err());
+
+        let (mut unsupported, _) = sample();
+        unsupported.preferences.language = Some("fr".into());
+        assert!(encode(unsupported, Vec::new(), None).is_err());
+
+        for language in [None, Some("fr")] {
+            let mut invalid: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+            match language {
+                None => {
+                    invalid["data"]["preferences"]
+                        .as_object_mut()
+                        .unwrap()
+                        .remove("language");
+                }
+                Some(language) => invalid["data"]["preferences"]["language"] = language.into(),
+            }
+            assert!(decode(&serde_json::to_vec(&invalid).unwrap(), None).is_err());
+        }
+    }
+
+    #[test]
+    fn importacion_resuelve_idioma_nuevo_y_conserva_local_para_archivos_legacy() {
+        assert_eq!(
+            resolve_import_language(Some("es".into()), Some("en")).unwrap(),
+            "es"
+        );
+        assert_eq!(
+            resolve_import_language(Some("en".into()), Some("es")).unwrap(),
+            "en"
+        );
+        assert_eq!(resolve_import_language(None, Some("es")).unwrap(), "es");
+        assert_eq!(resolve_import_language(None, Some("en")).unwrap(), "en");
+        assert!(resolve_import_language(Some("fr".into()), Some("es")).is_err());
+        assert!(resolve_import_language(None, Some("fr")).is_err());
+        assert!(resolve_import_language(None, None).is_err());
     }
 
     #[test]
@@ -421,6 +558,27 @@ mod tests {
     }
 
     #[test]
+    fn lee_exportacion_v1_cifrada_y_autentica_la_version_del_formato() {
+        let legacy = decode(&legacy_encrypted_export(), Some("clave segura de prueba")).unwrap();
+        assert!(legacy.encrypted);
+        assert_eq!(legacy.data.preferences.language, None);
+        assert_eq!(legacy.api_keys[0].api_key, "secret-key");
+
+        let (data, keys) = sample();
+        let mut latest: serde_json::Value =
+            serde_json::from_slice(&encode(data, keys, Some("clave segura de prueba")).unwrap())
+                .unwrap();
+        latest["version"] = LEGACY_VERSION.into();
+        assert!(
+            decode(
+                &serde_json::to_vec(&latest).unwrap(),
+                Some("clave segura de prueba")
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
     fn rechaza_contrasena_incorrecta_y_alteracion() {
         let (data, keys) = sample();
         let bytes = encode(data, keys, Some("clave segura de prueba")).unwrap();
@@ -452,6 +610,64 @@ mod tests {
         let mut unsupported_theme = sample().0;
         unsupported_theme.preferences.theme_id = "unknown".into();
         assert!(validate_data(&unsupported_theme, &[]).is_err());
+    }
+
+    #[test]
+    fn acepta_limites_validos_de_perfiles_claves_y_contrasena() {
+        let mut data = sample().0;
+        data.providers[0].id = "i".repeat(64);
+        data.active_provider_id = data.providers[0].id.clone().into();
+        data.providers[0].name = "n".repeat(128);
+        data.providers[0].model = "m".repeat(256);
+        let mut provider = data.providers[0].clone();
+        for index in 1..MAX_PROVIDERS {
+            provider.id = format!("perfil-{index}");
+            data.providers.push(provider.clone());
+        }
+        assert_eq!(data.providers.len(), MAX_PROVIDERS);
+        let keys = vec![ApiKeyEntry {
+            provider_id: data.providers[0].id.clone(),
+            api_key: "k".repeat(16_384),
+        }];
+        assert!(validate_data(&data, &keys).is_ok());
+        assert!(validate_password("123456789012").is_ok());
+        assert!(validate_password(&"p".repeat(MAX_PASSWORD_BYTES)).is_ok());
+    }
+
+    #[test]
+    fn valida_minimo_en_caracteres_y_maximo_en_bytes_de_contrasena() {
+        assert!(validate_password(&"é".repeat(12)).is_ok());
+        assert!(validate_password(&"é".repeat(11)).is_err());
+        assert!(validate_password(&"p".repeat(MAX_PASSWORD_BYTES + 1)).is_err());
+    }
+
+    #[test]
+    fn limita_el_tamano_exportado_y_acepta_el_limite_de_lectura() {
+        let (mut data, _) = sample();
+        data.active_provider_id = None;
+        let base_provider = data.providers[0].clone();
+        data.providers.clear();
+        let mut keys = Vec::with_capacity(MAX_PROVIDERS);
+        for index in 0..MAX_PROVIDERS {
+            let mut provider = base_provider.clone();
+            provider.id = format!("perfil-{index}");
+            data.providers.push(provider);
+            keys.push(ApiKeyEntry {
+                provider_id: format!("perfil-{index}"),
+                api_key: "\"".repeat(16_384),
+            });
+        }
+        assert!(data.providers.len() <= MAX_PROVIDERS);
+        assert!(
+            encode(data, keys, Some("contraseña suficientemente larga"))
+                .unwrap_err()
+                .contains("tamaño máximo")
+        );
+
+        let (data, _) = sample();
+        let mut bytes = encode(data, Vec::new(), None).unwrap();
+        bytes.resize(MAX_FILE_BYTES, b' ');
+        assert!(decode(&bytes, None).is_ok());
     }
 
     #[test]

@@ -1,15 +1,18 @@
 import { memo } from "react";
 import Markdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { useLanguage } from "../i18n";
 
-const components: Components = {
-  a({ node: _node, ...props }) {
-    return <a {...props} target="_blank" rel="noopener noreferrer" />;
-  },
-  img({ alt }) {
-    return <span className="markdown-image-placeholder">{alt ? `Imagen omitida: ${alt}` : "Imagen omitida"}</span>;
-  },
-};
+function SafeMarkdownLink({ node: _node, ...props }: React.ComponentProps<"a"> & { node?: unknown }) {
+  return <a {...props} target="_blank" rel="noopener noreferrer" />;
+}
+
+function MarkdownImagePlaceholder({ alt }: { alt?: string }) {
+  const { messages } = useLanguage();
+  return <span className="markdown-image-placeholder">{alt ? `${messages.markdown.imageOmitted}: ${alt}` : messages.markdown.imageOmitted}</span>;
+}
+
+const components: Components = { a: SafeMarkdownLink, img: MarkdownImagePlaceholder };
 
 function safeUrlTransform(url: string) {
   if (url.startsWith("#")) return url;

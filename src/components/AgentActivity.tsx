@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { useLanguage } from "../i18n";
 
 type ActivityEntry = {
   timestampMs: number;
@@ -7,14 +8,8 @@ type ActivityEntry = {
   outcome: string;
 };
 
-const actionLabels: Record<string, string> = {
-  comando: "Comando del agente",
-  archivo: "Cambio de archivo",
-  restauración: "Restauración de archivo",
-  "limpieza de copias": "Limpieza de copias",
-};
-
 export function AgentActivity() {
+  const { language, messages } = useLanguage();
   const [entries, setEntries] = useState<ActivityEntry[]>([]);
   const [error, setError] = useState("");
   const [confirmClear, setConfirmClear] = useState(false);
@@ -24,7 +19,7 @@ export function AgentActivity() {
       setEntries(await invoke<ActivityEntry[]>("get_agent_activity"));
       setError("");
     } catch {
-      setError("No se pudo cargar el historial local.");
+      setError(messages.activity.loadError);
     }
   }
 
@@ -38,34 +33,39 @@ export function AgentActivity() {
       setEntries([]);
       setError("");
     } catch {
-      setError("No se pudo borrar el historial local.");
+      setError(messages.activity.clearError);
     }
     setConfirmClear(false);
   }
 
   return <section className="agent-activity" aria-labelledby="agent-activity-title">
     <div className="agent-activity-heading">
-      <strong id="agent-activity-title">Actividad del agente</strong>
-      <button className="action-quiet" onClick={() => void refresh()}>Actualizar</button>
+      <strong id="agent-activity-title">{messages.activity.title}</strong>
+      <button className="action-quiet" onClick={() => void refresh()}>{messages.activity.refresh}</button>
     </div>
-    <p>Registro local acotado. Guarda el tipo de acción, el resultado y la hora; nunca comandos, rutas, prompts, salida de terminal ni claves.</p>
+    <p>{messages.activity.description}</p>
     {error && <p role="status" className="policy-notice">{error}</p>}
-    {entries.length === 0 ? <p className="agent-activity-empty">Todavía no hay actividad registrada.</p> : <ol className="agent-activity-list" aria-label="Últimos eventos del agente">
+    {entries.length === 0 ? <p className="agent-activity-empty">{messages.activity.empty}</p> : <ol className="agent-activity-list" aria-label={messages.activity.latest}>
       {entries.map((entry, index) => <li key={`${entry.timestampMs}-${index}`}>
-        <span>{actionLabels[entry.action] ?? "Acción del agente"}<small>{entry.outcome}</small></span>
-        <ActivityTime timestamp={entry.timestampMs} />
+        <span>{activityActionLabel(entry.action, messages.activity.actions)}<small>{entry.outcome}</small></span>
+        <ActivityTime timestamp={entry.timestampMs} language={language} invalidTime={messages.activity.invalidTime} />
       </li>)}
     </ol>}
-    {confirmClear ? <div className="agent-activity-confirm" role="group" aria-label="Confirmar borrado del historial">
-      <span>¿Borrar el historial de actividad?</span>
-      <button className="action-quiet" onClick={() => setConfirmClear(false)}>Cancelar</button>
-      <button className="action-quiet" onClick={() => void clear()}>Sí, borrar</button>
-    </div> : <button className="action-quiet" onClick={() => setConfirmClear(true)} disabled={entries.length === 0 && !error}>Borrar historial</button>}
+    {confirmClear ? <div className="agent-activity-confirm" role="group" aria-label={messages.activity.confirmClear}>
+      <span>{messages.activity.confirmClear}</span>
+      <button className="action-quiet" onClick={() => setConfirmClear(false)}>{messages.activity.cancel}</button>
+      <button className="action-quiet" onClick={() => void clear()}>{messages.activity.confirm}</button>
+    </div> : <button className="action-quiet" onClick={() => setConfirmClear(true)} disabled={entries.length === 0 && !error}>{messages.activity.clear}</button>}
   </section>;
 }
 
-function ActivityTime({ timestamp }: { timestamp: number }) {
+function activityActionLabel(action: string, labels: { command: string; file: string; restore: string; cleanup: string; other: string }) {
+  const key = action === "comando" ? "command" : action === "archivo" ? "file" : action === "restauración" ? "restore" : action === "limpieza de copias" ? "cleanup" : "other";
+  return labels[key];
+}
+
+function ActivityTime({ timestamp, language, invalidTime }: { timestamp: number; language: string; invalidTime: string }) {
   const date = new Date(timestamp);
   const iso = Number.isNaN(date.getTime()) ? undefined : date.toISOString();
-  return <time dateTime={iso}>{iso ? date.toLocaleString() : "Hora no válida"}</time>;
+  return <time dateTime={iso}>{iso ? date.toLocaleString(language) : invalidTime}</time>;
 }

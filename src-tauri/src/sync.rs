@@ -45,6 +45,12 @@ struct SyncState {
     pending: bool,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ApiError {
+    error: String,
+}
+
 #[derive(Serialize)]
 #[serde(tag = "status", rename_all = "camelCase")]
 pub enum SyncRunResult {
@@ -88,13 +94,30 @@ pub async fn read_remote_preference_history(
     before_revision: Option<u64>,
 ) -> Result<PreferenceHistoryPage, String> {
     let token = account::session_token()?;
+    read_remote_preference_history_with(
+        &sync_client()?,
+        preference_history_url(before_revision),
+        token.as_str(),
+    )
+    .await
+}
+
+fn preference_history_url(before_revision: Option<u64>) -> String {
     let mut url = format!("{SYNC_ORIGIN}/v1/preferences/history?limit=25");
     if let Some(before) = before_revision {
         url.push_str(&format!("&before={before}"));
     }
-    let response = sync_client()?
+    url
+}
+
+async fn read_remote_preference_history_with(
+    client: &Client,
+    url: String,
+    token: &str,
+) -> Result<PreferenceHistoryPage, String> {
+    let response = client
         .get(url)
-        .bearer_auth(token.as_str())
+        .bearer_auth(token)
         .send()
         .await
         .map_err(|_| "No se pudo consultar el historial de preferencias.".to_string())?;
@@ -111,9 +134,22 @@ pub async fn read_remote_preference_history(
 #[command]
 pub async fn delete_remote_preference_history(revision: u64) -> Result<(), String> {
     let token = account::session_token()?;
-    let response = sync_client()?
-        .delete(format!("{SYNC_ORIGIN}/v1/preferences/history/{revision}"))
-        .bearer_auth(token.as_str())
+    delete_remote_preference_history_with(
+        &sync_client()?,
+        format!("{SYNC_ORIGIN}/v1/preferences/history/{revision}"),
+        token.as_str(),
+    )
+    .await
+}
+
+async fn delete_remote_preference_history_with(
+    client: &Client,
+    url: String,
+    token: &str,
+) -> Result<(), String> {
+    let response = client
+        .delete(url)
+        .bearer_auth(token)
         .send()
         .await
         .map_err(|_| "No se pudo eliminar la versión de la nube.".to_string())?;
@@ -136,12 +172,25 @@ pub async fn restore_remote_preference_history(
 ) -> Result<RemoteSnapshot, String> {
     let _guard = lock_sync().await;
     let token = account::session_token()?;
+    restore_remote_preference_history_with(
+        &sync_client()?,
+        format!("{SYNC_ORIGIN}/v1/preferences/history/{revision}/restore"),
+        token.as_str(),
+        current_revision,
+    )
+    .await
+}
+
+async fn restore_remote_preference_history_with(
+    client: &Client,
+    url: String,
+    token: &str,
+    current_revision: u64,
+) -> Result<RemoteSnapshot, String> {
     let idempotency_key = random_idempotency_key()?;
-    let response = sync_client()?
-        .post(format!(
-            "{SYNC_ORIGIN}/v1/preferences/history/{revision}/restore"
-        ))
-        .bearer_auth(token.as_str())
+    let response = client
+        .post(url)
+        .bearer_auth(token)
         .header(reqwest::header::IF_MATCH, format!("\"{current_revision}\""))
         .header("Idempotency-Key", idempotency_key)
         .send()
@@ -175,8 +224,21 @@ pub async fn restore_remote_preference_history(
 
 async fn fetch_remote_preferences(token: &str) -> Result<RemoteSnapshot, String> {
     let client = sync_client()?;
+    fetch_remote_preferences_with(
+        &client,
+        format!("{SYNC_ORIGIN}/v1/preferences/current"),
+        token,
+    )
+    .await
+}
+
+async fn fetch_remote_preferences_with(
+    client: &Client,
+    url: String,
+    token: &str,
+) -> Result<RemoteSnapshot, String> {
     let response = client
-        .get(format!("{SYNC_ORIGIN}/v1/preferences/current"))
+        .get(url)
         .bearer_auth(token)
         .send()
         .await
@@ -208,7 +270,13 @@ pub async fn write_remote_preferences(
 ) -> Result<RemoteWriteResult, String> {
     let _guard = lock_sync().await;
     let token = account::session_token()?;
-    let result = put_remote_preferences(&token, &snapshot, revision).await?;
+    let result = match put_remote_preferences(&token, &snapshot, revision).await {
+        Ok(result) => result,
+        Err(error) => {
+            mark_sync_pending(&app)?;
+            return Err(error);
+        }
+    };
     if let RemoteWriteResult::Saved { revision } = result {
         record_sync_baseline(&app, snapshot.clone(), snapshot, revision)?;
         return Ok(RemoteWriteResult::Saved { revision });
@@ -464,14 +532,22 @@ fn write_sync_state(app: &AppHandle, state: &SyncState) -> Result<(), String> {
 }
 
 fn mark_sync_pending(app: &AppHandle) -> Result<(), String> {
-    let mut state = read_sync_state(app)?.unwrap_or(SyncState {
-        local_snapshot: None,
-        cloud_snapshot: None,
-        revision: None,
-        pending: false,
-    });
-    state.pending = true;
-    write_sync_state(app, &state)
+    write_sync_state(app, &pending_sync_state(read_sync_state(app)?))
+}
+
+fn pending_sync_state(state: Option<SyncState>) -> SyncState {
+    match state {
+        Some(mut state) => {
+            state.pending = true;
+            state
+        }
+        None => SyncState {
+            local_snapshot: None,
+            cloud_snapshot: None,
+            revision: None,
+            pending: true,
+        },
+    }
 }
 
 fn preserve_unshared_endpoints(
@@ -517,11 +593,28 @@ async fn put_remote_preferences(
     snapshot: &PreferenceSnapshot,
     revision: u64,
 ) -> Result<RemoteWriteResult, String> {
+    let client = sync_client()?;
+    put_remote_preferences_with(
+        &client,
+        format!("{SYNC_ORIGIN}/v1/preferences/current"),
+        token,
+        snapshot,
+        revision,
+    )
+    .await
+}
+
+async fn put_remote_preferences_with(
+    client: &Client,
+    url: String,
+    token: &str,
+    snapshot: &PreferenceSnapshot,
+    revision: u64,
+) -> Result<RemoteWriteResult, String> {
     let body = snapshot::encode(snapshot)?;
     let idempotency_key = random_idempotency_key()?;
-    let client = sync_client()?;
     let response = client
-        .put(format!("{SYNC_ORIGIN}/v1/preferences/current"))
+        .put(url)
         .bearer_auth(token)
         .header(reqwest::header::IF_MATCH, format!("\"{revision}\""))
         .header("Idempotency-Key", idempotency_key)
@@ -542,6 +635,15 @@ async fn put_remote_preferences(
             "El servicio rechazó la clave de idempotencia; vuelve a consultar la nube.".into(),
         );
     }
+    let response_status = response.status();
+    if response_status == reqwest::StatusCode::BAD_REQUEST {
+        let bytes = bounded_body(response).await.unwrap_or_default();
+        return Err(if indicates_unsupported_snapshot(response_status, &bytes) {
+            "El servicio no admite el formato de sincronización v2. Los datos locales siguen guardados; actualiza el servicio antes de volver a sincronizar.".into()
+        } else {
+            "El servicio no pudo guardar la configuración.".into()
+        });
+    }
     if !response.status().is_success() {
         return Err("El servicio no pudo guardar la configuración.".into());
     }
@@ -555,6 +657,14 @@ async fn put_remote_preferences(
     Ok(RemoteWriteResult::Saved {
         revision: saved_revision,
     })
+}
+
+fn indicates_unsupported_snapshot(status: reqwest::StatusCode, body: &[u8]) -> bool {
+    if status != reqwest::StatusCode::BAD_REQUEST {
+        return false;
+    }
+    serde_json::from_slice::<ApiError>(body)
+        .is_ok_and(|response| response.error == "invalid_snapshot")
 }
 
 fn sync_client() -> Result<Client, String> {
@@ -618,14 +728,18 @@ fn random_idempotency_key() -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::thread::JoinHandle;
 
     fn snapshot(theme_id: &str) -> PreferenceSnapshot {
         PreferenceSnapshot {
-            schema_version: 1,
+            schema_version: 2,
             preferences: crate::preferences::snapshot::SnapshotPreferences {
                 theme_id: theme_id.into(),
                 appearance: "dark".into(),
                 update_mode: "manual".into(),
+                language: Some("es".into()),
             },
             active_provider_id: None,
             providers: Vec::new(),
@@ -639,6 +753,555 @@ mod tests {
             revision: Some(revision),
             pending: false,
         }
+    }
+
+    fn assert_error_contains<T>(result: Result<T, String>, expected: &str) {
+        let error = match result {
+            Ok(_) => panic!("se esperaba el error {expected}"),
+            Err(error) => error,
+        };
+        assert!(error.contains(expected), "{error}");
+    }
+
+    fn mock_sync_server(
+        status: &'static str,
+        headers: String,
+        body: Vec<u8>,
+    ) -> (String, JoinHandle<Vec<u8>>) {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(3)))
+                .unwrap();
+            let mut request = Vec::new();
+            let mut chunk = [0; 1024];
+            loop {
+                let count = stream.read(&mut chunk).unwrap();
+                if count == 0 {
+                    break;
+                }
+                request.extend_from_slice(&chunk[..count]);
+                let Some(header_end) = request.windows(4).position(|part| part == b"\r\n\r\n")
+                else {
+                    continue;
+                };
+                let header_text = String::from_utf8_lossy(&request[..header_end]);
+                let content_length = header_text
+                    .lines()
+                    .find_map(|line| {
+                        line.strip_prefix("content-length:")
+                            .or_else(|| line.strip_prefix("Content-Length:"))
+                            .and_then(|value| value.trim().parse::<usize>().ok())
+                    })
+                    .unwrap_or(0);
+                if request.len() >= header_end + 4 + content_length {
+                    break;
+                }
+            }
+            let response = format!(
+                "HTTP/1.1 {status}\r\n{headers}Content-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            );
+            stream.write_all(response.as_bytes()).unwrap();
+            stream.write_all(&body).unwrap();
+            request
+        });
+        (format!("http://{address}/v1/preferences/current"), server)
+    }
+
+    async fn fetch_with_response(
+        status: &'static str,
+        headers: String,
+        body: Vec<u8>,
+    ) -> (Result<RemoteSnapshot, String>, Vec<u8>) {
+        let (url, server) = mock_sync_server(status, headers, body);
+        let result = fetch_remote_preferences_with(&Client::new(), url, "test-session").await;
+        (result, server.join().unwrap())
+    }
+
+    async fn history_with_response(
+        status: &'static str,
+        headers: String,
+        body: Vec<u8>,
+    ) -> (Result<PreferenceHistoryPage, String>, Vec<u8>) {
+        let (url, server) = mock_sync_server(status, headers, body);
+        let result = read_remote_preference_history_with(
+            &Client::new(),
+            url.replace("/current", "/history?limit=25&before=8"),
+            "test-session",
+        )
+        .await;
+        (result, server.join().unwrap())
+    }
+
+    async fn delete_history_with_response(
+        status: &'static str,
+        headers: String,
+        body: Vec<u8>,
+    ) -> (Result<(), String>, Vec<u8>) {
+        let (url, server) = mock_sync_server(status, headers, body);
+        let url = url.replace("/current", "/history/8");
+        let result =
+            delete_remote_preference_history_with(&Client::new(), url, "test-session").await;
+        (result, server.join().unwrap())
+    }
+
+    async fn fetch_chunked_body(body: Vec<u8>) -> Result<RemoteSnapshot, String> {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(3)))
+                .unwrap();
+            let mut request = Vec::new();
+            let mut chunk = [0; 1024];
+            while !request.windows(4).any(|part| part == b"\r\n\r\n") {
+                let count = stream.read(&mut chunk).unwrap();
+                if count == 0 {
+                    break;
+                }
+                request.extend_from_slice(&chunk[..count]);
+            }
+            stream
+                .write_all(
+                    b"HTTP/1.1 200 OK\r\nETag: \"7\"\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n",
+                )
+                .unwrap();
+            for part in body.chunks(MAX_RESPONSE_BYTES - 1) {
+                write!(stream, "{:X}\r\n", part.len()).unwrap();
+                stream.write_all(part).unwrap();
+                stream.write_all(b"\r\n").unwrap();
+            }
+            stream.write_all(b"0\r\n\r\n").unwrap();
+        });
+        let result = fetch_remote_preferences_with(
+            &Client::new(),
+            format!("http://{address}/v1/preferences/current"),
+            "test-session",
+        )
+        .await;
+        server.join().unwrap();
+        result
+    }
+
+    async fn put_with_response(
+        status: &'static str,
+        headers: String,
+        body: Vec<u8>,
+        value: &PreferenceSnapshot,
+        revision: u64,
+    ) -> (Result<RemoteWriteResult, String>, Vec<u8>) {
+        let (url, server) = mock_sync_server(status, headers, body);
+        let result =
+            put_remote_preferences_with(&Client::new(), url, "test-session", value, revision).await;
+        (result, server.join().unwrap())
+    }
+
+    async fn restore_history_with_response(
+        status: &'static str,
+        headers: String,
+        body: Vec<u8>,
+        current_revision: u64,
+    ) -> (Result<RemoteSnapshot, String>, Vec<u8>) {
+        let (url, server) = mock_sync_server(status, headers, body);
+        let url = url.replace(
+            "/v1/preferences/current",
+            "/v1/preferences/history/9/restore",
+        );
+        let result = restore_remote_preference_history_with(
+            &Client::new(),
+            url,
+            "test-session",
+            current_revision,
+        )
+        .await;
+        (result, server.join().unwrap())
+    }
+
+    #[test]
+    fn pending_state_crea_un_estado_o_preserva_la_linea_base_existente() {
+        let empty = pending_sync_state(None);
+        assert!(empty.pending);
+        assert!(empty.local_snapshot.is_none());
+        assert!(empty.cloud_snapshot.is_none());
+        assert!(empty.revision.is_none());
+
+        let existing = SyncState {
+            local_snapshot: Some(snapshot("ocean")),
+            cloud_snapshot: Some(snapshot("laurel")),
+            revision: Some(7),
+            pending: false,
+        };
+        let pending = pending_sync_state(Some(existing));
+        assert!(pending.pending);
+        assert_eq!(
+            pending.local_snapshot.unwrap().preferences.theme_id,
+            "ocean"
+        );
+        assert_eq!(
+            pending.cloud_snapshot.unwrap().preferences.theme_id,
+            "laurel"
+        );
+        assert_eq!(pending.revision, Some(7));
+    }
+
+    #[tokio::test]
+    async fn consulta_la_configuracion_remota_y_rechaza_respuestas_inconsistentes() {
+        let remote = RemoteSnapshot {
+            snapshot: Some(snapshot("laurel")),
+            revision: 7,
+        };
+        let (result, request) = fetch_with_response(
+            "200 OK",
+            "ETag: \"7\"\r\n".into(),
+            serde_json::to_vec(&remote).unwrap(),
+        )
+        .await;
+        assert_eq!(result.unwrap().revision, 7);
+        let request = String::from_utf8_lossy(&request).to_ascii_lowercase();
+        assert!(request.starts_with("get /v1/preferences/current http/1.1"));
+        assert!(request.contains("authorization: bearer test-session"));
+
+        let (result, _) = fetch_with_response("401 Unauthorized", String::new(), Vec::new()).await;
+        assert_error_contains(result, "Inicia sesión de nuevo");
+
+        let (result, _) =
+            fetch_with_response("503 Service Unavailable", String::new(), Vec::new()).await;
+        assert_error_contains(result, "no pudo leer");
+
+        let (result, _) = fetch_with_response(
+            "200 OK",
+            String::new(),
+            serde_json::to_vec(&remote).unwrap(),
+        )
+        .await;
+        assert_error_contains(result, "revisión válida");
+
+        let (result, _) = fetch_with_response(
+            "200 OK",
+            "ETag: \"8\"\r\n".into(),
+            serde_json::to_vec(&remote).unwrap(),
+        )
+        .await;
+        assert_error_contains(result, "no coincide");
+
+        let (result, _) =
+            fetch_with_response("200 OK", "ETag: \"7\"\r\n".into(), b"{".to_vec()).await;
+        assert_error_contains(result, "configuración inválida");
+
+        let mut invalid = snapshot("laurel");
+        invalid.preferences.theme_id = "tema-inexistente".into();
+        let invalid_remote = RemoteSnapshot {
+            snapshot: Some(invalid),
+            revision: 7,
+        };
+        let (result, _) = fetch_with_response(
+            "200 OK",
+            "ETag: \"7\"\r\n".into(),
+            serde_json::to_vec(&invalid_remote).unwrap(),
+        )
+        .await;
+        assert_error_contains(result, "no son válidas");
+
+        let (result, _) = fetch_with_response(
+            "200 OK",
+            "ETag: \"7\"\r\n".into(),
+            vec![b' '; MAX_RESPONSE_BYTES + 1],
+        )
+        .await;
+        assert_error_contains(result, "supera el límite");
+    }
+
+    #[tokio::test]
+    async fn consulta_historial_paginado_y_rechaza_respuestas_invalidas() {
+        assert!(preference_history_url(None).ends_with("?limit=25"));
+        assert!(preference_history_url(Some(8)).ends_with("?limit=25&before=8"));
+        let page = PreferenceHistoryPage {
+            entries: vec![PreferenceHistorySummary {
+                revision: 7,
+                created_at: "2026-11-25T12:00:00Z".into(),
+            }],
+            next_before: Some(7),
+        };
+        let (result, request) =
+            history_with_response("200 OK", String::new(), serde_json::to_vec(&page).unwrap())
+                .await;
+        let result = result.unwrap();
+        assert_eq!(result.entries[0].revision, 7);
+        assert_eq!(result.next_before, Some(7));
+        let request = String::from_utf8_lossy(&request).to_ascii_lowercase();
+        assert!(request.starts_with("get /v1/preferences/history?limit=25&before=8 http/1.1"));
+        assert!(request.contains("authorization: bearer test-session"));
+
+        let (result, _) =
+            history_with_response("401 Unauthorized", String::new(), Vec::new()).await;
+        assert_error_contains(result, "Inicia sesión de nuevo");
+        let (result, _) =
+            history_with_response("503 Service Unavailable", String::new(), Vec::new()).await;
+        assert_error_contains(result, "no pudo leer el historial");
+        let (result, _) = history_with_response("200 OK", String::new(), b"{".to_vec()).await;
+        assert_error_contains(result, "historial inválido");
+        let (result, _) =
+            history_with_response("200 OK", String::new(), vec![b' '; MAX_RESPONSE_BYTES + 1])
+                .await;
+        assert_error_contains(result, "supera el límite");
+    }
+
+    #[tokio::test]
+    async fn elimina_versiones_de_historial_con_respuestas_controladas() {
+        let (result, request) =
+            delete_history_with_response("204 No Content", String::new(), Vec::new()).await;
+        assert!(result.is_ok());
+        let request = String::from_utf8_lossy(&request).to_ascii_lowercase();
+        assert!(request.starts_with("delete /v1/preferences/history/8 http/1.1"));
+        assert!(request.contains("authorization: bearer test-session"));
+
+        let (result, _) =
+            delete_history_with_response("401 Unauthorized", String::new(), Vec::new()).await;
+        assert_error_contains(result, "Inicia sesión de nuevo");
+        let (result, _) =
+            delete_history_with_response("404 Not Found", String::new(), Vec::new()).await;
+        assert_error_contains(result, "ya no está disponible");
+        let (result, _) =
+            delete_history_with_response("503 Service Unavailable", String::new(), Vec::new())
+                .await;
+        assert_error_contains(result, "no pudo eliminar");
+    }
+
+    #[tokio::test]
+    async fn restaura_historial_con_revision_condicional_y_valida_la_respuesta() {
+        let restored = RemoteSnapshot {
+            snapshot: Some(snapshot("laurel")),
+            revision: 10,
+        };
+        let (result, request) = restore_history_with_response(
+            "200 OK",
+            "ETag: \"10\"\r\n".into(),
+            serde_json::to_vec(&restored).unwrap(),
+            8,
+        )
+        .await;
+        assert_eq!(result.unwrap().revision, 10);
+        let request = String::from_utf8_lossy(&request).to_ascii_lowercase();
+        assert!(request.starts_with("post /v1/preferences/history/9/restore http/1.1"));
+        assert!(request.contains("authorization: bearer test-session"));
+        assert!(request.contains("if-match: \"8\""));
+        assert!(request.contains("idempotency-key:"));
+
+        for (status, expected) in [
+            (
+                "412 Precondition Failed",
+                "La nube cambió desde que cargaste el historial",
+            ),
+            ("401 Unauthorized", "Inicia sesión de nuevo"),
+            ("503 Service Unavailable", "no pudo restaurar"),
+        ] {
+            let (result, _) =
+                restore_history_with_response(status, String::new(), Vec::new(), 8).await;
+            assert_error_contains(result, expected);
+        }
+
+        let (result, _) = restore_history_with_response(
+            "200 OK",
+            "ETag: \"11\"\r\n".into(),
+            serde_json::to_vec(&restored).unwrap(),
+            8,
+        )
+        .await;
+        assert_error_contains(result, "revisión restaurada no coincide");
+
+        let empty = RemoteSnapshot {
+            snapshot: None,
+            revision: 10,
+        };
+        let (result, _) = restore_history_with_response(
+            "200 OK",
+            "ETag: \"10\"\r\n".into(),
+            serde_json::to_vec(&empty).unwrap(),
+            8,
+        )
+        .await;
+        assert_error_contains(result, "versión restaurada está vacía");
+
+        let (result, _) =
+            restore_history_with_response("200 OK", "ETag: \"10\"\r\n".into(), b"{".to_vec(), 8)
+                .await;
+        assert_error_contains(result, "configuración inválida");
+    }
+
+    #[tokio::test]
+    async fn limita_el_cuerpo_chunked_aunque_no_anuncie_content_length() {
+        let result = fetch_chunked_body(vec![b'x'; MAX_RESPONSE_BYTES + 1]).await;
+        assert_error_contains(result, "supera el límite");
+    }
+
+    #[tokio::test]
+    async fn rechaza_un_cuerpo_http_truncado_sin_intentar_parsearlo() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(3)))
+                .unwrap();
+            let mut request = Vec::new();
+            let mut chunk = [0; 1024];
+            while !request.windows(4).any(|part| part == b"\r\n\r\n") {
+                let count = stream.read(&mut chunk).unwrap();
+                if count == 0 {
+                    break;
+                }
+                request.extend_from_slice(&chunk[..count]);
+            }
+            stream
+                .write_all(
+                    b"HTTP/1.1 200 OK\r\nETag: \"1\"\r\nContent-Length: 100\r\nConnection: close\r\n\r\n{}",
+                )
+                .unwrap();
+        });
+
+        let result = fetch_remote_preferences_with(
+            &Client::new(),
+            format!("http://{address}/v1/preferences/current"),
+            "test-session",
+        )
+        .await;
+        server.join().unwrap();
+
+        assert_error_contains(result, "No se pudo leer la respuesta de sincronización");
+    }
+
+    #[tokio::test]
+    async fn escribe_preferencias_con_revision_idempotencia_y_conflictos_controlados() {
+        let value = snapshot("laurel");
+        let saved = RemoteSnapshot {
+            snapshot: Some(value.clone()),
+            revision: 8,
+        };
+        let (result, request) = put_with_response(
+            "200 OK",
+            "ETag: \"8\"\r\n".into(),
+            serde_json::to_vec(&saved).unwrap(),
+            &value,
+            7,
+        )
+        .await;
+        assert!(matches!(
+            result.unwrap(),
+            RemoteWriteResult::Saved { revision: 8 }
+        ));
+        let request = String::from_utf8_lossy(&request).to_ascii_lowercase();
+        assert!(request.starts_with("put /v1/preferences/current http/1.1"));
+        assert!(request.contains("authorization: bearer test-session"));
+        assert!(request.contains("if-match: \"7\""));
+        assert!(request.contains("idempotency-key:"));
+        assert!(request.contains("content-type: application/json"));
+        assert!(request.contains("\"themeid\":\"laurel\""));
+
+        let (result, _) = put_with_response(
+            "412 Precondition Failed",
+            String::new(),
+            Vec::new(),
+            &value,
+            7,
+        )
+        .await;
+        assert!(matches!(result.unwrap(), RemoteWriteResult::Conflict));
+
+        for (status, expected) in [
+            ("401 Unauthorized", "Inicia sesión de nuevo"),
+            ("409 Conflict", "clave de idempotencia"),
+            ("503 Service Unavailable", "no pudo guardar"),
+        ] {
+            let (result, _) = put_with_response(status, String::new(), Vec::new(), &value, 7).await;
+            assert_error_contains(result, expected);
+        }
+
+        let (result, _) = put_with_response(
+            "400 Bad Request",
+            String::new(),
+            br#"{"error":"invalid_snapshot"}"#.to_vec(),
+            &value,
+            7,
+        )
+        .await;
+        assert_error_contains(result, "no admite el formato");
+
+        let (result, _) = put_with_response(
+            "400 Bad Request",
+            String::new(),
+            br#"{"error":"invalid_idempotency_key"}"#.to_vec(),
+            &value,
+            7,
+        )
+        .await;
+        assert_error_contains(result, "no pudo guardar");
+
+        let (result, _) = put_with_response(
+            "200 OK",
+            String::new(),
+            serde_json::to_vec(&saved).unwrap(),
+            &value,
+            7,
+        )
+        .await;
+        assert_error_contains(result, "revisión válida");
+
+        let (result, _) = put_with_response(
+            "200 OK",
+            "ETag: \"9\"\r\n".into(),
+            serde_json::to_vec(&saved).unwrap(),
+            &value,
+            7,
+        )
+        .await;
+        assert_error_contains(result, "no coincide");
+
+        let mismatched = RemoteSnapshot {
+            snapshot: Some(snapshot("ocean")),
+            revision: 8,
+        };
+        let (result, _) = put_with_response(
+            "200 OK",
+            "ETag: \"8\"\r\n".into(),
+            serde_json::to_vec(&mismatched).unwrap(),
+            &value,
+            7,
+        )
+        .await;
+        assert_error_contains(result, "no coincide");
+
+        let (result, _) =
+            put_with_response("200 OK", "ETag: \"8\"\r\n".into(), b"{".to_vec(), &value, 7).await;
+        assert_error_contains(result, "confirmación inválida");
+    }
+
+    #[test]
+    fn identifica_solo_el_rechazo_v1_de_snapshot_v2() {
+        let unsupported = br#"{"error":"invalid_snapshot"}"#;
+        assert!(indicates_unsupported_snapshot(
+            reqwest::StatusCode::BAD_REQUEST,
+            unsupported
+        ));
+        assert!(!indicates_unsupported_snapshot(
+            reqwest::StatusCode::BAD_REQUEST,
+            br#"{"error":"invalid_idempotency_key"}"#
+        ));
+        assert!(!indicates_unsupported_snapshot(
+            reqwest::StatusCode::BAD_REQUEST,
+            br#"{"error":"invalid_snapshot","detail":"unexpected"}"#
+        ));
+        assert!(!indicates_unsupported_snapshot(
+            reqwest::StatusCode::BAD_REQUEST,
+            b"not-json"
+        ));
+        assert!(!indicates_unsupported_snapshot(
+            reqwest::StatusCode::UNPROCESSABLE_ENTITY,
+            unsupported
+        ));
     }
 
     #[test]
@@ -748,12 +1411,51 @@ mod tests {
     }
 
     #[test]
+    fn conserva_endpoint_local_y_no_inventa_uno_ausente_en_cloud() {
+        let provider = |id: &str, endpoint| crate::preferences::snapshot::SnapshotProvider {
+            id: id.into(),
+            kind: "custom".into(),
+            name: "Servidor".into(),
+            model: "modelo".into(),
+            custom_endpoint: endpoint,
+        };
+        let local_endpoint = "https://local.example/v1";
+        let mut local = snapshot("ocean");
+        local
+            .providers
+            .push(provider("perfil-local", Some(local_endpoint.to_string())));
+        local.providers.push(provider("perfil-sin-cloud", None));
+
+        let mut cloud = snapshot("laurel");
+        cloud.providers.push(provider(
+            "perfil-local",
+            Some("https://cloud.example/v1".into()),
+        ));
+        cloud.providers.push(provider("perfil-sin-cloud", None));
+
+        let outgoing = preserve_unshared_endpoints(&local, &Some(cloud), None).unwrap();
+        assert_eq!(
+            outgoing.providers[0].custom_endpoint.as_deref(),
+            Some(local_endpoint)
+        );
+        assert_eq!(outgoing.providers[1].custom_endpoint, None);
+
+        let without_cloud = preserve_unshared_endpoints(&local, &None, None).unwrap();
+        assert_eq!(without_cloud, local);
+    }
+
+    #[test]
     fn valida_etag_y_acepta_revision_cero_o_positiva() {
         assert_eq!(parse_etag_revision("\"0\""), Some(0));
         assert_eq!(parse_etag_revision("\"42\""), Some(42));
+        assert_eq!(
+            parse_etag_revision(&format!("\"{}\"", u64::MAX)),
+            Some(u64::MAX)
+        );
         for value in ["0", "\"\"", "\"01\"", "\"-1\"", "\"1\"x", "\"x\""] {
             assert_eq!(parse_etag_revision(value), None, "{value}");
         }
+        assert_eq!(parse_etag_revision("\"18446744073709551616\""), None);
     }
 
     #[test]
@@ -802,6 +1504,30 @@ mod tests {
             .theme_id = "desconocido".into();
         let bytes = serde_json::to_vec(&invalid_snapshot).unwrap();
         assert!(parse_sync_state(&bytes).is_err());
+    }
+
+    #[test]
+    fn rechaza_estado_con_revision_incoherente_o_campos_desconocidos() {
+        let mut without_revision = state(3, snapshot("laurel"));
+        without_revision.revision = None;
+        assert!(validate_sync_state(without_revision).is_err());
+
+        let without_snapshots = SyncState {
+            local_snapshot: None,
+            cloud_snapshot: None,
+            revision: Some(3),
+            pending: true,
+        };
+        assert!(validate_sync_state(without_snapshots).is_err());
+
+        let with_unknown_field = serde_json::json!({
+            "localSnapshot": null,
+            "cloudSnapshot": null,
+            "revision": null,
+            "pending": true,
+            "apiKey": "no-debe-persistirse"
+        });
+        assert!(parse_sync_state(&serde_json::to_vec(&with_unknown_field).unwrap()).is_err());
     }
 
     #[test]

@@ -22,7 +22,7 @@ function reportWithCoverage(coverageByName, metric = "lines") {
 }
 
 test("acepta cada módulo crítico en el umbral", () => {
-  const report = reportWithCoverage(Object.fromEntries(CRITICAL_RUST_LINE_FILES.map((name) => [name, MINIMUM_LINE_COVERAGE])));
+  const report = reportWithCoverage(Object.fromEntries(CRITICAL_RUST_LINE_FILES.map((name) => [name, ["terminal_flow.rs", "terminal_prediction.rs"].includes(name) ? 100 : MINIMUM_LINE_COVERAGE])));
 
   assert.deepEqual(checkCriticalCoverage(report), []);
 });
@@ -35,8 +35,11 @@ test("exige los módulos de transporte y control de flujo PTY en el informe de l
   });
 
   assert.deepEqual(checkCriticalCoverage(report), [
-    "terminal_output.rs: se esperaba un archivo en el informe y se encontraron 0",
+    "chat_stream.rs: se esperaba un archivo en el informe y se encontraron 0",
+    "preferences/snapshot.rs: se esperaba un archivo en el informe y se encontraron 0",
     "terminal_flow.rs: se esperaba un archivo en el informe y se encontraron 0",
+    "terminal_prediction.rs: se esperaba un archivo en el informe y se encontraron 0",
+    "terminal_output.rs: se esperaba un archivo en el informe y se encontraron 0",
   ]);
 });
 
@@ -47,9 +50,12 @@ test("falla si falta un módulo crítico", () => {
   });
 
   assert.deepEqual(checkCriticalCoverage(report), [
+    "chat_stream.rs: se esperaba un archivo en el informe y se encontraron 0",
     "git_panel.rs: se esperaba un archivo en el informe y se encontraron 0",
-    "terminal_output.rs: se esperaba un archivo en el informe y se encontraron 0",
+    "preferences/snapshot.rs: se esperaba un archivo en el informe y se encontraron 0",
     "terminal_flow.rs: se esperaba un archivo en el informe y se encontraron 0",
+    "terminal_prediction.rs: se esperaba un archivo en el informe y se encontraron 0",
+    "terminal_output.rs: se esperaba un archivo en el informe y se encontraron 0",
   ]);
 });
 
@@ -58,13 +64,45 @@ test("falla si la cobertura queda por debajo del mínimo", () => {
     "agent_files.rs": 91.55,
     "configuration_transfer.rs": 84.99,
     "git_panel.rs": 87.94,
+    "terminal_prediction.rs": 100,
   });
 
   assert.deepEqual(checkCriticalCoverage(report), [
+    "chat_stream.rs: se esperaba un archivo en el informe y se encontraron 0",
     "configuration_transfer.rs: 84.99 % es inferior al mínimo de 85 % de líneas",
-    "terminal_output.rs: se esperaba un archivo en el informe y se encontraron 0",
+    "preferences/snapshot.rs: se esperaba un archivo en el informe y se encontraron 0",
     "terminal_flow.rs: se esperaba un archivo en el informe y se encontraron 0",
+    "terminal_output.rs: se esperaba un archivo en el informe y se encontraron 0",
   ]);
+});
+
+test("exige 100 % de líneas y ramas en la configuración de predicción PowerShell", () => {
+  for (const [metric, files, minimum] of [
+    ["lines", CRITICAL_RUST_LINE_FILES, MINIMUM_LINE_COVERAGE],
+    ["branches", CRITICAL_RUST_BRANCH_FILES, MINIMUM_BRANCH_COVERAGE],
+  ]) {
+    const coverageByName = Object.fromEntries(files.map((name) => [name, name === "terminal_flow.rs" ? 100 : name === "terminal_prediction.rs" ? 99.99 : minimum]));
+    const expectedLabel = metric === "lines" ? "líneas" : "ramas";
+    assert.deepEqual(checkCriticalCoverage(reportWithCoverage(coverageByName, metric), metric), [
+      `terminal_prediction.rs: 99.99 % es inferior al mínimo de 100 % de ${expectedLabel}`,
+    ]);
+  }
+});
+
+test("exige 100 % de líneas y ramas en el control crítico de flujo PTY", () => {
+  for (const [metric, files, minimum] of [
+    ["lines", CRITICAL_RUST_LINE_FILES, MINIMUM_LINE_COVERAGE],
+    ["branches", CRITICAL_RUST_BRANCH_FILES, MINIMUM_BRANCH_COVERAGE],
+  ]) {
+    const coverageByName = Object.fromEntries(files.map((name) => [
+      name,
+      name === "terminal_flow.rs" ? 99.99 : name === "terminal_prediction.rs" ? 100 : minimum,
+    ]));
+    const expectedLabel = metric === "lines" ? "líneas" : "ramas";
+    assert.deepEqual(checkCriticalCoverage(reportWithCoverage(coverageByName, metric), metric), [
+      `terminal_flow.rs: 99.99 % es inferior al mínimo de 100 % de ${expectedLabel}`,
+    ]);
+  }
 });
 
 test("falla con porcentajes inválidos o archivos ambiguos", () => {
@@ -72,6 +110,7 @@ test("falla con porcentajes inválidos o archivos ambiguos", () => {
     "agent_files.rs": 91.55,
     "configuration_transfer.rs": Number.NaN,
     "git_panel.rs": 101,
+    "terminal_prediction.rs": 100,
   });
   report.data[0].files.push({
     filename: "D:/copy/src-tauri/src/agent_files.rs",
@@ -80,16 +119,18 @@ test("falla con porcentajes inválidos o archivos ambiguos", () => {
 
   assert.deepEqual(checkCriticalCoverage(report), [
     "agent_files.rs: se esperaba un archivo en el informe y se encontraron 2",
+    "chat_stream.rs: se esperaba un archivo en el informe y se encontraron 0",
     "configuration_transfer.rs: el informe no contiene una cobertura de líneas válida",
     "git_panel.rs: el informe no contiene una cobertura de líneas válida",
-    "terminal_output.rs: se esperaba un archivo en el informe y se encontraron 0",
+    "preferences/snapshot.rs: se esperaba un archivo en el informe y se encontraron 0",
     "terminal_flow.rs: se esperaba un archivo en el informe y se encontraron 0",
+    "terminal_output.rs: se esperaba un archivo en el informe y se encontraron 0",
   ]);
 });
 
 test("acepta cada módulo crítico en el umbral de ramas", () => {
   const report = reportWithCoverage(
-    Object.fromEntries(CRITICAL_RUST_BRANCH_FILES.map((name) => [name, MINIMUM_BRANCH_COVERAGE])),
+    Object.fromEntries(CRITICAL_RUST_BRANCH_FILES.map((name) => [name, ["terminal_flow.rs", "terminal_prediction.rs"].includes(name) ? 100 : MINIMUM_BRANCH_COVERAGE])),
     "branches",
   );
 
@@ -101,14 +142,18 @@ test("falla si faltan ramas, hay datos inválidos o se baja del mínimo", () => 
     {
       "agent_files.rs": MINIMUM_BRANCH_COVERAGE - 0.01,
       "configuration_transfer.rs": Number.NaN,
+      "terminal_prediction.rs": 100,
     },
     "branches",
   );
 
   assert.deepEqual(checkCriticalCoverage(report, "branches"), [
     `agent_files.rs: ${(MINIMUM_BRANCH_COVERAGE - 0.01).toFixed(2)} % es inferior al mínimo de ${MINIMUM_BRANCH_COVERAGE} % de ramas`,
+    "chat_stream.rs: se esperaba un archivo en el informe y se encontraron 0",
     "configuration_transfer.rs: el informe no contiene una cobertura de ramas válida",
     "git_panel.rs: se esperaba un archivo en el informe y se encontraron 0",
+    "preferences/snapshot.rs: se esperaba un archivo en el informe y se encontraron 0",
+    "terminal_flow.rs: se esperaba un archivo en el informe y se encontraron 0",
   ]);
 });
 

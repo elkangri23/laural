@@ -1,7 +1,7 @@
 {
   "name": "laural",
   "private": true,
-  "version": "0.1.0-alpha.17",
+  "version": "0.1.0-alpha.18",
   "description": "Terminal de escritorio con IA local y agentes configurables",
   "license": "MIT",
   "type": "module",
@@ -11,7 +11,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "test": "vitest run --coverage",
-    "test:coverage-policy": "node --test scripts/check-critical-rust-coverage.test.mjs",
+    "test:coverage-policy": "node --test scripts/check-critical-rust-coverage.test.mjs scripts/check-critical-ui-coverage.test.mjs && node scripts/check-critical-ui-coverage.mjs coverage/lcov.info",
     "test:bundle-budget": "node --test scripts/check-bundle-size.test.mjs",
     "test:rust": "cargo llvm-cov --manifest-path src-tauri/Cargo.toml --lib --html",
     "test:coverage": "npm test && npm run test:coverage-policy && npm run test:bundle-budget && npm run test:rust"

@@ -20,6 +20,7 @@ mod providers;
 mod sync;
 mod terminal_flow;
 mod terminal_output;
+mod terminal_prediction;
 
 use terminal_flow::TerminalOutputFlow;
 use terminal_output::TerminalOutput;
@@ -101,14 +102,17 @@ fn git_bash_path() -> Option<PathBuf> {
 const BASH_PROMPT_COMMAND: &str =
     r#"__laural_status=$?; printf '\033]133;D;%s\007' "$__laural_status""#;
 
-fn shell_command(shell: &str) -> Result<CommandBuilder, String> {
+fn shell_command(
+    shell: &str,
+    power_shell_prediction_enabled: bool,
+) -> Result<CommandBuilder, String> {
     match shell {
         "powershell" => {
             let mut command = CommandBuilder::new("powershell.exe");
             command.arg("-NoLogo");
             command.arg("-NoExit");
             command.arg("-Command");
-            command.arg(r#"
+            let startup = r#"
                 $global:__lauralLastHistoryId = $null
                 $global:__lauralOriginalPrompt = $function:prompt
                 function global:prompt {
@@ -127,7 +131,12 @@ fn shell_command(shell: &str) -> Result<CommandBuilder, String> {
                     $global:__lauralLastHistoryId = if ($last) { $last.Id } else { 0 }
                     return $out
                 }
-            "#);
+            "#;
+            command.arg(terminal_prediction::startup_command(
+                shell,
+                power_shell_prediction_enabled,
+                startup,
+            ));
             Ok(command)
         }
         "cmd" => {
@@ -179,6 +188,7 @@ fn create_terminal(
     cwd: Option<String>,
     rows: u16,
     cols: u16,
+    power_shell_prediction_enabled: bool,
 ) -> Result<(), String> {
     if !valid_terminal_id(&terminal_id) {
         return Err("El identificador de la terminal no es válido.".to_string());
@@ -198,7 +208,7 @@ fn create_terminal(
         return Err("Has alcanzado el límite de 16 terminales abiertas.".into());
     }
 
-    let mut command = shell_command(&shell)?;
+    let mut command = shell_command(&shell, power_shell_prediction_enabled)?;
     if let Some(cwd) = cwd {
         let path = Path::new(&cwd);
         if !path.is_dir() {
@@ -685,7 +695,7 @@ mod terminal_tests {
         let mut writer = pair.master.take_writer().unwrap();
         let child = pair
             .slave
-            .spawn_command(shell_command("cmd").unwrap())
+            .spawn_command(shell_command("cmd", false).unwrap())
             .unwrap();
         drop(pair.slave);
         let (sent, received) = mpsc::channel();
@@ -785,7 +795,7 @@ mod terminal_tests {
             let mut reader = pair.master.try_clone_reader().unwrap();
             let child = pair
                 .slave
-                .spawn_command(shell_command("cmd").unwrap())
+                .spawn_command(shell_command("cmd", false).unwrap())
                 .unwrap();
             drop(pair.slave);
             writers.push(pair.master.take_writer().unwrap());
@@ -1029,7 +1039,7 @@ mod terminal_tests {
             let mut writer = pair.master.take_writer().unwrap();
             let mut child = pair
                 .slave
-                .spawn_command(shell_command(shell).unwrap())
+                .spawn_command(shell_command(shell, false).unwrap())
                 .unwrap();
             drop(pair.slave);
             let (sent, received) = mpsc::channel();

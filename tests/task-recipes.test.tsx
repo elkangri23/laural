@@ -1,13 +1,73 @@
 // @vitest-environment jsdom
-import { act, useState } from "react";
+import { act, useState, type ReactNode } from "react";
+import { LanguageProvider } from "../src/i18n";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { TaskRecipes } from "../src/components/TaskRecipes";
 
 let root: Root | undefined;
 let host: HTMLDivElement;
+
+function renderWithLanguage(children: ReactNode, language: "es" | "en" = "es") {
+  localStorage.setItem("laural.language.v1", language);
+  return root!.render(<LanguageProvider>{children}</LanguageProvider>);
+}
 const onClose = vi.fn();
 const onUse = vi.fn();
+
+test("localiza controles de recetas sin traducir contenido guardado", async () => {
+  localStorage.setItem("laural.task-recipes.v1", JSON.stringify({ version: 1, recipes: [{ id: "local", name: "Mi receta", objective: "Texto original", steps: ["Paso original"] }] }));
+  await act(async () => renderWithLanguage(<TaskRecipes onClose={onClose} onUse={onUse} />, "en"));
+
+  expect(host.querySelector("h2")?.textContent).toBe("Task recipes");
+  expect(host.textContent).toContain("Review required");
+  expect(host.textContent).toContain("Mi receta");
+  expect(host.textContent).toContain("Texto original");
+  expect(host.textContent).toContain("Paso original");
+});
+
+test("localiza las plantillas iniciales y prepara el prompt en inglés", async () => {
+  await act(async () => renderWithLanguage(<TaskRecipes onClose={onClose} onUse={onUse} />, "en"));
+
+  expect(host.textContent).toContain("Review a project");
+  expect(host.textContent).toContain("Review the project and report concrete issues");
+  expect(host.textContent).toContain("Identify the main structure and technologies.");
+  await act(async () => button("Use recipe").click());
+
+  expect(onUse.mock.calls[0][0]).toContain("Objective: Review the project and report concrete issues");
+  expect(onUse.mock.calls[0][0]).toContain("Steps to consider:");
+  expect(onUse.mock.calls[0][0]).toContain("Do not modify files or run operations with side effects without approval.");
+});
+
+test("traduce una plantilla predeterminada persistida sin reemplazar recetas editadas", async () => {
+  const defaults = [
+    { id: "review-project", name: "Revisar un proyecto", objective: "Revisa el proyecto y señala problemas concretos con impacto y ubicación.", steps: ["Identifica la estructura y tecnologías principales.", "Busca errores, riesgos de seguridad y deuda técnica relevante.", "Resume hallazgos con referencias y propone cambios pequeños."] },
+    { id: "custom", name: "Mi receta", objective: "Objetivo escrito por mí", steps: ["Paso escrito por mí"] },
+  ];
+  localStorage.setItem("laural.task-recipes.v1", JSON.stringify({ version: 1, recipes: defaults }));
+
+  await act(async () => renderWithLanguage(<TaskRecipes onClose={onClose} onUse={onUse} />, "en"));
+
+  expect(host.textContent).toContain("Review a project");
+  expect(host.textContent).toContain("Mi receta");
+  await act(async () => button("Mi receta").click());
+  expect(host.textContent).toContain("Objetivo escrito por mí");
+  expect(host.textContent).toContain("Paso escrito por mí");
+  const persisted = JSON.parse(localStorage.getItem("laural.task-recipes.v1") ?? "{}");
+  expect(persisted.recipes).toEqual(defaults);
+});
+
+test("conserva el texto modificado de una receta predeterminada en su idioma original", async () => {
+  localStorage.setItem("laural.task-recipes.v1", JSON.stringify({ version: 1, recipes: [
+    { id: "review-project", name: "Revisar un proyecto", objective: "Mi objetivo editado", steps: ["Mi paso editado"] },
+  ] }));
+
+  await act(async () => renderWithLanguage(<TaskRecipes onClose={onClose} onUse={onUse} />, "en"));
+
+  expect(host.textContent).toContain("Revisar un proyecto");
+  expect(host.textContent).toContain("Mi objetivo editado");
+  expect(host.textContent).toContain("Mi paso editado");
+});
 
 function button(text: string): HTMLButtonElement {
   const result = [...host.querySelectorAll("button")].find((item) => item.textContent?.includes(text));
@@ -44,7 +104,7 @@ afterEach(async () => {
 });
 
 test("previsualiza una receta y prepara un prompt sin ejecutarlo", async () => {
-  await act(async () => root!.render(<TaskRecipes onClose={onClose} onUse={onUse} />));
+  await act(async () => renderWithLanguage(<TaskRecipes onClose={onClose} onUse={onUse} />));
   expect(host.textContent).toContain("Revisar un proyecto");
   await act(async () => button("Usar receta").click());
   expect(onUse).toHaveBeenCalledOnce();
@@ -54,7 +114,7 @@ test("previsualiza una receta y prepara un prompt sin ejecutarlo", async () => {
 });
 
 test("crea recetas locales y las conserva en el almacenamiento del equipo", async () => {
-  await act(async () => root!.render(<TaskRecipes onClose={onClose} onUse={onUse} />));
+  await act(async () => renderWithLanguage(<TaskRecipes onClose={onClose} onUse={onUse} />));
   await act(async () => button("Crear receta").click());
   const fields = host.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(".recipe-editor input, .recipe-editor textarea");
   await setValue(fields[0], "Revisión de dependencias");
@@ -69,7 +129,7 @@ test("crea recetas locales y las conserva en el almacenamiento del equipo", asyn
 });
 
 test("conserva una receta creada al cerrar y volver a abrir el panel", async () => {
-  await act(async () => root!.render(<TaskRecipes onClose={onClose} onUse={onUse} />));
+  await act(async () => renderWithLanguage(<TaskRecipes onClose={onClose} onUse={onUse} />));
   await act(async () => button("Crear receta").click());
   const fields = host.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(".recipe-editor input, .recipe-editor textarea");
   await setValue(fields[0], "Verificar licencias");
@@ -79,7 +139,7 @@ test("conserva una receta creada al cerrar y volver a abrir el panel", async () 
   await act(async () => root!.unmount());
   root = createRoot(host);
 
-  await act(async () => root!.render(<TaskRecipes onClose={onClose} onUse={onUse} />));
+  await act(async () => renderWithLanguage(<TaskRecipes onClose={onClose} onUse={onUse} />));
   await act(async () => button("Verificar licencias").click());
   expect(host.querySelector(".recipe-preview h3")?.textContent).toBe("Verificar licencias");
   expect(host.querySelector(".recipe-preview")?.textContent).toContain("Resume las licencias encontradas.");
@@ -87,13 +147,13 @@ test("conserva una receta creada al cerrar y volver a abrir el panel", async () 
 
 test("descarta entradas inválidas guardadas y limita el contenido a texto", async () => {
   localStorage.setItem("laural.task-recipes.v1", JSON.stringify({ version: 1, recipes: [{ id: "x", name: "", objective: "", steps: [] }] }));
-  await act(async () => root!.render(<TaskRecipes onClose={onClose} onUse={onUse} />));
+  await act(async () => renderWithLanguage(<TaskRecipes onClose={onClose} onUse={onUse} />));
   expect(host.textContent).toContain("Revisar un proyecto");
   expect(host.querySelector("script")).toBeNull();
 });
 
 test("valida la receta antes de guardarla", async () => {
-  await act(async () => root!.render(<TaskRecipes onClose={onClose} onUse={onUse} />));
+  await act(async () => renderWithLanguage(<TaskRecipes onClose={onClose} onUse={onUse} />));
   await act(async () => button("Crear receta").click());
   await act(async () => button("Guardar receta").click());
   expect(host.querySelector('[role="alert"]')?.textContent).toContain("Completa nombre, objetivo");
@@ -101,7 +161,7 @@ test("valida la receta antes de guardarla", async () => {
 });
 
 test("anuncia la receta seleccionada y los límites de edición", async () => {
-  await act(async () => root!.render(<TaskRecipes onClose={onClose} onUse={onUse} />));
+  await act(async () => renderWithLanguage(<TaskRecipes onClose={onClose} onUse={onUse} />));
   const recipes = host.querySelectorAll<HTMLButtonElement>(".recipes-list button:not(.recipes-add)");
   expect(recipes[0].getAttribute("aria-pressed")).toBe("true");
   expect(recipes[1].getAttribute("aria-pressed")).toBe("false");
@@ -120,7 +180,7 @@ test("anuncia la receta seleccionada y los límites de edición", async () => {
 });
 
 test("acepta todos los límites máximos documentados", async () => {
-  await act(async () => root!.render(<TaskRecipes onClose={onClose} onUse={onUse} />));
+  await act(async () => renderWithLanguage(<TaskRecipes onClose={onClose} onUse={onUse} />));
   await act(async () => button("Crear receta").click());
   const fields = host.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(".recipe-editor input, .recipe-editor textarea");
   const steps = Array.from({ length: 12 }, () => "p".repeat(240)).join("\n");
@@ -138,7 +198,7 @@ test("acepta todos los límites máximos documentados", async () => {
 });
 
 test("rechaza pasos que superan el límite de caracteres", async () => {
-  await act(async () => root!.render(<TaskRecipes onClose={onClose} onUse={onUse} />));
+  await act(async () => renderWithLanguage(<TaskRecipes onClose={onClose} onUse={onUse} />));
   await act(async () => button("Crear receta").click());
   const fields = host.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(".recipe-editor input, .recipe-editor textarea");
   await setValue(fields[0], "Paso demasiado largo");
@@ -150,7 +210,7 @@ test("rechaza pasos que superan el límite de caracteres", async () => {
 });
 
 test("conserva pasos pegados por encima del límite y no guarda hasta corregirlos", async () => {
-  await act(async () => root!.render(<TaskRecipes onClose={onClose} onUse={onUse} />));
+  await act(async () => renderWithLanguage(<TaskRecipes onClose={onClose} onUse={onUse} />));
   await act(async () => button("Crear receta").click());
   const fields = host.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(".recipe-editor input, .recipe-editor textarea");
   await setValue(fields[0], "Receta con pasos pegados");
@@ -170,7 +230,7 @@ test("conserva pasos pegados por encima del límite y no guarda hasta corregirlo
 });
 
 test("conserva campos pegados por encima de sus límites y bloquea el guardado", async () => {
-  await act(async () => root!.render(<TaskRecipes onClose={onClose} onUse={onUse} />));
+  await act(async () => renderWithLanguage(<TaskRecipes onClose={onClose} onUse={onUse} />));
   await act(async () => button("Crear receta").click());
   const fields = host.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(".recipe-editor input, .recipe-editor textarea");
   const longName = "n".repeat(61);
@@ -198,7 +258,7 @@ test("conserva campos pegados por encima de sus límites y bloquea el guardado",
 });
 
 test("edita y elimina una receta con confirmación", async () => {
-  await act(async () => root!.render(<TaskRecipes onClose={onClose} onUse={onUse} />));
+  await act(async () => renderWithLanguage(<TaskRecipes onClose={onClose} onUse={onUse} />));
   await act(async () => button("Editar").click());
   const fields = host.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(".recipe-editor input, .recipe-editor textarea");
   await setValue(fields[0], "Revisión de proyecto actualizada");
@@ -220,7 +280,7 @@ test("devuelve el foco a crear receta al eliminar la última receta", async () =
     version: 1,
     recipes: [{ id: "only", name: "Única", objective: "Objetivo.", steps: ["Paso."] }],
   }));
-  await act(async () => root!.render(<TaskRecipes onClose={onClose} onUse={onUse} />));
+  await act(async () => renderWithLanguage(<TaskRecipes onClose={onClose} onUse={onUse} />));
   await act(async () => button("Eliminar").click());
   expect(host.textContent).toContain("No hay recetas guardadas");
   expect(document.activeElement).toBe(button("Crear receta"));
@@ -228,17 +288,17 @@ test("devuelve el foco a crear receta al eliminar la última receta", async () =
 
 test("restaura las recetas iniciales ante JSON corrupto o demasiado grande", async () => {
   localStorage.setItem("laural.task-recipes.v1", "{");
-  await act(async () => root!.render(<TaskRecipes onClose={onClose} onUse={onUse} />));
+  await act(async () => renderWithLanguage(<TaskRecipes onClose={onClose} onUse={onUse} />));
   expect(host.textContent).toContain("Revisar un proyecto");
   await act(async () => root!.unmount());
   root = createRoot(host);
   localStorage.setItem("laural.task-recipes.v1", "x".repeat(256_001));
-  await act(async () => root!.render(<TaskRecipes onClose={onClose} onUse={onUse} />));
+  await act(async () => renderWithLanguage(<TaskRecipes onClose={onClose} onUse={onUse} />));
   expect(host.textContent).toContain("Revisar un proyecto");
 });
 
 test("avisa si no puede guardar cambios en el almacenamiento local", async () => {
-  await act(async () => root!.render(<TaskRecipes onClose={onClose} onUse={onUse} />));
+  await act(async () => renderWithLanguage(<TaskRecipes onClose={onClose} onUse={onUse} />));
   await act(async () => button("Crear receta").click());
   const fields = host.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(".recipe-editor input, .recipe-editor textarea");
   await setValue(fields[0], "Receta temporal");
@@ -252,7 +312,7 @@ test("avisa si no puede guardar cambios en el almacenamiento local", async () =>
 test("no supera el límite de treinta recetas", async () => {
   const recipes = Array.from({ length: 30 }, (_, index) => ({ id: `recipe-${index}`, name: `Receta ${index}`, objective: "Objetivo.", steps: ["Paso."] }));
   localStorage.setItem("laural.task-recipes.v1", JSON.stringify({ version: 1, recipes }));
-  await act(async () => root!.render(<TaskRecipes onClose={onClose} onUse={onUse} />));
+  await act(async () => renderWithLanguage(<TaskRecipes onClose={onClose} onUse={onUse} />));
   await act(async () => button("Crear receta").click());
   const fields = host.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(".recipe-editor input, .recipe-editor textarea");
   await setValue(fields[0], "Receta extra");
@@ -264,7 +324,7 @@ test("no supera el límite de treinta recetas", async () => {
 });
 
 test("cierra el diálogo con Escape o al pulsar fuera", async () => {
-  await act(async () => root!.render(<TaskRecipes onClose={onClose} onUse={onUse} />));
+  await act(async () => renderWithLanguage(<TaskRecipes onClose={onClose} onUse={onUse} />));
   await act(async () => host.querySelector(".recipes-dialog")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
   expect(onClose).toHaveBeenCalledOnce();
   await act(async () => host.querySelector(".dialog-backdrop")!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true })));
@@ -272,7 +332,7 @@ test("cierra el diálogo con Escape o al pulsar fuera", async () => {
 });
 
 test("mantiene el foco dentro del diálogo y enfoca el formulario al editar", async () => {
-  await act(async () => root!.render(<TaskRecipes onClose={onClose} onUse={onUse} />));
+  await act(async () => renderWithLanguage(<TaskRecipes onClose={onClose} onUse={onUse} />));
   const dialog = host.querySelector<HTMLElement>(".recipes-dialog")!;
   const first = dialog.querySelector<HTMLButtonElement>(".dialog-close")!;
   const buttons = dialog.querySelectorAll<HTMLButtonElement>("button");
@@ -300,7 +360,7 @@ test("devuelve el foco al control que abrió las recetas al cerrar", async () =>
     return open ? <TaskRecipes onClose={() => setOpen(false)} onUse={onUse} /> : null;
   }
 
-  await act(async () => root!.render(<Harness />));
+  await act(async () => renderWithLanguage(<Harness />));
   expect(document.activeElement).toBe(host.querySelector(".recipes-list button.selected"));
   await act(async () => host.querySelector<HTMLButtonElement>(".dialog-close")!.click());
 
@@ -319,7 +379,7 @@ test("cierra el diálogo sin enfocar un control que ya no existe", async () => {
     return open ? <TaskRecipes onClose={() => setOpen(false)} onUse={onUse} /> : null;
   }
 
-  await act(async () => root!.render(<Harness />));
+  await act(async () => renderWithLanguage(<Harness />));
   opener.remove();
   await act(async () => host.querySelector<HTMLButtonElement>(".dialog-close")!.click());
 

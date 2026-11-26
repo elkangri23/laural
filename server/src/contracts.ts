@@ -1,5 +1,5 @@
-import type { PreferenceSnapshot } from "../../shared/preference-snapshot-v1.js";
-export type { PreferenceSnapshot, PreferenceSnapshotRevision } from "../../shared/preference-snapshot-v1.js";
+import type { PreferenceSnapshot } from "../../shared/preference-snapshot.js";
+export type { PreferenceSnapshot, PreferenceSnapshotRevision } from "../../shared/preference-snapshot.js";
 
 export type StoredSnapshot = {
   snapshot: PreferenceSnapshot | null;

@@ -12,10 +12,15 @@ const COVERAGE_THRESHOLDS = {
 
 export const CRITICAL_RUST_BRANCH_FILES = [
   "agent_files.rs",
+  "chat_stream.rs",
   "configuration_transfer.rs",
   "git_panel.rs",
+  "preferences/snapshot.rs",
+  "terminal_flow.rs",
+  "terminal_prediction.rs",
 ];
-export const CRITICAL_RUST_LINE_FILES = [...CRITICAL_RUST_BRANCH_FILES, "terminal_output.rs", "terminal_flow.rs"];
+export const CRITICAL_RUST_LINE_FILES = [...CRITICAL_RUST_BRANCH_FILES, "terminal_output.rs"];
+const EXACT_COVERAGE_FILES = new Set(["terminal_flow.rs", "terminal_prediction.rs"]);
 
 const FILES_BY_METRIC = {
   lines: CRITICAL_RUST_LINE_FILES,
@@ -39,10 +44,11 @@ export function checkCriticalCoverage(report, metric = "lines") {
     }
 
     const percent = matches[0].summary?.[metric]?.percent;
+    const minimum = EXACT_COVERAGE_FILES.has(name) ? 100 : threshold.minimum;
     if (typeof percent !== "number" || !Number.isFinite(percent) || percent < 0 || percent > 100) {
       failures.push(`${name}: el informe no contiene una cobertura de ${threshold.label} válida`);
-    } else if (percent < threshold.minimum) {
-      failures.push(`${name}: ${percent.toFixed(2)} % es inferior al mínimo de ${threshold.minimum} % de ${threshold.label}`);
+    } else if (percent < minimum) {
+      failures.push(`${name}: ${percent.toFixed(2)} % es inferior al mínimo de ${minimum} % de ${threshold.label}`);
     }
   }
 

@@ -1,3 +1,5 @@
+import { useLanguage } from "../i18n";
+
 type HelpDialogProps = {
   onClose: () => void;
   onConfigureProvider: () => void;
@@ -6,19 +8,20 @@ type HelpDialogProps = {
 };
 
 export function HelpDialog({ onClose, onConfigureProvider, onOpenSettings, onOpenPalette }: HelpDialogProps) {
+  const { messages } = useLanguage();
   return <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <section className="provider-dialog help-dialog" role="dialog" aria-modal="true" aria-labelledby="help-title">
-      <button className="dialog-close" onClick={onClose} aria-label="Cerrar ayuda">×</button>
+      <button className="dialog-close" onClick={onClose} aria-label={messages.help.close}>×</button>
       <div className="dialog-mark"><HelpIcon /></div>
-      <p className="eyebrow">CENTRO DE AYUDA</p>
-      <h2 id="help-title">¿En qué podemos ayudarte?</h2>
-      <p className="dialog-copy">Accede rápidamente a las funciones principales de Laural.</p>
+      <p className="eyebrow">{messages.help.eyebrow}</p>
+      <h2 id="help-title">{messages.help.title}</h2>
+      <p className="dialog-copy">{messages.help.description}</p>
       <div className="help-actions">
-        <button className="settings-link" onClick={onConfigureProvider}>Conectar un modelo <span>Ollama, LM Studio o API compatible</span></button>
-        <button className="settings-link" onClick={onOpenSettings}>Abrir configuración <span>Apariencia, seguridad y actualizaciones</span></button>
-        <button className="settings-link" onClick={onOpenPalette}>Buscar acciones <span>Paleta de comandos · Ctrl + K</span></button>
+        <button className="settings-link" onClick={onConfigureProvider}>{messages.help.connect}<span>{messages.help.providers}</span></button>
+        <button className="settings-link" onClick={onOpenSettings}>{messages.help.settings}<span>{messages.help.settingsInfo}</span></button>
+        <button className="settings-link" onClick={onOpenPalette}>{messages.help.search}<span>{messages.help.searchInfo}</span></button>
       </div>
-      <div className="help-shortcuts"><strong>Atajos</strong><span><kbd>Ctrl</kbd> + <kbd>K</kbd> abrir la paleta</span><span><kbd>Ctrl</kbd> + <kbd>`</kbd> alternar terminal</span></div>
+      <div className="help-shortcuts"><strong>{messages.help.shortcuts}</strong><span><kbd>Ctrl</kbd> + <kbd>K</kbd> {messages.help.openPalette}</span><span><kbd>Ctrl</kbd> + <kbd>`</kbd> {messages.help.toggleTerminal}</span></div>
     </section>
   </div>;
 }

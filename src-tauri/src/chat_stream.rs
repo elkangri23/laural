@@ -146,6 +146,51 @@ mod tests {
     }
 
     #[test]
+    fn accepts_done_when_a_carriage_return_ends_the_stream() {
+        let input = format!("{TEXT}data: [DONE]\n\r");
+        assert_eq!(parse(&[input.as_bytes()]).unwrap(), "¡Sí!");
+    }
+
+    #[test]
+    fn accepts_data_field_without_optional_space() {
+        let input =
+            b"data:{\"choices\":[{\"delta\":{\"content\":\"sin espacio\"}}]}\n\ndata: [DONE]\n\n";
+        assert_eq!(parse(&[input]).unwrap(), "sin espacio");
+    }
+
+    #[test]
+    fn stops_at_done_event_and_ignores_trailing_invalid_data() {
+        let mut input = TEXT.as_bytes().to_vec();
+        input.extend_from_slice(b"data: [DONE]\n\n");
+        input.extend_from_slice(b"data: \xff\n");
+
+        assert_eq!(parse(&[&input]).unwrap(), "¡Sí!");
+    }
+
+    #[test]
+    fn ignores_non_data_fields_and_empty_content() {
+        let input = concat!(
+            ": keepalive\n",
+            "id: 12\n",
+            "event: message\n",
+            "data:\n\n",
+            "data: {\"error\":null,\"choices\":[{\"delta\":{\"content\":\"\"}}]}\n\n",
+            "data: {\"choices\":[{\"delta\":{\"content\":\"válido\"}}]}\n\n",
+            "data: {\"choices\":[{\"finish_reason\":\"stop\"}]}"
+        );
+        assert_eq!(parse(&[input.as_bytes()]).unwrap(), "válido");
+    }
+
+    #[test]
+    fn propagates_consumer_failure() {
+        let mut stream = ChatStream::default();
+        let error = stream
+            .push(TEXT.as_bytes(), &mut |_| Err("consumidor cerrado".into()))
+            .unwrap_err();
+        assert_eq!(error, "consumidor cerrado");
+    }
+
+    #[test]
     fn rejects_truncated_empty_or_invalid_responses() {
         for input in [
             TEXT.as_bytes(),

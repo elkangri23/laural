@@ -7,6 +7,7 @@ Este índice reúne las decisiones y requisitos de la etapa inicial. El código 
 - [Visión, objetivos y límites](product/vision-and-scope.md)
 - [Brief de producto](PRODUCT_BRIEF.md)
 - [Hoja de ruta](ROADMAP.md)
+- [Plan de ajustes, idiomas y snapshot v2](plans/implementacion-ajustes-idiomas.md)
 - [Plan de perfiles, exportación/importación y sincronización opcional](plans/sincronizacion-preferencias.md)
 - [Estado técnico del servicio de sincronización](../server/README.md)
 - [Diseño formal de portabilidad, sync y status público](designs/sincronizacion-preferencias-y-portabilidad.md)

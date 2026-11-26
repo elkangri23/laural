@@ -8,7 +8,7 @@ describe("envío transaccional mediante Resend", () => {
     const fetch = vi.fn(async () => new Response("{\"id\":\"mail-id\"}", { status: 200 }));
     vi.stubGlobal("fetch", fetch);
     const mailer = new ResendMailer({ apiKey: "server-only-key", from: "Laural <auth@example.test>" });
-    await mailer.sendVerification({ email: "user@example.test", displayName: "A <B>", pin: "012345", challengeId: "challenge-id" });
+    await mailer.sendVerification({ email: "user@example.test", displayName: `<A & "B" 'C'>`, pin: "012345", challengeId: "challenge-id" });
 
     expect(fetch).toHaveBeenCalledOnce();
     const [url, options] = fetch.mock.calls[0] as unknown as [string, RequestInit];
@@ -18,7 +18,7 @@ describe("envío transaccional mediante Resend", () => {
     expect(new Headers(options.headers).get("idempotency-key")).toBe("verification/challenge-id");
     const payload = JSON.parse(String(options.body)) as { html: string; text: string; to: string[] };
     expect(payload.to).toEqual(["user@example.test"]);
-    expect(payload.html).toContain("A &lt;B&gt;");
+    expect(payload.html).toContain("&lt;A &amp; &quot;B&quot; &#39;C&#39;&gt;");
     expect(payload.text).toContain("012345");
     expect(payload.html).toContain("no inicia sesión");
     // Plantilla única de Laural: marca, tarjeta oscura y PIN destacado.
@@ -103,8 +103,11 @@ describe("envío transaccional mediante Resend", () => {
     vi.stubGlobal("fetch", fetch);
     const mailer = new ResendMailer({ apiKey: "server-only-key", from: "auth@example.test" });
     for (const [eventType, subject] of [
+      ["recovery_codes_rotated", "Se renovaron los códigos de recuperación"],
+      ["totp_disabled", "Se desactivó la verificación en dos pasos"],
       ["passkey_added", "Se añadió una passkey"],
       ["passkey_removed", "Se eliminó una passkey"],
+      ["account_recovered", "Se restablecieron los factores"],
     ] as const) {
       await mailer.sendSecurityNotice({ email: "user@example.test", eventType, notificationId: `notice-${eventType}` });
       const [, options] = fetch.mock.calls.at(-1) as unknown as [string, RequestInit];
@@ -115,7 +118,7 @@ describe("envío transaccional mediante Resend", () => {
       expect(payload.html).not.toMatch(/portátil|dispositivo|credential-id/iu);
       expect(new Headers(options.headers).get("idempotency-key")).toBe(`security/notice-${eventType}`);
     }
-    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch).toHaveBeenCalledTimes(5);
   });
 
   it("convierte los errores del proveedor en un error genérico", async () => {
@@ -175,5 +178,43 @@ describe("envío transaccional mediante Resend", () => {
     const mailer = new ResendMailer({ apiKey: "server-only-key", from: "auth@example.test" });
     await expect(mailer.sendAccountRecoveryNotice({ caseId: "case-id", accountEmail: "user@example.test", notificationId: "notice-id" }))
       .rejects.toThrow("correo administrador");
+  });
+
+  it("rechaza el enlace de recuperación si falta la URL base", async () => {
+    const mailer = new ResendMailer({ apiKey: "server-only-key", from: "auth@example.test" });
+    await expect(mailer.sendAccountRecoveryGrant({ email: "user@example.test", ticket: "ticket", grantId: "grant-id" }))
+      .rejects.toThrow("URL de recuperación");
+  });
+
+  it("usa mensajes genéricos para los rechazos de cada plantilla y no devuelve la respuesta del proveedor", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("detalle privado del proveedor", { status: 401 })));
+    const mailer = new ResendMailer({
+      apiKey: "server-only-key",
+      from: "auth@example.test",
+      recoveryAdminEmail: "admin@example.test",
+      recoveryBaseUrl: "https://sync.example.test/auth/recovery",
+    });
+    const actions: Array<[() => Promise<void>, string]> = [
+      [() => mailer.sendPasswordReset({ email: "user@example.test", displayName: "User", pin: "123456", challengeId: "id" }), "restablecimiento"],
+      [() => mailer.sendAccountRecoveryPin({ email: "user@example.test", displayName: "User", pin: "123456", challengeId: "id" }), "PIN de recuperación"],
+      [() => mailer.sendAccountRecoveryNotice({ caseId: "case", accountEmail: "user@example.test", notificationId: "id" }), "aviso de recuperación al administrador"],
+      [() => mailer.sendAccountRecoveryGrant({ email: "user@example.test", ticket: "ticket", grantId: "id" }), "enlace de recuperación"],
+      [() => mailer.sendSecurityNotice({ email: "user@example.test", eventType: "totp_enabled", notificationId: "id" }), "aviso de seguridad"],
+    ];
+
+    for (const [action, publicError] of actions) {
+      const error = await action().then(() => null, (reason: unknown) => reason);
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain(publicError);
+      expect((error as Error).message).not.toContain("detalle privado del proveedor");
+    }
+  });
+
+  it("tolera una respuesta exitosa sin cuerpo", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 204 })));
+    const mailer = new ResendMailer({ apiKey: "server-only-key", from: "auth@example.test" });
+    await expect(mailer.sendVerification({
+      email: "user@example.test", displayName: "User", pin: "123456", challengeId: "empty-body",
+    })).resolves.toBeUndefined();
   });
 });

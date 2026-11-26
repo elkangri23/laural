@@ -1,11 +1,17 @@
 // @vitest-environment jsdom
-import { act } from "react";
+import { act, type ReactNode } from "react";
+import { LanguageProvider } from "../src/i18n";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { CommandBlockItem, type CommandBlock } from "../src/components/CommandBlockItem";
 
 let root: Root | undefined;
 let host: HTMLDivElement;
+
+function renderWithLanguage(children: ReactNode) {
+  localStorage.setItem("laural.language.v1", "es");
+  return root!.render(<LanguageProvider>{children}</LanguageProvider>);
+}
 const stableBlock: CommandBlock = {
   id: "terminado",
   terminalId: "uno",
@@ -45,7 +51,7 @@ afterEach(async () => {
 });
 
 test("memoiza cada bloque y limpia el formato de terminal de su salida", async () => {
-  await act(async () => root!.render(<>
+  await act(async () => renderWithLanguage(<>
     <CommandBlockItem block={stableBlock} />
     <CommandBlockItem block={runningBlock} />
     <CommandBlockItem block={unknownExitBlock} />

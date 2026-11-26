@@ -625,6 +625,175 @@ mod tests {
     }
 
     #[test]
+    fn rechaza_nombres_reservados_de_windows_y_rutas_no_relativas() {
+        for name in ["COM1.txt", "LPT³.log", "CONIN$", "archivo.", "archivo "] {
+            assert!(!valid_name(name), "{name}");
+        }
+        for name in ["COM10.txt", "LPT0.log", "normal-ñ.txt"] {
+            assert!(valid_name(name), "{name}");
+        }
+
+        assert!(is_valid_relative_path(Path::new("carpeta/normal-ñ.txt")));
+        assert!(!is_valid_relative_path(Path::new("../normal.txt")));
+        assert!(!is_valid_relative_path(Path::new("C:/normal.txt")));
+        assert!(!is_valid_relative_path(Path::new("")));
+    }
+
+    #[test]
+    fn solo_considera_archivos_ordinarios_como_destinos() {
+        let root = tempfile::tempdir().unwrap();
+        let file = root.path().join("normal.txt");
+        let directory = root.path().join("carpeta");
+        fs::write(&file, b"contenido").unwrap();
+        fs::create_dir(&directory).unwrap();
+
+        assert!(is_regular_file(&file).unwrap());
+        assert!(!is_regular_file(&root.path().join("ausente.txt")).unwrap());
+        assert!(is_regular_file(&directory).is_err());
+    }
+
+    #[test]
+    fn lista_y_limpia_el_historial_ausente_sin_eliminar_archivos() {
+        let root = tempfile::tempdir().unwrap();
+        fs::write(root.path().join("nota.txt"), b"actual").unwrap();
+
+        assert!(list_backups(root.path(), "nota.txt").unwrap().is_empty());
+        assert_eq!(clear_backups(root.path(), "nota.txt", true).unwrap(), 0);
+        assert_eq!(fs::read(root.path().join("nota.txt")).unwrap(), b"actual");
+        assert!(clear_backups(root.path(), "nota.txt", false).is_err());
+    }
+
+    #[test]
+    fn limita_el_listado_a_veinte_copias_validas() {
+        let root = tempfile::tempdir().unwrap();
+        let backups = root.path().join(BACKUPS);
+        fs::create_dir(&backups).unwrap();
+        for index in 0..25 {
+            let version = backups.join(format!("edicion-{index:02}"));
+            fs::create_dir(&version).unwrap();
+            fs::write(version.join("nota.txt"), format!("copia-{index}")).unwrap();
+        }
+
+        let versions = list_backups(root.path(), "nota.txt").unwrap();
+
+        assert_eq!(versions.len(), 20);
+        assert!(
+            versions
+                .iter()
+                .all(|version| version.starts_with("edicion-"))
+        );
+    }
+
+    #[test]
+    fn lista_copias_en_el_limite_y_omite_las_que_lo_superan() {
+        let root = tempfile::tempdir().unwrap();
+        let backups = root.path().join(BACKUPS);
+        let at_limit = backups.join("edicion-limite");
+        let oversized = backups.join("edicion-grande");
+        fs::create_dir_all(&at_limit).unwrap();
+        fs::create_dir_all(&oversized).unwrap();
+        fs::write(at_limit.join("nota.txt"), vec![b'a'; 100_000]).unwrap();
+        fs::write(oversized.join("nota.txt"), vec![b'b'; 100_001]).unwrap();
+
+        assert_eq!(
+            list_backups(root.path(), "nota.txt").unwrap(),
+            ["edicion-limite"]
+        );
+    }
+
+    #[test]
+    fn rechaza_restaurar_una_copia_mayor_al_limite_y_conserva_el_destino() {
+        let root = tempfile::tempdir().unwrap();
+        let destination = root.path().join("nota.txt");
+        fs::write(&destination, b"contenido actual").unwrap();
+        let backup = root.path().join(BACKUPS).join("edicion-grande");
+        fs::create_dir_all(&backup).unwrap();
+        fs::write(backup.join("nota.txt"), vec![b'x'; 100_001]).unwrap();
+
+        assert!(restore(root.path(), "nota.txt", "edicion-grande", true).is_err());
+        assert_eq!(fs::read(destination).unwrap(), b"contenido actual");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn ignora_entradas_y_enlaces_no_validos_en_el_historial() {
+        use std::os::unix::fs::symlink;
+
+        let root = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let backups = root.path().join(BACKUPS);
+        fs::create_dir(&backups).unwrap();
+        let valid = backups.join("edicion-valida");
+        fs::create_dir(&valid).unwrap();
+        fs::write(valid.join("nota.txt"), b"copia valida").unwrap();
+        let malformed = backups.join("edicion-con espacio");
+        fs::create_dir(&malformed).unwrap();
+        fs::write(malformed.join("nota.txt"), b"no valida").unwrap();
+        fs::write(backups.join("edicion-no-es-directorio"), b"archivo").unwrap();
+        fs::write(outside.path().join("nota.txt"), b"externo").unwrap();
+        let linked = backups.join("edicion-enlace");
+        symlink(outside.path(), &linked).unwrap();
+
+        assert_eq!(
+            list_backups(root.path(), "nota.txt").unwrap(),
+            ["edicion-valida"]
+        );
+        assert_eq!(clear_backups(root.path(), "nota.txt", true).unwrap(), 1);
+        assert!(outside.path().join("nota.txt").exists());
+        assert!(malformed.exists());
+        assert!(backups.join("edicion-no-es-directorio").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn no_restaura_ni_elimina_una_copia_que_es_enlace_simbolico() {
+        use std::os::unix::fs::symlink;
+
+        let root = tempfile::tempdir().unwrap();
+        let outside = tempfile::NamedTempFile::new().unwrap();
+        fs::write(outside.path(), b"contenido externo").unwrap();
+        let backup = root.path().join(BACKUPS).join("edicion-enlace").join("sub");
+        fs::create_dir_all(&backup).unwrap();
+        let copied_path = backup.join("nota.txt");
+        symlink(outside.path(), &copied_path).unwrap();
+
+        assert!(
+            list_backups(root.path(), "sub/nota.txt")
+                .unwrap()
+                .is_empty()
+        );
+        assert!(restore(root.path(), "sub/nota.txt", "edicion-enlace", true).is_err());
+        assert_eq!(clear_backups(root.path(), "sub/nota.txt", true).unwrap(), 0);
+        assert!(
+            copied_path
+                .symlink_metadata()
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
+        assert_eq!(fs::read(outside.path()).unwrap(), b"contenido externo");
+    }
+
+    #[test]
+    fn rechaza_restauracion_de_version_invalida_o_inexistente() {
+        let root = tempfile::tempdir().unwrap();
+
+        assert!(restore(root.path(), "nota.txt", "edicion-valida", false).is_err());
+        assert!(restore(root.path(), "nota.txt", "../fuera", true).is_err());
+        assert!(restore(root.path(), "nota.txt", "version-invalida", true).is_err());
+        assert!(restore(root.path(), "nota.txt", "edicion-ausente", true).is_err());
+        assert!(
+            restore(
+                &root.path().join("proyecto-ausente"),
+                "nota.txt",
+                "edicion-ausente",
+                true
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
     fn guarda_versiones_distintas_con_la_ruta_original() {
         let root = tempfile::tempdir().unwrap();
         let path = "src/config.json";

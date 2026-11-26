@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { act } from "react";
+import { act, type ReactNode } from "react";
+import { LanguageProvider } from "../src/i18n";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
 import { ChatMessageItem, type ChatMessage } from "../src/components/ChatMessageItem";
@@ -11,6 +12,11 @@ vi.mock("../src/components/AssistantMarkdown", () => ({ AssistantMarkdown: ({ co
 
 let root: Root | undefined;
 let host: HTMLDivElement;
+
+function renderWithLanguage(children: ReactNode) {
+  localStorage.setItem("laural.language.v1", "es");
+  return root!.render(<LanguageProvider>{children}</LanguageProvider>);
+}
 
 afterEach(async () => {
   await act(async () => root?.unmount());
@@ -28,11 +34,11 @@ test("no vuelve a renderizar mensajes cuya identidad no cambió durante el strea
   const streamingMessage: ChatMessage = { id: "actual", role: "assistant", content: "Primer fragmento" };
   const render = (messages: ChatMessage[]) => messages.map(message => <ChatMessageItem key={message.id} message={message} />);
 
-  await act(async () => root!.render(render([previousMessage, streamingMessage])));
+  await act(async () => renderWithLanguage(render([previousMessage, streamingMessage])));
   const rendersAfterInitialMount = mocks.sparkIconRender.mock.calls.length;
   mocks.sparkIconRender.mockClear();
 
-  await act(async () => root!.render(render([previousMessage, { ...streamingMessage, content: "Segundo fragmento" }])));
+  await act(async () => renderWithLanguage(render([previousMessage, { ...streamingMessage, content: "Segundo fragmento" }])));
 
   expect(mocks.sparkIconRender).toHaveBeenCalledTimes(1);
   expect(rendersAfterInitialMount).toBeGreaterThanOrEqual(2);
@@ -49,14 +55,14 @@ test("limita a cinco por segundo el render Markdown mientras llega el streaming"
   const streamingContentRef = { current: createStreamingTextBuffer() };
   streamingContentRef.current.append("fragmento 1");
 
-  await act(async () => root!.render(<ChatMessageItem message={message} isStreaming streamingContentRef={streamingContentRef} />));
+  await act(async () => renderWithLanguage(<ChatMessageItem message={message} isStreaming streamingContentRef={streamingContentRef} />));
   await act(async () => { await Promise.resolve(); });
   expect(host.textContent).toContain("fragmento 1");
   mocks.sparkIconRender.mockClear();
 
   streamingContentRef.current.clear();
   streamingContentRef.current.append("fragmento 2");
-  await act(async () => root!.render(<ChatMessageItem message={{ ...message, content: "fragmento 2" }} isStreaming streamingContentRef={streamingContentRef} />));
+  await act(async () => renderWithLanguage(<ChatMessageItem message={{ ...message, content: "fragmento 2" }} isStreaming streamingContentRef={streamingContentRef} />));
   expect(host.textContent).toContain("fragmento 1");
   expect(mocks.sparkIconRender).not.toHaveBeenCalled();
   await act(async () => { await vi.advanceTimersByTimeAsync(199); });
@@ -66,7 +72,7 @@ test("limita a cinco por segundo el render Markdown mientras llega el streaming"
   expect(host.textContent).toContain("fragmento 2");
   expect(mocks.sparkIconRender).toHaveBeenCalledTimes(1);
 
-  await act(async () => root!.render(<ChatMessageItem message={{ ...message, content: "respuesta final" }} isStreaming={false} streamingContentRef={streamingContentRef} />));
+  await act(async () => renderWithLanguage(<ChatMessageItem message={{ ...message, content: "respuesta final" }} isStreaming={false} streamingContentRef={streamingContentRef} />));
   expect(host.textContent).toContain("respuesta final");
   expect(mocks.sparkIconRender).toHaveBeenCalledTimes(2);
 });

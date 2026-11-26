@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { act } from "react";
+import { act, type ReactNode } from "react";
+import { LanguageProvider } from "../src/i18n";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { AgentActivity } from "../src/components/AgentActivity";
@@ -9,6 +10,11 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: mocks.invoke }));
 
 let root: Root | undefined;
 let host: HTMLDivElement;
+
+function renderWithLanguage(children: ReactNode) {
+  localStorage.setItem("laural.language.v1", "es");
+  return root!.render(<LanguageProvider>{children}</LanguageProvider>);
+}
 
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -27,7 +33,7 @@ afterEach(async () => {
 
 test("muestra solo metadatos y confirma antes de borrar el historial", async () => {
   root = createRoot(host);
-  await act(async () => root!.render(<AgentActivity />));
+  await act(async () => renderWithLanguage(<AgentActivity />));
 
   expect(host.textContent).toContain("Comando del agente");
   expect(host.textContent).toContain("completado");
@@ -53,7 +59,7 @@ test("muestra solo metadatos y confirma antes de borrar el historial", async () 
 test("informa si no puede consultar la actividad", async () => {
   mocks.invoke.mockRejectedValue(new Error("fallo de prueba"));
   root = createRoot(host);
-  await act(async () => root!.render(<AgentActivity />));
+  await act(async () => renderWithLanguage(<AgentActivity />));
   expect(host.textContent).toContain("No se pudo cargar el historial local.");
   const clearButton = [...host.querySelectorAll("button")].find((button) => button.textContent === "Borrar historial")!;
   expect(clearButton.disabled).toBe(false);

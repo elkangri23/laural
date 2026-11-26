@@ -2,7 +2,10 @@ import { afterEach, expect, test, vi } from "vitest";
 import { appendTerminalOutput, createTerminalOutputBatcher, createTerminalTextBatcher, decodeTerminalOutput, terminalSizeChanged } from "../src/terminalOutput";
 import fixture from "../shared/fixtures/terminal-output-event.json";
 
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
 
 test("conserva la cola de una ráfaga grande aunque llegue en fragmentos", () => {
   const raw = Array.from({ length: 1500 }, (_, i) => `línea ${i} — abcdefghijklmnopqrstuvwxyz\n`).join("");
@@ -75,6 +78,19 @@ test("vacía xterm inmediatamente al alcanzar el límite de 256 KiB", () => {
   expect(onOutput.mock.calls[0][0]).toHaveLength(256 * 1024);
   vi.advanceTimersByTime(16);
   expect(onOutput).toHaveBeenCalledOnce();
+});
+
+test("ignora fragmentos de bytes vacíos y cancelar sin cola activa", () => {
+  vi.useFakeTimers();
+  const onOutput = vi.fn();
+  const batcher = createTerminalOutputBatcher(onOutput);
+
+  batcher.push(new Uint8Array());
+  batcher.flush();
+  batcher.cancel();
+  vi.advanceTimersByTime(16);
+
+  expect(onOutput).not.toHaveBeenCalled();
 });
 
 test("reduce a ocho las escrituras xterm de una ráfaga de 64 eventos máximos", () => {
@@ -188,6 +204,14 @@ test("decodifica los bytes del PTY en Base64 y rechaza datos malformados", () =>
   expect(decodeTerminalOutput("AAEC/w")).toBeNull();
   expect(decodeTerminalOutput("%%%invalid%%%")).toBeNull();
   expect(decodeTerminalOutput("A".repeat(44_000))).toBeNull();
+});
+
+test("descarta Base64 válido cuando el decodificador nativo falla", () => {
+  vi.stubGlobal("atob", () => {
+    throw new Error("fallo de decodificación simulado");
+  });
+
+  expect(decodeTerminalOutput("AA==")).toBeNull();
 });
 
 test("acepta la salida máxima del PTY y rechaza un byte adicional", () => {

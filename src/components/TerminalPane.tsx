@@ -4,7 +4,9 @@ import { FitAddon } from "@xterm/addon-fit";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { terminalTheme, type AppearanceMode, type ThemeDefinition } from "../themes";
+import { applyTerminalCursorBlink, applyTerminalTheme, initializeWithTerminalHost, readTerminalSelection } from "../terminalPaneState";
 import { createTerminalOutputBatcher, createTerminalTextBatcher, decodeTerminalOutput, terminalSizeChanged, type TerminalSize } from "../terminalOutput";
+import { useLanguage } from "../i18n";
 import "@xterm/xterm/css/xterm.css";
 
 type Shell = "powershell" | "cmd" | "wsl" | "git-bash";
@@ -12,9 +14,11 @@ const TERMINAL_SCROLLBACK_LINES = 2_500;
 const UNTRACKED_LINE_EDIT_KEYS = /[\u0001-\u0002\u0004-\u0007\u0009\u000b\u000c\u000e-\u001f]/;
 type OutputEvent = { dataBase64: string };
 type TerminalRequest = { sequence: number; terminalId: string };
-type TerminalPaneProps = { terminalId: string; shell: Shell; cwd: string | null; visible: boolean; active: boolean; copyRequest: TerminalRequest; clearRequest: TerminalRequest; onActionNotice: (message: string) => void; onRestart: (terminalId: string) => void; theme: ThemeDefinition; appearance: AppearanceMode; onTextOutput: (terminalId: string, text: string) => void; onCommandSubmit: (terminalId: string, command: string) => void; onCommandFinish: (terminalId: string, exitCode: number | null) => void };
+type TerminalPaneProps = { terminalId: string; shell: Shell; cwd: string | null; powerShellPredictionEnabled: boolean; visible: boolean; active: boolean; copyRequest: TerminalRequest; clearRequest: TerminalRequest; onActionNotice: (message: string) => void; onRestart: (terminalId: string) => void; theme: ThemeDefinition; appearance: AppearanceMode; onTextOutput: (terminalId: string, text: string) => void; onCommandSubmit: (terminalId: string, command: string) => void; onCommandFinish: (terminalId: string, exitCode: number | null) => void };
 
-function TerminalPane({ terminalId, shell, cwd, visible, active, copyRequest, clearRequest, onActionNotice, onRestart, theme, appearance, onTextOutput, onCommandSubmit, onCommandFinish }: TerminalPaneProps) {
+function TerminalPane({ terminalId, shell, cwd, powerShellPredictionEnabled, visible, active, copyRequest, clearRequest, onActionNotice, onRestart, theme, appearance, onTextOutput, onCommandSubmit, onCommandFinish }: TerminalPaneProps) {
+  const { messages } = useLanguage();
+  const terminalText = messages.terminal;
   const [ended, setEnded] = useState(false);
   const hostRef = useRef<HTMLDivElement>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -22,10 +26,7 @@ function TerminalPane({ terminalId, shell, cwd, visible, active, copyRequest, cl
   const handledCopyRef = useRef(0);
   const handledClearRef = useRef(0);
 
-  useEffect(() => {
-    const host = hostRef.current;
-    if (!host) return;
-
+  useEffect(() => initializeWithTerminalHost(hostRef.current, (host) => {
     const terminal = new Terminal({
       allowProposedApi: false,
       convertEol: false,
@@ -85,13 +86,13 @@ function TerminalPane({ terminalId, shell, cwd, visible, active, copyRequest, cl
         if (character === "\r") {
           skipLineFeed = true;
           if (commandLine?.trim()) onCommandSubmit(terminalId, commandLine.trim());
-          else if (commandLine === null) onCommandSubmit(terminalId, "Comando editado en el shell; texto no capturado");
+          else if (commandLine === null) onCommandSubmit(terminalId, terminalText.editedCommandNotCaptured);
           commandLine = "";
         } else if (character === "\n" && skipLineFeed) {
           skipLineFeed = false;
         } else if (character === "\n") {
           if (commandLine?.trim()) onCommandSubmit(terminalId, commandLine.trim());
-          else if (commandLine === null) onCommandSubmit(terminalId, "Comando editado en el shell; texto no capturado");
+          else if (commandLine === null) onCommandSubmit(terminalId, terminalText.editedCommandNotCaptured);
           commandLine = "";
         } else if (character === "\u007f" || character === "\b") {
           if (commandLine && commandLine.length > 0) commandLine = commandLine.slice(0, -1);
@@ -142,7 +143,8 @@ function TerminalPane({ terminalId, shell, cwd, visible, active, copyRequest, cl
       fitAndResize();
       started = true;
       const initialSize = { rows: terminal.rows || 28, cols: terminal.cols || 100 };
-      await invoke("create_terminal", { terminalId, shell, cwd, ...initialSize });
+      // Captura la preferencia al iniciar; cambiarla aplica solo a nuevas sesiones.
+      await invoke("create_terminal", { terminalId, shell, cwd, powerShellPredictionEnabled: shell === "powershell" && powerShellPredictionEnabled, ...initialSize });
       if (disposed || exited) return;
       lastSentSize = initialSize;
       isReady = true;
@@ -151,7 +153,7 @@ function TerminalPane({ terminalId, shell, cwd, visible, active, copyRequest, cl
 
     const startup = start().catch((error) => {
       if (disposed) return;
-      terminal.writeln(`No se pudo iniciar ${shell}: ${String(error)}`);
+      terminal.writeln(`${terminalText.startFailure} ${shell}: ${String(error)}`);
       setEnded(true);
     });
     return () => {
@@ -170,14 +172,14 @@ function TerminalPane({ terminalId, shell, cwd, visible, active, copyRequest, cl
       terminalRef.current = null;
       fitRef.current = null;
     };
-  }, [cwd, onCommandFinish, onCommandSubmit, onTextOutput, shell, terminalId]);
+  }), [cwd, onCommandFinish, onCommandSubmit, onTextOutput, shell, terminalId]);
 
   useEffect(() => {
-    if (terminalRef.current) terminalRef.current.options.theme = terminalTheme(theme, appearance);
+    applyTerminalTheme(terminalRef.current, theme, appearance);
   }, [appearance, theme]);
 
   useEffect(() => {
-    if (terminalRef.current) terminalRef.current.options.cursorBlink = visible && active;
+    applyTerminalCursorBlink(terminalRef.current, visible, active);
   }, [active, visible]);
 
   useEffect(() => {
@@ -193,32 +195,32 @@ function TerminalPane({ terminalId, shell, cwd, visible, active, copyRequest, cl
     if (copyRequest.sequence === 0 || copyRequest.sequence === handledCopyRef.current) return;
     handledCopyRef.current = copyRequest.sequence;
     if (copyRequest.terminalId !== terminalId) return;
-    const selection = terminalRef.current?.getSelection() ?? "";
+    const selection = readTerminalSelection(terminalRef.current);
     if (!selection) {
-      onActionNotice("Selecciona texto en la terminal para copiarlo.");
+      onActionNotice(terminalText.selectToCopy);
       return;
     }
     try {
       if (!navigator.clipboard?.writeText) throw new Error("Clipboard API unavailable");
       void navigator.clipboard.writeText(selection).then(
-        () => onActionNotice("Selección copiada al portapapeles."),
-        () => onActionNotice("No se pudo acceder al portapapeles."),
+        () => onActionNotice(terminalText.copied),
+        () => onActionNotice(terminalText.clipboardDenied),
       );
     } catch {
-      onActionNotice("No se pudo acceder al portapapeles.");
+      onActionNotice(terminalText.clipboardDenied);
     }
-  }, [copyRequest, onActionNotice, terminalId]);
+  }, [copyRequest, onActionNotice, terminalId, terminalText.clipboardDenied, terminalText.copied, terminalText.selectToCopy]);
 
   useEffect(() => {
     if (clearRequest.sequence === 0 || clearRequest.sequence === handledClearRef.current) return;
     handledClearRef.current = clearRequest.sequence;
     if (clearRequest.terminalId !== terminalId) return;
     terminalRef.current?.clear();
-    onActionNotice("Pantalla de terminal limpiada.");
-  }, [clearRequest, onActionNotice, terminalId]);
+    onActionNotice(terminalText.screenCleared);
+  }, [clearRequest, onActionNotice, terminalId, terminalText.screenCleared]);
 
   return <div className={`terminal-pane ${visible ? "visible" : "hidden"}`} ><div className="terminal-host" ref={hostRef} />
-    {ended && <div className="terminal-ended" role="status">Sesión finalizada <button onClick={() => onRestart(terminalId)}>Reiniciar terminal</button></div>}
+    {ended && <div className="terminal-ended" role="status">{terminalText.sessionEnded} <button onClick={() => onRestart(terminalId)}>{terminalText.restart}</button></div>}
   </div>;
 }
 

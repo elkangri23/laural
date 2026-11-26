@@ -9,6 +9,7 @@
 ## Qué ofrece
 
 - Terminal con PowerShell, CMD, WSL y Git Bash.
+- Sugerencias inline locales opcionales de PSReadLine para nuevas sesiones PowerShell; desactivadas por defecto y sin enviar el historial a la IA.
 - Pestañas, bloques navegables de comando/salida y panel dividido vertical u horizontal.
 - Panel Git de solo lectura con rama, cambios y diff preparado/no preparado. Está acotado por tamaño/tiempo y no envía el contenido al asistente automáticamente.
 - Recetas de tareas para el modo Agente: plantillas locales editables con vista previa que preparan instrucciones; el plan requiere envío y conserva las aprobaciones actuales.
@@ -20,7 +21,9 @@
 - Agente que propone comandos y cambios de archivos para revisión. Las políticas permiten confirmar comandos, aplicar reglas o activar el modo automático; se puede cancelar la planificación, detener comandos en ejecución y las ediciones de archivos requieren aprobación explícita.
 - Icono y favicon propios; la compilación para Windows se puede generar desde GitHub Actions al publicar una etiqueta `v*`.
 - Actualizaciones Windows firmadas desde GitHub, con instalación manual o automática y versión visible en Configuración.
-- La app funciona sin cuenta ni servicio. Permite exportar/importar `.laural` con vista previa; las claves se excluyen por defecto y solo se incluyen cifradas con contraseña. Configuración permite comparar y elegir el snapshot inicial; después, las preferencias y perfiles se sincronizan automáticamente, con reintentos tras desconexión y protección frente a revisiones remotas concurrentes. La sincronización requiere que el servicio esté habilitado; Configuración también ofrece historial cloud paginado, restauración como nueva revisión y borrado de versiones. Las claves API quedan excluidas. Falta validar migración y servicio en el VPS real. Consulta el [diseño aprobado](docs/designs/sincronizacion-preferencias-y-portabilidad.md), el [plan de implementación](docs/plans/sincronizacion-preferencias.md) y el [estado técnico del servicio](server/README.md).
+- Configuración organizada en cinco apartados: Personalización, IA, Agente y terminal, Datos y cuenta, y Aplicación; navegación por teclado y accesos de retorno entre diálogos.
+- Interfaz con selector español/inglés. La traducción sigue en curso; los permisos del agente, las reglas, advertencias de seguridad, encabezados de Ajustes y estado de carga de la terminal ya usan el idioma elegido.
+- La app funciona sin cuenta ni servicio. Permite exportar/importar `.laural` con vista previa; la versión v2 incluye el idioma, lee archivos v1 conservando el idioma local y las claves se excluyen por defecto o se incluyen cifradas con contraseña. La sincronización del cliente también emite snapshots v2 y lee v1/v2; si el servicio VPS aún solo admite v1, conserva la configuración local y deja la sincronización pendiente. Antes de publicar esta versión hay que desplegar y validar el servicio v2 en el VPS. Configuración también ofrece historial cloud paginado, restauración como nueva revisión y borrado de versiones. Las claves API quedan excluidas de la nube. Consulta el [diseño aprobado](docs/designs/sincronizacion-preferencias-y-portabilidad.md), el [plan de implementación](docs/plans/sincronizacion-preferencias.md), el [plan de idiomas y snapshot v2](docs/plans/implementacion-ajustes-idiomas.md) y el [estado técnico del servicio](server/README.md).
 - Las claves de proveedor se guardan en Windows Credential Manager, no en el archivo de perfiles. Consulta [privacidad y seguridad](docs/security/privacy.md).
 
 Laural es una implementación independiente con marca e interfaz propias. No incluye código, recursos ni componentes de Warp.

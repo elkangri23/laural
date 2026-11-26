@@ -2,9 +2,11 @@ import { appendTerminalOutput, COMMAND_BLOCK_OUTPUT_LIMIT } from "./terminalOutp
 import { createChatHistoryPersistence } from "./chatPersistence";
 import { limitChatMessages, prepareChatHistoryForRequest } from "./chatHistory";
 import { createStreamingTextBuffer } from "./streamingText";
+import { addProjectPath, projectPathIdentity, readProjectWorkspace, removeProjectPath, writeProjectWorkspace } from "./projectWorkspace";
 import { HelpDialog, HelpIcon } from "./components/HelpDialog";
 import { BellIcon, NotificationCenter } from "./components/NotificationCenter";
-import { SettingsDialog } from "./components/SettingsDialog";
+import { SettingsDialog, type SettingsCategory } from "./components/SettingsDialog";
+import type { ExecutionMode } from "./components/AgentSettings";
 import { UpdateManager } from "./components/UpdateManager";
 import { ChatMessageItem, type ChatMessage } from "./components/ChatMessageItem";
 import { CommandBlockItem, type CommandBlock } from "./components/CommandBlockItem";
@@ -15,10 +17,11 @@ import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { ConfigurationImportResult } from "./components/ConfigurationTransfer";
 import { themeVariables, themes, type AppearanceMode } from "./themes";
+import { LanguageProvider, useLanguage } from "./i18n";
 import "./App.css";
 
 const TerminalPane = lazy(() => import("./components/TerminalPane"));
-const BackupRetentionControl = lazy(() => import("./components/BackupRetentionControl").then(module => ({ default: module.BackupRetentionControl })));
+const AgentSettings = lazy(() => import("./components/AgentSettings").then(module => ({ default: module.AgentSettings })));
 const AgentActivity = lazy(() => import("./components/AgentActivity").then(module => ({ default: module.AgentActivity })));
 const AccountSettings = lazy(() => import("./components/AccountSettings").then(module => ({ default: module.AccountSettings })));
 const CommandPalette = lazy(() => import("./components/CommandPalette").then(module => ({ default: module.CommandPalette })));
@@ -31,7 +34,6 @@ type TerminalTab = { id: string; shell: Shell; title: string; cwd: string | null
 type CommandHistoryEntry = { id: string; terminalId: string; command: string; shell: Shell };
 type ContextPreview = { terminal: string; project: string; selectedFiles: string; gitDiff: string; totalCharacters: number };
 type Provider = { id: string; providerKind: string; name: string; baseUrl: string; model: string; hasApiKey: boolean; shareCustomEndpoint: boolean };
-type ExecutionMode = "review" | "rules" | "automatic";
 type PlanAction =
   | { type: "run_command"; command: string; reason: string; status?: string; result?: string }
   | { type: "write_file"; path: string; content: string; reason: string; status?: string; result?: string };
@@ -43,6 +45,7 @@ const MAX_OPEN_TERMINALS = 16;
 const CHAT_DELTA_BATCH_MS = 50;
 const CHAT_UI_REFRESH_MS = 200;
 const SYNC_RISK_ACK_KEY = "laural.sync-risk-ack.v1";
+const POWERSHELL_PREDICTION_KEY = "laural.powershell-prediction.v1";
 
 const shellNames: Record<Shell, string> = {
   powershell: "PowerShell",
@@ -54,12 +57,16 @@ const shellIcons: Record<Shell, string> = {
   powershell: "PS", cmd: "$_", wsl: "WSL", "git-bash": "$",
 };
 
-function App() {
-  const [tabs, setTabs] = useState<TerminalTab[]>([
-    { id: crypto.randomUUID(), shell: "powershell", title: "PowerShell", cwd: null },
+function AppContent() {
+  const { language, setLanguage, messages } = useLanguage();
+  const appText = messages.app;
+  const [projectWorkspace, setProjectWorkspace] = useState(() => readProjectWorkspace(localStorage));
+  const projectPath = projectWorkspace.activePath;
+  const projectPaths = projectWorkspace.paths;
+  const [tabs, setTabs] = useState<TerminalTab[]>(() => [
+    { id: crypto.randomUUID(), shell: "powershell", title: "PowerShell", cwd: projectWorkspace.activePath },
   ]);
   const [activeTabId, setActiveTabId] = useState(tabs[0].id);
-  const [projectPath, setProjectPath] = useState<string | null>(null);
   const [splitTabId, setSplitTabId] = useState<string | null>(null);
   const [splitOrientation, setSplitOrientation] = useState<"vertical" | "horizontal" | null>(null);
   const [commandBlocks, setCommandBlocks] = useState<CommandBlock[]>([]);
@@ -83,6 +90,8 @@ function App() {
   const [prompt, setPrompt] = useState("");
   const [providerDialogOpen, setProviderDialogOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsCategory, setSettingsCategory] = useState<SettingsCategory>("personalization");
+  const [returnToSettings, setReturnToSettings] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
@@ -92,6 +101,7 @@ function App() {
   const [updateSettingsOpen, setUpdateSettingsOpen] = useState(false);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [syncNotice, setSyncNotice] = useState("");
+  const [powerShellPredictionEnabled, setPowerShellPredictionEnabled] = useState(() => localStorage.getItem(POWERSHELL_PREDICTION_KEY) === "true");
   const [syncRiskAcknowledged, setSyncRiskAcknowledged] = useState(() => localStorage.getItem(SYNC_RISK_ACK_KEY) === "true");
   const [themeId, setThemeId] = useState(() => localStorage.getItem("laural.theme") ?? "laurel");
   const [appearance, setAppearance] = useState<AppearanceMode>(() => localStorage.getItem("laural.appearance") === "light" ? "light" : "dark");
@@ -126,6 +136,7 @@ function App() {
   const [backupVersions, setBackupVersions] = useState<Record<number, string[]>>({});
   const [selectedBackups, setSelectedBackups] = useState<Record<number, string>>({});
   const [agentPlan, setAgentPlan] = useState<AgentPlan | null>(null);
+  const [agentPlanProjectPath, setAgentPlanProjectPath] = useState<string | null>(null);
   const [agentPlanBusy, setAgentPlanBusy] = useState(false);
   const [agentCommandBusy, setAgentCommandBusy] = useState(false);
   const [executionMode, setExecutionMode] = useState<ExecutionMode>("review");
@@ -157,6 +168,7 @@ function App() {
         themeId: localStorage.getItem("laural.theme") ?? themeId,
         appearance: localStorage.getItem("laural.appearance") === "light" ? "light" : "dark",
         updateMode: localStorage.getItem("laural.update-mode.v1") === "automatic" ? "automatic" : "manual",
+        language,
       };
       const snapshot = await invoke<{
         schemaVersion: number;
@@ -166,13 +178,13 @@ function App() {
       }>("get_preference_snapshot", { preferences });
       const result = await invoke<{ status: "synced" | "pending" | "needsChoice" | "conflict" | "signedOut" }>("sync_local_preferences", { snapshot });
       if (result.status === "synced" || result.status === "signedOut") setSyncNotice("");
-      else if (result.status === "pending") setSyncNotice("Cambios locales guardados. Se intentará sincronizar cuando el servicio vuelva a estar disponible.");
-      else if (result.status === "conflict") setSyncNotice("La configuración de este equipo y la nube han cambiado. Elige cuál conservar en Cuenta y sincronización.");
-      else setSyncNotice("Revisa Cuenta y sincronización para elegir qué configuración conservar.");
+      else if (result.status === "pending") setSyncNotice(appText.syncPending);
+      else if (result.status === "conflict") setSyncNotice(appText.syncConflict);
+      else setSyncNotice(appText.syncChoose);
     } catch {
-      setSyncNotice("No se pudo comprobar la sincronización. Revisa Cuenta y sincronización.");
+      setSyncNotice(appText.syncFailed);
     }
-  }, [themeId]);
+  }, [themeId, language, appText.syncPending, appText.syncConflict, appText.syncChoose, appText.syncFailed]);
 
   const schedulePreferenceSync = useCallback((delayMs = 700) => {
     if (syncTimerRef.current !== null) window.clearTimeout(syncTimerRef.current);
@@ -222,7 +234,7 @@ function App() {
 
   useEffect(() => {
     void invoke<{ pending: boolean }>("get_preference_sync_status").then((status) => {
-      if (status.pending) setSyncNotice("Hay cambios locales pendientes de sincronizar; Laural los volverá a intentar.");
+      if (status.pending) setSyncNotice(appText.syncPendingAgain);
     }).catch(() => undefined);
     const startup = window.setTimeout(() => schedulePreferenceSync(0), 1_500);
     const interval = window.setInterval(() => schedulePreferenceSync(0), 3 * 60 * 60 * 1000);
@@ -253,7 +265,7 @@ function App() {
       document.removeEventListener("visibilitychange", appResumed);
       if (syncTimerRef.current !== null) window.clearTimeout(syncTimerRef.current);
     };
-  }, [schedulePreferenceSync]);
+  }, [schedulePreferenceSync, appText.syncPendingAgain]);
 
   useEffect(() => {
     if (!appearanceSyncReadyRef.current) {
@@ -261,7 +273,7 @@ function App() {
       return;
     }
     schedulePreferenceSync();
-  }, [themeId, appearance, schedulePreferenceSync]);
+  }, [themeId, appearance, language, schedulePreferenceSync]);
 
   useEffect(() => {
     function handlePaletteShortcut(event: KeyboardEvent) {
@@ -303,6 +315,7 @@ function App() {
     localStorage.setItem("laural.theme", result.preferences.themeId);
     localStorage.setItem("laural.appearance", result.preferences.appearance);
     localStorage.setItem("laural.update-mode.v1", result.preferences.updateMode);
+    setLanguage(result.preferences.language);
     window.dispatchEvent(new Event("laural:update-mode-changed"));
     setThemeId(result.preferences.themeId);
     setAppearance(result.preferences.appearance);
@@ -396,20 +409,25 @@ function App() {
   );
   const activeTheme = themes.find((theme) => theme.id === themeId) ?? themes[0];
   const visibleBlocks = commandBlocks.filter((block) => block.terminalId === activeTabId).slice(-30).reverse();
+  const quickActions = messages.palette.quickActions;
   const paletteActions = [
-    { id: "new-terminal", label: "Nueva terminal", description: "Abrir una sesión PowerShell", run: () => addTerminal("powershell") },
-    { id: "project", label: projectPath ? "Cambiar carpeta de proyecto" : "Abrir carpeta de proyecto", description: "Elegir el directorio de trabajo local", run: () => { void openProject(); } },
-    { id: "git", label: "Abrir panel Git", description: "Consultar la rama y los cambios del proyecto", run: () => setGitPanelOpen(true) },
-    { id: "settings", label: "Abrir configuración", description: "Preferencias, seguridad y proveedores", run: () => setSettingsOpen(true) },
-    { id: "provider", label: "Conectar proveedor de IA", description: "Ollama, LM Studio o API compatible", run: () => setProviderDialogOpen(true) },
-    { id: "appearance", label: "Cambiar apariencia", description: "Temas y modo claro u oscuro", run: () => setAppearanceOpen(true) },
-    { id: "recipes", label: "Abrir recetas de tareas", description: "Preparar una instrucción local para el agente", run: () => setTaskRecipesOpen(true) },
-    { id: "help", label: "Abrir ayuda", description: "Accesos rápidos y atajos de teclado", run: () => setHelpOpen(true) },
-    { id: "notifications", label: "Abrir notificaciones", description: "Avisos de sincronización y actualizaciones", run: () => setNotificationsOpen(true) },
-    { id: "blocks", label: "Alternar bloques", description: "Mostrar u ocultar los resultados de comandos", run: () => setBlocksOpen((open) => !open) },
-    ...tabs.map((tab) => ({ id: `tab-${tab.id}`, label: `Ir a ${tab.title}`, description: `${shellNames[tab.shell]} · ${tab.cwd ?? "Directorio de inicio"}`, run: () => selectTab(tab.id) })),
+    { id: "new-terminal", ...quickActions.newTerminal, run: () => addTerminal("powershell") },
+    { id: "project", ...(projectPath ? quickActions.projectChange : quickActions.projectOpen), run: () => { void openProject(); } },
+    { id: "git", ...quickActions.git, run: () => setGitPanelOpen(true) },
+    { id: "settings", ...quickActions.settings, run: openSettings },
+    { id: "provider", ...quickActions.provider, run: () => { setReturnToSettings(false); setProviderDialogOpen(true); } },
+    { id: "appearance", ...quickActions.appearance, run: () => { setReturnToSettings(false); setAppearanceOpen(true); } },
+    { id: "recipes", ...quickActions.recipes, run: () => setTaskRecipesOpen(true) },
+    { id: "help", ...quickActions.help, run: () => setHelpOpen(true) },
+    { id: "notifications", ...quickActions.notifications, run: () => setNotificationsOpen(true) },
+    { id: "blocks", ...quickActions.blocks, run: () => setBlocksOpen((open) => !open) },
+    ...tabs.map((tab) => ({ id: `tab-${tab.id}`, label: quickActions.tab.label.replace("{title}", tab.title), description: `${shellNames[tab.shell]} · ${tab.cwd ?? quickActions.tab.home}`, run: () => selectTab(tab.id) })),
   ];
   const editingHasApiKey = providers.some((item) => item.id === editingProviderId && item.hasApiKey);
+
+  useEffect(() => {
+    writeProjectWorkspace(localStorage, projectWorkspace);
+  }, [projectWorkspace]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -427,6 +445,10 @@ function App() {
   useEffect(() => {
     localStorage.setItem("laural.assistant-visible.v1", String(assistantVisible));
   }, [assistantVisible]);
+
+  useEffect(() => {
+    localStorage.setItem(POWERSHELL_PREDICTION_KEY, String(powerShellPredictionEnabled));
+  }, [powerShellPredictionEnabled]);
 
   useEffect(() => () => {
     if (outputFlushTimerRef.current !== null) window.clearTimeout(outputFlushTimerRef.current);
@@ -519,7 +541,7 @@ function App() {
 
   function addTerminal(shell: Shell, cwd: string | null = projectPath) {
     if (tabs.length >= MAX_OPEN_TERMINALS) {
-      setTerminalActionNotice(`Puedes mantener abiertas hasta ${MAX_OPEN_TERMINALS} terminales.`);
+      setTerminalActionNotice(appText.terminalLimit.replace("{count}", String(MAX_OPEN_TERMINALS)));
       return;
     }
     const count = tabs.filter((tab) => tab.shell === shell).length + 1;
@@ -530,16 +552,55 @@ function App() {
     setShellMenuOpen(false);
   }
 
+  function resetProjectContext() {
+    setContextFiles([]);
+    setGitDiffContext("");
+    setGitDiffTruncated(false);
+    setContextPreview(null);
+    setContextPreviewError("");
+  }
+
+  function openProjectTerminal(path: string): boolean {
+    const existing = tabs.find(tab => tab.cwd && projectPathIdentity(tab.cwd) === projectPathIdentity(path));
+    if (existing) {
+      setActiveTabId(existing.id);
+      return true;
+    }
+    if (tabs.length >= MAX_OPEN_TERMINALS) {
+      setTerminalActionNotice(appText.terminalLimit.replace("{count}", String(MAX_OPEN_TERMINALS)));
+      return false;
+    }
+    addTerminal(activeTab?.shell ?? "powershell", path);
+    return true;
+  }
+
+  function activateProject(path: string): boolean {
+    if (!openProjectTerminal(path)) return false;
+    setProjectWorkspace(current => addProjectPath(current, path));
+    resetProjectContext();
+    return true;
+  }
+
+  function removeProject(path: string) {
+    const wasActive = projectPath !== null && projectPathIdentity(projectPath) === projectPathIdentity(path);
+    const next = removeProjectPath(projectWorkspace, path);
+    if (wasActive && next.activePath) {
+      const existing = tabs.find(tab => tab.cwd && projectPathIdentity(tab.cwd) === projectPathIdentity(next.activePath!));
+      if (existing) setActiveTabId(existing.id);
+      else if (tabs.length < MAX_OPEN_TERMINALS) addTerminal(activeTab?.shell ?? "powershell", next.activePath);
+      else next.activePath = null;
+    }
+    setProjectWorkspace(next);
+    if (wasActive) resetProjectContext();
+  }
+
   async function openProject() {
     try {
       const selected = await open({ directory: true, multiple: false });
       if (typeof selected !== "string") return;
-      setProjectPath(selected);
-      setGitDiffContext("");
-      setGitDiffTruncated(false);
-      addTerminal(activeTab?.shell ?? "powershell", selected);
+      activateProject(selected);
     } catch (error) {
-      setProviderError(`No se pudo abrir el selector de carpetas: ${String(error)}`);
+      setProviderError(appText.openFolderError.replace("{error}", String(error)));
       setProviderDialogOpen(true);
     }
   }
@@ -550,7 +611,7 @@ function App() {
       const paths = Array.isArray(selected) ? selected : selected ? [selected] : [];
       if (paths.length) setContextFiles((current) => [...new Set([...current, ...paths])].slice(0, 12));
     } catch (error) {
-      setProviderError(`No se pudieron adjuntar los archivos: ${String(error)}`);
+      setProviderError(appText.attachFilesError.replace("{error}", String(error)));
       setProviderDialogOpen(true);
     }
   }
@@ -572,6 +633,14 @@ function App() {
   function selectTab(tabId: string) {
     if (splitTabId === tabId) setSplitTabId(activeTabId);
     setActiveTabId(tabId);
+    const selected = tabs.find(tab => tab.id === tabId);
+    const matchingProject = selected?.cwd
+      ? projectPaths.find(path => projectPathIdentity(path) === projectPathIdentity(selected.cwd!))
+      : undefined;
+    if (matchingProject && (!projectPath || projectPathIdentity(matchingProject) !== projectPathIdentity(projectPath))) {
+      setProjectWorkspace(current => ({ ...current, activePath: matchingProject }));
+      resetProjectContext();
+    }
   }
 
   function closeTab(tabId: string) {
@@ -620,6 +689,7 @@ function App() {
     if (agentMode) {
       setPrompt("");
       setAgentPlan(null);
+      setAgentPlanProjectPath(projectPath);
       setAgentPlanBusy(true);
       const requestId = crypto.randomUUID();
       activeAgentRequestRef.current = requestId;
@@ -636,25 +706,29 @@ function App() {
         selectedFiles: contextFiles,
         gitDiffContext,
       }).then(async (plan) => {
-        if (agentStopRequestedRef.current) return;
+        if (agentStopRequestedRef.current) {
+          setAgentPlanProjectPath(null);
+          return;
+        }
         const prepared: AgentPlan = { ...plan, actions: plan.actions.map((action) => ({ ...action, status: "pending" })) };
         setAgentPlan(prepared);
-        setChatMessages((current) => limitChatMessages([...current, { role: "assistant", content: `Plan preparado con ${plan.actions.length} acciones.` }]));
+        setChatMessages((current) => limitChatMessages([...current, { role: "assistant", content: appText.agentPlanPrepared.replace("{count}", String(plan.actions.length)) }]));
         if (executionMode !== "review") {
           for (let index = 0; index < prepared.actions.length; index += 1) {
             if (agentStopRequestedRef.current) break;
             if (prepared.actions[index].type === "run_command") {
               const completed = await executeAgentCommand(index, false, prepared, planTerminalId);
               if (!completed) {
-                if (!agentStopRequestedRef.current) setChatMessages((current) => limitChatMessages([...current, { role: "assistant", content: "La secuencia automática se detuvo porque un comando no devolvió un código de salida correcto." }]));
+                if (!agentStopRequestedRef.current) setChatMessages((current) => limitChatMessages([...current, { role: "assistant", content: appText.agentSequenceStopped }]));
                 break;
               }
             }
           }
-          if (agentStopRequestedRef.current) setChatMessages((current) => limitChatMessages([...current, { role: "assistant", content: "Ejecución del agente detenida. Los cambios de archivo pendientes no se aplicaron." }]));
+          if (agentStopRequestedRef.current) setChatMessages((current) => limitChatMessages([...current, { role: "assistant", content: appText.agentExecutionStopped }]));
         }
       }).catch((error) => {
-        setChatMessages((current) => limitChatMessages([...current, { role: "assistant", content: agentStopRequestedRef.current ? "Planificación del agente cancelada." : `No se pudo preparar el plan: ${String(error)}` }]));
+        setAgentPlanProjectPath(null);
+        setChatMessages((current) => limitChatMessages([...current, { role: "assistant", content: agentStopRequestedRef.current ? appText.agentPlanningCancelled : appText.agentPlanFailed.replace("{error}", String(error)) }]));
       }).finally(() => {
         if (activeAgentRequestRef.current === requestId) activeAgentRequestRef.current = null;
         setAgentPlanBusy(false);
@@ -736,7 +810,7 @@ function App() {
       flushDelta(true);
       streamFailed = true;
       const message = String(error);
-      setChatMessages((current) => current.map((item) => item.id === assistantMessageId ? { ...item, content: item.content ? `${item.content}\n\n[${message}]` : `No se pudo completar la consulta: ${message}` } : item));
+      setChatMessages((current) => current.map((item) => item.id === assistantMessageId ? { ...item, content: item.content ? `${item.content}\n\n[${message}]` : appText.assistantRequestFailed.replace("{error}", message) } : item));
     }).finally(() => {
       if (!streamFailed) flushDelta(true);
       unlisten?.();
@@ -762,6 +836,7 @@ function App() {
   function clearChat() {
     setChatMessages([]);
     setAgentPlan(null);
+    setAgentPlanProjectPath(null);
     localStorage.removeItem("laural.chat.v1");
   }
 
@@ -805,10 +880,10 @@ function App() {
     try {
       await invoke("run_agent_command", { terminalId, command: action.command, approved });
       const exitCode = await completion;
-      if (agentStopRequestedRef.current) { updateAgentAction(index, { status: "cancelled", result: "Interrupción enviada a la terminal." }); return false; }
-      if (exitCode === 0) { updateAgentAction(index, { status: "completed", result: "El comando terminó correctamente." }); return true; }
-      if (exitCode !== null) { updateAgentAction(index, { status: "error", result: `El comando terminó con código ${exitCode}.` }); return false; }
-      updateAgentAction(index, { status: "submitted", result: "Comando enviado; este shell no comunicó el código de salida." });
+      if (agentStopRequestedRef.current) { updateAgentAction(index, { status: "cancelled", result: appText.agentInterrupted }); return false; }
+      if (exitCode === 0) { updateAgentAction(index, { status: "completed", result: appText.agentCommandSuccess }); return true; }
+      if (exitCode !== null) { updateAgentAction(index, { status: "error", result: appText.agentCommandExit.replace("{code}", String(exitCode)) }); return false; }
+      updateAgentAction(index, { status: "submitted", result: appText.agentCommandSubmitted });
       return false;
     } catch (error) {
       clearTimeout(timer);
@@ -825,11 +900,12 @@ function App() {
 
   async function applyAgentFile(index: number) {
     const action = agentPlan?.actions[index];
-    if (!action || action.type !== "write_file" || !projectPath) return;
+    const targetProjectPath = agentPlanProjectPath;
+    if (!action || action.type !== "write_file" || !targetProjectPath) return;
     updateAgentAction(index, { status: "applying", result: undefined });
     try {
       const result = await invoke<string>("apply_agent_file", {
-        projectPath,
+        projectPath: targetProjectPath,
         relativePath: action.path,
         content: action.content,
         approved: true,
@@ -841,30 +917,33 @@ function App() {
   }
 
   async function showBackups(index: number, path: string) {
-    if (!projectPath) return;
+    const targetProjectPath = agentPlanProjectPath;
+    if (!targetProjectPath) return;
     try {
-      const versions = await invoke<string[]>("list_agent_backups", { projectPath, relativePath: path });
+      const versions = await invoke<string[]>("list_agent_backups", { projectPath: targetProjectPath, relativePath: path });
       setBackupVersions(current => ({ ...current, [index]: versions }));
       if (versions[0]) setSelectedBackups(current => ({ ...current, [index]: versions[0] }));
-      else updateAgentAction(index, { result: "No hay copias para este archivo." });
+      else updateAgentAction(index, { result: appText.noBackupsForFile });
     } catch (error) { updateAgentAction(index, { result: String(error) }); }
   }
 
   async function restoreBackup(index: number, path: string) {
     const version = selectedBackups[index];
-    if (!projectPath || !version || !window.confirm(`¿Restaurar ${path} desde ${version}? La versión actual se guardará como otra copia.`)) return;
+    const targetProjectPath = agentPlanProjectPath;
+    if (!targetProjectPath || !version || !window.confirm(appText.restoreBackupConfirm.replace("{path}", path).replace("{version}", version))) return;
     try {
-      const result = await invoke<string>("restore_agent_backup", { projectPath, relativePath: path, version, approved: true });
+      const result = await invoke<string>("restore_agent_backup", { projectPath: targetProjectPath, relativePath: path, version, approved: true });
       updateAgentAction(index, { result });
       await showBackups(index, path);
     } catch (error) { updateAgentAction(index, { result: String(error) }); }
   }
   async function clearBackups(index: number, path: string) {
-    if (!projectPath || !window.confirm(`¿Eliminar todas las copias de ${path}? El archivo actual permanecerá intacto.`)) return;
+    const targetProjectPath = agentPlanProjectPath;
+    if (!targetProjectPath || !window.confirm(appText.clearBackupsConfirm.replace("{path}", path))) return;
     try {
-      const removed = await invoke<number>("clear_agent_backups", { projectPath, relativePath: path, approved: true });
+      const removed = await invoke<number>("clear_agent_backups", { projectPath: targetProjectPath, relativePath: path, approved: true });
       setBackupVersions(current => ({ ...current, [index]: [] }));
-      updateAgentAction(index, { result: `Copias eliminadas: ${removed}.` });
+      updateAgentAction(index, { result: appText.backupsRemoved.replace("{count}", String(removed)) });
     } catch (error) { updateAgentAction(index, { result: String(error) }); }
   }
   async function changeExecutionMode(mode: ExecutionMode) {
@@ -872,9 +951,9 @@ function App() {
     setPolicyNotice("");
     try {
       await invoke("save_agent_settings", { settings: { mode, allowedPrefixes, backupRetention } });
-      setPolicyNotice("Política guardada.");
+      setPolicyNotice(appText.policySaved);
     } catch (error) {
-      setPolicyNotice(`No se pudo guardar: ${String(error)}`);
+      setPolicyNotice(appText.policySaveError.replace("{error}", String(error)));
     }
   }
 
@@ -883,9 +962,9 @@ function App() {
     setAllowedPrefixes(prefixes);
     try {
       await invoke("save_agent_settings", { settings: { mode: executionMode, allowedPrefixes: prefixes, backupRetention } });
-      setPolicyNotice("Reglas guardadas.");
+      setPolicyNotice(appText.rulesSaved);
     } catch (error) {
-      setPolicyNotice(`No se pudieron guardar las reglas: ${String(error)}`);
+      setPolicyNotice(appText.rulesSaveError.replace("{error}", String(error)));
     }
   }
 
@@ -894,9 +973,9 @@ function App() {
     setPolicyNotice("");
     try {
       await invoke("save_agent_settings", { settings: { mode: executionMode, allowedPrefixes, backupRetention: value } });
-      setPolicyNotice("Retención guardada.");
+      setPolicyNotice(appText.retentionSaved);
     } catch (error) {
-      setPolicyNotice(`No se pudo guardar: ${String(error)}`);
+      setPolicyNotice(appText.policySaveError.replace("{error}", String(error)));
     }
   }
 
@@ -915,7 +994,7 @@ function App() {
     } else if (kind === "freellmapi") {
       setProviderName("FreeLLMAPI"); setBaseUrl("http://127.0.0.1:31415/v1"); setModel("auto");
     } else {
-      setProviderName("API compatible"); setBaseUrl(""); setModel("");
+      setProviderName(appText.otherEndpoint); setBaseUrl(""); setModel("");
     }
   }
 
@@ -939,7 +1018,7 @@ function App() {
       const found = await invoke<string[]>("test_provider", providerInput());
       setModels(found);
       if (!found.includes(model)) setModel(found.includes("auto") ? "auto" : found[0]);
-      setProviderNotice(`Conexión correcta · ${found.length} modelos disponibles`);
+      setProviderNotice(appText.providerConnectionSuccess.replace("{count}", String(found.length)));
     } catch (error) {
       setProviderError(String(error));
     } finally {
@@ -954,8 +1033,8 @@ function App() {
       loadProviderIntoForm(saved);
       setProviders(await invoke<Provider[]>("get_providers"));
       setApiKey("");
-      setProviderNotice("Proveedor guardado en este equipo.");
-      setProviderDialogOpen(false);
+      setProviderNotice(appText.providerSavedLocal);
+      closeProviderDialog();
       schedulePreferenceSync();
     } catch (error) {
       setProviderError(String(error));
@@ -971,7 +1050,7 @@ function App() {
       const saved = await invoke<Provider>("select_provider", { providerId: id });
       loadProviderIntoForm(saved);
       setApiKey("");
-      setProviderNotice("Proveedor activo actualizado.");
+      setProviderNotice(appText.providerActivated);
       schedulePreferenceSync();
     } catch (error) {
       setProviderError(String(error));
@@ -982,7 +1061,7 @@ function App() {
 
   function newProviderProfile() {
     setEditingProviderId(null);
-    setProviderKind("custom"); setShareCustomEndpoint(false); setProviderName("Nuevo proveedor"); setBaseUrl(""); setModel(""); setApiKey(""); setModels([]);
+    setProviderKind("custom"); setShareCustomEndpoint(false); setProviderName(appText.newProviderName); setBaseUrl(""); setModel(""); setApiKey(""); setModels([]);
     setProviderError(""); setProviderNotice("");
   }
 
@@ -990,6 +1069,34 @@ function App() {
     setProviderDialogOpen(false);
     setApiKey("");
     setProviderError("");
+    returnFromSettingsChild();
+  }
+
+  function openSettings() {
+    setReturnToSettings(false);
+    setSettingsOpen(true);
+  }
+
+  function closeSettings() {
+    setSettingsOpen(false);
+    setReturnToSettings(false);
+  }
+
+  function openSettingsChild(open: (value: boolean) => void) {
+    setReturnToSettings(true);
+    setSettingsOpen(false);
+    open(true);
+  }
+
+  function returnFromSettingsChild() {
+    if (!returnToSettings) return;
+    setReturnToSettings(false);
+    setSettingsOpen(true);
+  }
+
+  function closeSettingsChild(close: (value: boolean) => void) {
+    close(false);
+    returnFromSettingsChild();
   }
 
   return (
@@ -999,62 +1106,73 @@ function App() {
           <div className="brand-mark" aria-hidden="true"><span /><span /></div>
           <span className="brand-name">Laural</span>
           <div className="app-menu-wrap" ref={appMenuRef}>
-            <button ref={appMenuButtonRef} className="icon-button sidebar-menu" aria-label="Abrir menú" aria-expanded={appMenuOpen} aria-haspopup="menu" aria-controls="app-menu" onClick={() => setAppMenuOpen((open) => !open)}><DotsIcon /></button>
-            {appMenuOpen && <div className="app-menu" id="app-menu" role="menu" aria-label="Menú de Laural" onKeyDown={navigateAppMenu}>
-              <button role="menuitem" onClick={() => { setAppMenuOpen(false); addTerminal("powershell"); }}>Nueva terminal</button>
-              <button role="menuitem" onClick={() => { setAppMenuOpen(false); void openProject(); }}>Abrir carpeta de proyecto</button>
-              <button role="menuitem" onClick={() => { setAppMenuOpen(false); setCommandPaletteView("all"); setCommandPaletteOpen(true); }}>Buscar acciones e historial</button>
-              <button role="menuitem" onClick={() => { setAppMenuOpen(false); setProviderDialogOpen(true); }}>Configurar proveedor de IA</button>
-              <button role="menuitem" onClick={() => { setAppMenuOpen(false); setSettingsOpen(true); }}>Configuración</button>
-              <button role="menuitem" onClick={() => { setAppMenuOpen(false); setHelpOpen(true); }}>Ayuda</button>
+            <button ref={appMenuButtonRef} className="icon-button sidebar-menu" aria-label={appText.menuOpen} aria-expanded={appMenuOpen} aria-haspopup="menu" aria-controls="app-menu" onClick={() => setAppMenuOpen((open) => !open)}><DotsIcon /></button>
+            {appMenuOpen && <div className="app-menu" id="app-menu" role="menu" aria-label={appText.menuLabel} onKeyDown={navigateAppMenu}>
+              <button role="menuitem" onClick={() => { setAppMenuOpen(false); addTerminal("powershell"); }}>{appText.newTerminal}</button>
+              <button role="menuitem" onClick={() => { setAppMenuOpen(false); void openProject(); }}>{appText.openProject}</button>
+              <button role="menuitem" onClick={() => { setAppMenuOpen(false); setCommandPaletteView("all"); setCommandPaletteOpen(true); }}>{appText.searchActions}</button>
+              <button role="menuitem" onClick={() => { setAppMenuOpen(false); setReturnToSettings(false); setProviderDialogOpen(true); }}>{appText.configureProvider}</button>
+              <button role="menuitem" onClick={() => { setAppMenuOpen(false); openSettings(); }}>{appText.settings}</button>
+              <button role="menuitem" onClick={() => { setAppMenuOpen(false); setHelpOpen(true); }}>{appText.help}</button>
             </div>}
           </div>
         </div>
         <div className="workspace-picker-wrap" ref={workspaceMenuRef}>
           <button className="workspace-picker" aria-expanded={workspaceMenuOpen} aria-haspopup="menu" aria-controls="workspace-menu" onClick={() => setWorkspaceMenuOpen((open) => !open)}>
             <span className="workspace-avatar">A</span>
-            <span className="workspace-copy"><strong>Mi equipo</strong><small>Espacio personal</small></span>
+            <span className="workspace-copy"><strong>{appText.workspace}</strong><small>{appText.personalSpace}</small></span>
             <ChevronIcon />
           </button>
-          {workspaceMenuOpen && <div className="workspace-menu" id="workspace-menu" role="menu" aria-label="Espacio de trabajo">
-            <p className="workspace-menu-label">ESPACIO ACTUAL</p>
-            <div className="workspace-menu-current"><span className="workspace-avatar">A</span><span><strong>Espacio personal</strong><small>Solo disponible en este equipo</small></span><span className="workspace-menu-check" aria-label="Seleccionado">✓</span></div>
-            <p className="workspace-menu-note">Los espacios compartidos aún no están disponibles. Tus proyectos se abren dentro de este espacio local.</p>
-            <button role="menuitem" onClick={() => { setWorkspaceMenuOpen(false); void openProject(); }}><FolderIcon /><span>{projectPath ? "Cambiar carpeta de proyecto" : "Abrir carpeta de proyecto"}</span></button>
-            <button role="menuitem" onClick={() => { setWorkspaceMenuOpen(false); setAccountSettingsOpen(true); }}><SyncIcon /><span>Cuenta y sincronización</span></button>
+          {workspaceMenuOpen && <div className="workspace-menu" id="workspace-menu" role="menu" aria-label={appText.workspace}>
+            <p className="workspace-menu-label">{appText.currentSpace}</p>
+            <div className="workspace-menu-current"><span className="workspace-avatar">A</span><span><strong>{appText.personalSpace}</strong><small>{appText.onlyThisDevice}</small></span><span className="workspace-menu-check" aria-label={appText.selected}>✓</span></div>
+            <p className="workspace-menu-note">{appText.workspaceUnavailable}</p>
+            <button role="menuitem" onClick={() => { setWorkspaceMenuOpen(false); void openProject(); }}><FolderIcon /><span>{projectPath ? appText.changeProject : appText.openProject}</span></button>
+            <button role="menuitem" onClick={() => { setWorkspaceMenuOpen(false); setReturnToSettings(false); setAccountSettingsOpen(true); }}><SyncIcon /><span>{appText.syncAccount}</span></button>
           </div>}
         </div>
-        <nav className="primary-nav" aria-label="Navegación principal">
-          <button className={`nav-item ${!(commandPaletteOpen && commandPaletteView === "history") ? "active" : ""}`}><TerminalIcon /><span>Terminal</span><kbd>⌘ 1</kbd></button>
-          <button className="nav-item" onClick={() => setProviderDialogOpen(true)}><SparkIcon /><span>Asistente IA</span><span className="nav-dot" /></button>
-          <button className={`nav-item ${commandPaletteOpen && commandPaletteView === "history" ? "active" : ""}`} onClick={() => { setCommandPaletteView("history"); setCommandPaletteOpen(true); }}><HistoryIcon /><span>Historial</span></button>
+        <nav className="primary-nav" aria-label={appText.primaryNavigation}>
+          <button className={`nav-item ${!(commandPaletteOpen && commandPaletteView === "history") ? "active" : ""}`}><TerminalIcon /><span>{appText.terminal}</span><kbd>⌘ 1</kbd></button>
+          <button className="nav-item" onClick={() => { setReturnToSettings(false); setProviderDialogOpen(true); }}><SparkIcon /><span>{appText.aiAssistant}</span><span className="nav-dot" /></button>
+          <button className={`nav-item ${commandPaletteOpen && commandPaletteView === "history" ? "active" : ""}`} onClick={() => { setCommandPaletteView("history"); setCommandPaletteOpen(true); }}><HistoryIcon /><span>{appText.history}</span></button>
         </nav>
         <div className="sidebar-section">
-          <div className="section-label"><span>PROYECTOS</span><button className="quiet-icon" aria-label="Añadir proyecto"><PlusIcon /></button></div>
-          <button className="project-item" onClick={() => void openProject()}><span className="project-glyph">L</span><span>{projectPath ? projectPath.split(/[\\/]/).filter(Boolean).pop() : "Laural"}</span><span className="project-menu">···</span></button>
-          <button className="add-project" onClick={() => void openProject()}><PlusIcon /><span>Abrir un proyecto</span></button>
+          <div className="section-label"><span>{appText.projects}</span><button className="quiet-icon" aria-label={appText.addProject} title={appText.addProject} onClick={() => void openProject()}><PlusIcon /></button></div>
+          <div className="project-list" role="list" aria-label={appText.projects}>
+            {projectPaths.map((path) => {
+              const name = path.split(/[\\/]/).filter(Boolean).pop() ?? path;
+              const active = projectPath !== null && projectPathIdentity(projectPath) === projectPathIdentity(path);
+              return <div className={`project-item ${active ? "active" : ""}`} key={projectPathIdentity(path)} role="listitem">
+                <button type="button" className="project-select" aria-current={active ? "true" : undefined} title={path} onClick={() => activateProject(path)}>
+                  <span className="project-glyph">{name.slice(0, 1).toUpperCase()}</span><span className="project-name">{name}</span>
+                </button>
+                <button type="button" className="project-remove" aria-label={appText.removeProject.replace("{project}", name)} title={appText.removeProject.replace("{project}", name)} onClick={() => removeProject(path)}>×</button>
+              </div>;
+            })}
+          </div>
+          <button className="add-project" onClick={() => void openProject()}><PlusIcon /><span>{appText.openAProject}</span></button>
         </div>
         <div className="sidebar-spacer" />
         <div className="sidebar-bottom">
           <div className="plan-card">
             <div className="plan-icon"><SparkIcon /></div>
             <div>
-              <strong>{provider ? provider.name : "Conecta tu modelo"}</strong>
-              <p>{provider ? `Modelo: ${provider.model || "automático"}` : "Usa Ollama, LM Studio o tu endpoint."}</p>
+              <strong>{provider ? provider.name : appText.connectModel}</strong>
+              <p>{provider ? `${appText.model}: ${provider.model || appText.automatic}` : appText.endpointHint}</p>
             </div>
-            <button className="plan-arrow" onClick={() => setProviderDialogOpen(true)} aria-label="Configurar proveedor"><ChevronIcon /></button>
+            <button className="plan-arrow" onClick={() => { setReturnToSettings(false); setProviderDialogOpen(true); }} aria-label={appText.configure}><ChevronIcon /></button>
           </div>
-          <button className="appearance-entry" onClick={() => setSettingsOpen(true)}><PaletteIcon /><span>Configuración</span><span className="appearance-entry-meta">{appearance === "dark" ? "Oscuro" : "Claro"}</span></button>
-          {syncNotice && <div className="sync-notice" role="status"><span>{syncNotice}</span><button onClick={() => setAccountSettingsOpen(true)}>Revisar</button><button className="sync-notice-close" onClick={clearSyncNotice} aria-label="Cerrar aviso de sincronización">×</button></div>}
-          <UpdateManager settingsOpen={updateSettingsOpen} onSettingsOpen={() => setUpdateSettingsOpen(true)} onSettingsClose={() => setUpdateSettingsOpen(false)} />
+          <button className="appearance-entry" onClick={openSettings}><PaletteIcon /><span>{appText.appearance}</span><span className="appearance-entry-meta">{appearance === "dark" ? appText.dark : appText.light}</span></button>
+          {syncNotice && <div className="sync-notice" role="status"><span>{syncNotice}</span><button onClick={() => setAccountSettingsOpen(true)}>{appText.reviewSync}</button><button className="sync-notice-close" onClick={clearSyncNotice} aria-label={appText.closeSyncNotice}>×</button></div>}
+          <UpdateManager settingsOpen={updateSettingsOpen} onSettingsOpen={() => { setReturnToSettings(false); setUpdateSettingsOpen(true); }} onSettingsClose={() => closeSettingsChild(setUpdateSettingsOpen)} />
           <div className="profile-menu-wrap" ref={profileMenuRef}>
-            <button className="profile-row" aria-expanded={profileMenuOpen} aria-haspopup="menu" aria-controls="profile-menu" onClick={() => setProfileMenuOpen((open) => !open)}><span className="profile-avatar">AM</span><span className="profile-name">Perfil local</span><DotsIcon /></button>
-            {profileMenuOpen && <div className="profile-menu" id="profile-menu" role="menu" aria-label="Opciones del perfil local">
-              <p className="profile-menu-label">PERFIL LOCAL</p>
-              <p className="profile-menu-description">Preferencias y proveedores guardados en este equipo.</p>
-              <button role="menuitem" onClick={() => { setProfileMenuOpen(false); setSettingsOpen(true); }}>Configuración</button>
-              <button role="menuitem" onClick={() => { setProfileMenuOpen(false); setTransferOpen(true); }}>Importar y exportar configuración</button>
-              <button role="menuitem" onClick={() => { setProfileMenuOpen(false); setAccountSettingsOpen(true); }}>Cuenta y sincronización</button>
+            <button className="profile-row" aria-expanded={profileMenuOpen} aria-haspopup="menu" aria-controls="profile-menu" onClick={() => setProfileMenuOpen((open) => !open)}><span className="profile-avatar">AM</span><span className="profile-name">{appText.localProfile}</span><DotsIcon /></button>
+            {profileMenuOpen && <div className="profile-menu" id="profile-menu" role="menu" aria-label={appText.profileOptions}>
+              <p className="profile-menu-label">{appText.localProfile.toUpperCase()}</p>
+              <p className="profile-menu-description">{appText.profileDescription}</p>
+              <button role="menuitem" onClick={() => { setProfileMenuOpen(false); openSettings(); }}>{appText.settings}</button>
+              <button role="menuitem" onClick={() => { setProfileMenuOpen(false); setReturnToSettings(false); setTransferOpen(true); }}>{appText.transfer}</button>
+              <button role="menuitem" onClick={() => { setProfileMenuOpen(false); setReturnToSettings(false); setAccountSettingsOpen(true); }}>{appText.syncAccount}</button>
             </div>}
           </div>
         </div>
@@ -1062,210 +1180,238 @@ function App() {
 
       <section className="main-column">
         <header className="topbar">
-          <div className="breadcrumb"><span className="breadcrumb-muted">Mi equipo</span><ChevronRightIcon /><strong>Terminal</strong></div>
+          <div className="breadcrumb"><span className="breadcrumb-muted">{appText.workspace}</span><ChevronRightIcon /><strong>{appText.breadcrumbTerminal}</strong></div>
           <div className="topbar-actions">
-            <button className="search-button" onClick={() => { setCommandPaletteView("all"); setCommandPaletteOpen(true); }}><SearchIcon /><span>Buscar comandos y sesiones</span><kbd>Ctrl K</kbd></button>
-            <button className="icon-button top-icon" aria-label="Ayuda" title="Ayuda" onClick={() => setHelpOpen(true)}><HelpIcon /></button>
-            <button className="icon-button top-icon" aria-label="Notificaciones" title="Notificaciones" onClick={() => setNotificationsOpen(true)}><BellIcon /></button>
+            <button className="search-button" onClick={() => { setCommandPaletteView("all"); setCommandPaletteOpen(true); }}><SearchIcon /><span>{appText.searchCommands}</span><kbd>Ctrl K</kbd></button>
+            <button className="icon-button top-icon" aria-label={appText.helpTitle} title={appText.helpTitle} onClick={() => setHelpOpen(true)}><HelpIcon /></button>
+            <button className="icon-button top-icon" aria-label={appText.notificationsTitle} title={appText.notificationsTitle} onClick={() => setNotificationsOpen(true)}><BellIcon /></button>
           </div>
         </header>
 
         <div className="terminal-toolbar">
-          <div className="tabs-strip" role="tablist" aria-label="Sesiones de terminal">
+          <div className="tabs-strip" role="tablist" aria-label={appText.sessions}>
             {tabs.map((tab) => <button className={`terminal-tab ${tab.id === activeTabId ? "selected" : ""}`} key={tab.id} onClick={() => selectTab(tab.id)} role="tab" aria-selected={tab.id === activeTabId}>
               <span className={`shell-badge ${tab.shell}`}>{shellIcons[tab.shell]}</span><span>{tab.title}</span>
-              <span className="tab-close" role="button" tabIndex={0} aria-label={`Cerrar ${tab.title}`} onClick={(event) => { event.stopPropagation(); closeTab(tab.id); }} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.stopPropagation(); closeTab(tab.id); } }}>×</span>
+              <span className="tab-close" role="button" tabIndex={0} aria-label={appText.closeTab.replace("{title}", tab.title)} onClick={(event) => { event.stopPropagation(); closeTab(tab.id); }} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.stopPropagation(); closeTab(tab.id); } }}>×</span>
             </button>)}
             <div className="new-tab-wrap">
-              <button className="new-tab-button" aria-label="Nueva terminal" onClick={() => setShellMenuOpen((open) => !open)}><PlusIcon /></button>
+              <button className="new-tab-button" aria-label={appText.newTerminal} onClick={() => setShellMenuOpen((open) => !open)}><PlusIcon /></button>
               {shellMenuOpen && <div className="shell-menu">{(Object.keys(shellNames) as Shell[]).map((shell) => <button key={shell} onClick={() => addTerminal(shell)}><span className={`shell-badge ${shell}`}>{shellIcons[shell]}</span><span>{shellNames[shell]}</span></button>)}</div>}
             </div>
           </div>
           <div className="terminal-tools">
-            <button className="toolbar-chip" onClick={() => setProviderDialogOpen(true)}><span className={`status-led ${provider ? "connected" : ""}`} /><span>{provider ? `${provider.name} · ${provider.model}` : "Proveedor sin configurar"}</span><ChevronIcon /></button>
-            <button className="toolbar-icon git-toolbar-button" aria-label="Abrir panel Git" title="Panel Git de solo lectura" onClick={() => setGitPanelOpen(true)}><BranchIcon /></button>
-            <button className={`toolbar-icon ${splitTabId ? "active" : ""}`} aria-label={splitTabId ? `División ${splitOrientation === "vertical" ? "vertical" : "horizontal"}; cambiar o cerrar` : "Dividir panel"} title={splitTabId ? `${splitOrientation === "vertical" ? "Vertical" : "Horizontal"} · clic para cambiar/cerrar` : "Dividir terminal"} onClick={toggleSplit}><SplitIcon /></button>
-            <button className={`toolbar-icon assistant-toggle ${assistantVisible ? "active" : ""}`} aria-label={assistantVisible ? "Ocultar asistente IA" : "Mostrar asistente IA"} aria-pressed={assistantVisible} title={assistantVisible ? "Ocultar asistente IA" : "Mostrar asistente IA"} onClick={() => setAssistantVisible((visible) => !visible)}><PanelRightIcon /></button>
+            <button className="toolbar-chip" onClick={() => setProviderDialogOpen(true)}><span className={`status-led ${provider ? "connected" : ""}`} /><span>{provider ? `${provider.name} · ${provider.model}` : appText.providerUnconfigured}</span><ChevronIcon /></button>
+            <button className="toolbar-icon git-toolbar-button" aria-label={appText.openGit} title={messages.git.readOnly} onClick={() => setGitPanelOpen(true)}><BranchIcon /></button>
+            <button className={`toolbar-icon ${splitTabId ? "active" : ""}`} aria-label={splitTabId ? splitOrientation === "vertical" ? appText.splitVertical : appText.splitHorizontal : appText.splitPanel} title={splitTabId ? appText.splitChange.replace("{orientation}", splitOrientation === "vertical" ? appText.vertical : appText.horizontal) : appText.splitTerminal} onClick={toggleSplit}><SplitIcon /></button>
+            <button className={`toolbar-icon assistant-toggle ${assistantVisible ? "active" : ""}`} aria-label={assistantVisible ? appText.hideAssistant : appText.showAssistant} aria-pressed={assistantVisible} title={assistantVisible ? appText.hideAssistant : appText.showAssistant} onClick={() => setAssistantVisible((visible) => !visible)}><PanelRightIcon /></button>
             <div className="toolbar-more-wrap" ref={terminalMoreRef}>
-              <button className="toolbar-icon" aria-label="Más opciones" aria-expanded={terminalMoreOpen} aria-haspopup="menu" aria-controls="terminal-more-menu" onClick={() => setTerminalMoreOpen((open) => !open)}><DotsIcon /></button>
-              {terminalMoreOpen && <div className="toolbar-more-menu" id="terminal-more-menu" role="menu" aria-label="Más opciones de terminal">
-                <button role="menuitem" onClick={() => { setTerminalMoreOpen(false); setGitPanelOpen(true); }}>Abrir panel Git</button>
-                <button role="menuitem" onClick={() => { setTerminalMoreOpen(false); setBlocksOpen((open) => !open); }}>{blocksOpen ? "Ocultar bloques" : "Mostrar bloques"}</button>
-                <button role="menuitem" onClick={() => { setTerminalMoreOpen(false); setAssistantVisible((visible) => !visible); }}>{assistantVisible ? "Ocultar asistente IA" : "Mostrar asistente IA"}</button>
-                <button role="menuitem" onClick={() => { setTerminalMoreOpen(false); setProviderDialogOpen(true); }}>Configurar proveedor</button>
-                <button role="menuitem" onClick={() => { setTerminalMoreOpen(false); requestTerminalCopy(); }}>Copiar selección</button>
-                <button role="menuitem" onClick={() => { setTerminalMoreOpen(false); requestTerminalClear(); }}>Limpiar terminal</button>
+              <button className="toolbar-icon" aria-label={appText.terminalMore} aria-expanded={terminalMoreOpen} aria-haspopup="menu" aria-controls="terminal-more-menu" onClick={() => setTerminalMoreOpen((open) => !open)}><DotsIcon /></button>
+              {terminalMoreOpen && <div className="toolbar-more-menu" id="terminal-more-menu" role="menu" aria-label={appText.terminalMoreLabel}>
+                <button role="menuitem" onClick={() => { setTerminalMoreOpen(false); setGitPanelOpen(true); }}>{appText.openGit}</button>
+                <button role="menuitem" onClick={() => { setTerminalMoreOpen(false); setBlocksOpen((open) => !open); }}>{blocksOpen ? appText.hideBlocks : appText.showBlocks}</button>
+                <button role="menuitem" onClick={() => { setTerminalMoreOpen(false); setAssistantVisible((visible) => !visible); }}>{assistantVisible ? appText.hideAssistant : appText.showAssistant}</button>
+                <button role="menuitem" onClick={() => { setTerminalMoreOpen(false); setProviderDialogOpen(true); }}>{appText.configureProviderShort}</button>
+                <button role="menuitem" onClick={() => { setTerminalMoreOpen(false); requestTerminalCopy(); }}>{appText.copySelection}</button>
+                <button role="menuitem" onClick={() => { setTerminalMoreOpen(false); requestTerminalClear(); }}>{appText.clearTerminal}</button>
               </div>}
             </div>
           </div>
         </div>
 
         <div className={`workspace-body ${assistantVisible ? "" : "assistant-hidden"}`}>
-          <section className="terminal-area" aria-label="Terminal">
+          <section className="terminal-area" aria-label={appText.terminal}>
             <div className="terminal-heading">
-              <div><div className="terminal-title-line"><span className="terminal-title-mark">⌁</span><h1>{activeTab?.title ?? "Terminal"}</h1><span className="connection-pill"><span /> Local</span></div><p className="terminal-path">{activeTab?.cwd ?? "Directorio de inicio"} <span>·</span> Windows</p></div>
-              <div className="terminal-heading-actions"><button className={`small-action ${blocksOpen ? "selected" : ""}`} onClick={() => setBlocksOpen((open) => !open)} aria-pressed={blocksOpen}>Bloques <span className="block-count">{visibleBlocks.length}</span></button><button className="small-action" title="Copiar el texto seleccionado en la terminal" onClick={requestTerminalCopy}><CopyIcon /> Copiar selección</button><button className="small-action" title="Limpiar la pantalla de la terminal activa" onClick={requestTerminalClear}><ClearIcon /> Limpiar</button>{terminalActionNotice && <span className="terminal-action-notice" role="status">{terminalActionNotice}</span>}</div>
+              <div><div className="terminal-title-line"><span className="terminal-title-mark">⌁</span><h1>{activeTab?.title ?? appText.terminal}</h1><span className="connection-pill"><span /> {appText.connectionLocal}</span></div><p className="terminal-path">{activeTab?.cwd ?? appText.homeDirectory} <span>·</span> {appText.windows}</p></div>
+              <div className="terminal-heading-actions"><button className={`small-action ${blocksOpen ? "selected" : ""}`} onClick={() => setBlocksOpen((open) => !open)} aria-pressed={blocksOpen}>{appText.blockHeading} <span className="block-count">{visibleBlocks.length}</span></button><button className="small-action" title={appText.copySelectedTitle} onClick={requestTerminalCopy}><CopyIcon /> {appText.copySelection}</button><button className="small-action" title={appText.clearScreenTitle} onClick={requestTerminalClear}><ClearIcon /> {appText.clearTerminal}</button>{terminalActionNotice && <span className="terminal-action-notice" role="status">{terminalActionNotice}</span>}</div>
             </div>
             <div className={`terminal-frame ${blocksOpen ? "with-blocks" : ""} ${splitTabId ? `is-split split-${splitOrientation}` : ""}`}>
-              <Suspense fallback={<div className="terminal-loading" role="status">Iniciando terminal…</div>}>
-                {tabs.map((tab) => <TerminalPane key={tab.id} terminalId={tab.id} active={tab.id === activeTabId} copyRequest={terminalCopyRequest} clearRequest={terminalClearRequest} onActionNotice={setTerminalActionNotice} onRestart={restartTab} shell={tab.shell} cwd={tab.cwd} visible={tab.id === activeTabId || tab.id === splitTabId} theme={activeTheme} appearance={appearance} onTextOutput={captureTerminalOutput} onCommandSubmit={startCommandBlock} onCommandFinish={finishCommandBlock} />)}
+              <Suspense fallback={<div className="terminal-loading" role="status">{appText.terminalLoading}</div>}>
+                {tabs.map((tab) => <TerminalPane key={tab.id} terminalId={tab.id} active={tab.id === activeTabId} copyRequest={terminalCopyRequest} clearRequest={terminalClearRequest} onActionNotice={setTerminalActionNotice} onRestart={restartTab} shell={tab.shell} cwd={tab.cwd} powerShellPredictionEnabled={powerShellPredictionEnabled} visible={tab.id === activeTabId || tab.id === splitTabId} theme={activeTheme} appearance={appearance} onTextOutput={captureTerminalOutput} onCommandSubmit={startCommandBlock} onCommandFinish={finishCommandBlock} />)}
               </Suspense>
-              <div className="terminal-caption"><span className="shortcut-hint"><kbd>Ctrl</kbd> + <kbd>`</kbd> alternar terminal</span><span><span className="activity-pulse" /> Shell conectado</span></div>
+              <div className="terminal-caption"><span className="shortcut-hint"><kbd>Ctrl</kbd> + <kbd>`</kbd> {appText.toggleTerminal}</span><span><span className="activity-pulse" /> {appText.shellConnected}</span></div>
             </div>
-            {blocksOpen && <section className="command-blocks-panel" aria-label="Bloques de comandos">
-              {visibleBlocks.length === 0 ? <p className="blocks-empty">Los comandos que envíes desde esta terminal aparecerán aquí con su salida.</p> : visibleBlocks.map((block) => {
+            {blocksOpen && <section className="command-blocks-panel" aria-label={appText.commandBlocks}>
+              {visibleBlocks.length === 0 ? <p className="blocks-empty">{appText.blocksEmpty}</p> : visibleBlocks.map((block) => {
                 return <CommandBlockItem block={block} key={block.id} />;
               })}
             </section>}
-            <div className="terminal-footer"><div className="footer-left"><button className="footer-branch" onClick={() => setGitPanelOpen(true)} title="Consultar rama y cambios reales del proyecto"><BranchIcon /> Consultar Git</button></div><div className="footer-right"><span>UTF-8</span><span>{activeTab?.title ?? "PowerShell"}</span><span>100%</span></div></div>
+            <div className="terminal-footer"><div className="footer-left"><button className="footer-branch" onClick={() => setGitPanelOpen(true)} title={messages.git.title}><BranchIcon /> {messages.git.branch}</button></div><div className="footer-right"><span>UTF-8</span><span>{activeTab?.title ?? "PowerShell"}</span><span>100%</span></div></div>
           </section>
 
           {assistantVisible && <aside className="assistant-panel">
-            <div className="assistant-header"><div className="assistant-heading"><div className="assistant-avatar"><SparkIcon /></div><div><strong>Asistente</strong><span>Contexto de esta terminal</span></div></div><button className="action-quiet" onClick={clearChat} disabled={chatBusy || agentPlanBusy || agentCommandBusy}>Borrar historial</button></div>
-            <div className="mode-switch" role="tablist" aria-label="Modo de IA">
-              <button className={!agentMode ? "active" : ""} onClick={() => setAgentMode(false)} role="tab" aria-selected={!agentMode}><MessageIcon /> Chat</button>
-              <button className={agentMode ? "active" : ""} onClick={() => setAgentMode(true)} role="tab" aria-selected={agentMode}><AgentIcon /> Agente <span className="mode-beta">PREVIEW</span></button>
+            <div className="assistant-header"><div className="assistant-heading"><div className="assistant-avatar"><SparkIcon /></div><div><strong>{appText.assistant}</strong><span>{appText.terminalContext}</span></div></div><button className="action-quiet" onClick={clearChat} disabled={chatBusy || agentPlanBusy || agentCommandBusy}>{appText.clearChat}</button></div>
+            <div className="mode-switch" role="tablist" aria-label={appText.aiMode}>
+              <button className={!agentMode ? "active" : ""} onClick={() => setAgentMode(false)} role="tab" aria-selected={!agentMode}><MessageIcon /> {appText.chat}</button>
+              <button className={agentMode ? "active" : ""} onClick={() => setAgentMode(true)} role="tab" aria-selected={agentMode}><AgentIcon /> {appText.agent} <span className="mode-beta">{appText.preview}</span></button>
             </div>
-            {agentMode && <div className="agent-mode-actions"><button className="action-quiet" onClick={() => setTaskRecipesOpen(true)}>Recetas</button><button className="action-quiet" onClick={() => setSettingsOpen(true)}>Permisos del agente</button></div>}
+            {agentMode && <div className="agent-mode-actions"><button className="action-quiet" onClick={() => setTaskRecipesOpen(true)}>{appText.recipes}</button><button className="action-quiet" onClick={() => { setSettingsCategory("agent"); openSettings(); }}>{appText.agentPermissions}</button></div>}
             {chatMessages.length === 0 ? <div className="assistant-empty">
               <div className="empty-orbit orbit-one" /><div className="empty-orbit orbit-two" /><div className="empty-spark"><SparkIcon /></div>
-              <h2>{agentMode ? "Trabaja junto al agente" : "¿Qué quieres hacer?"}</h2>
-              <p>{agentMode ? projectPath ? "Describe una tarea. El agente prepara un plan y aplica tus reglas antes de ejecutar." : "Abre una carpeta de proyecto antes de iniciar una tarea del agente." : "Pregunta sobre la salida de la terminal, explora tu proyecto o pide ayuda con un comando."}</p>
-              {agentMode && !projectPath && <button className="open-project-cta" onClick={() => void openProject()}>Abrir proyecto</button>}
+              <h2>{agentMode ? appText.agentHeadline : appText.chatHeadline}</h2>
+              <p>{agentMode ? projectPath ? appText.agentTaskPrompt : appText.openProjectForAgent : appText.chatPrompt}</p>
+              {agentMode && !projectPath && <button className="open-project-cta" onClick={() => void openProject()}>{appText.openAProject}</button>}
               <div className="suggestion-list">
-                <button onClick={() => setPrompt("Explícame la salida de este comando")}><span className="suggestion-icon"><InfoIcon /></span><span>Explícame la salida de este comando</span><ArrowUpRightIcon /></button>
-                <button onClick={() => setPrompt("Ayúdame a encontrar un error en este proyecto")}><span className="suggestion-icon"><SearchIcon /></span><span>Ayúdame a encontrar un error</span><ArrowUpRightIcon /></button>
-                <button onClick={() => setPrompt("Dame un comando para revisar el estado de Git")}><span className="suggestion-icon"><TerminalIcon /></span><span>Genera un comando con contexto</span><ArrowUpRightIcon /></button>
+                <button onClick={() => setPrompt(appText.explainOutput)}><span className="suggestion-icon"><InfoIcon /></span><span>{appText.explainOutputLabel}</span><ArrowUpRightIcon /></button>
+                <button onClick={() => setPrompt(appText.findError)}><span className="suggestion-icon"><SearchIcon /></span><span>{appText.findErrorLabel}</span><ArrowUpRightIcon /></button>
+                <button onClick={() => setPrompt(appText.gitCommand)}><span className="suggestion-icon"><TerminalIcon /></span><span>{appText.generateCommand}</span><ArrowUpRightIcon /></button>
               </div>
             </div> : <div className="message-thread">
               {chatMessages.map((message, index) => <ChatMessageItem key={message.id ?? `${index}-${message.role}`} message={message} isStreaming={message.id === streamingMessageId} streamingContentRef={message.id === streamingMessageId ? streamingContentRef : undefined} />)}
               {agentPlan && <div className="agent-plan-card">
-                <div className="agent-plan-header"><span className="plan-icon-small"><AgentIcon /></span><strong>Plan del agente</strong><span>{agentPlan.actions.length} acciones</span></div>
+                <div className="agent-plan-header"><span className="plan-icon-small"><AgentIcon /></span><strong>{appText.agentPlan}</strong>{agentPlanProjectPath && <span className="agent-plan-root" title={agentPlanProjectPath}>{agentPlanProjectPath}</span>}<span className="agent-plan-count">{appText.actionsCount.replace("{count}", String(agentPlan.actions.length))}</span></div>
                 <p className="agent-plan-summary">{agentPlan.summary}</p>
                 <div className="agent-action-list">{agentPlan.actions.map((action, index) => <article className={`agent-action ${action.status ?? "pending"}`} key={`${index}-${action.type}`}>
-                  <div className="agent-action-top"><span className="action-number">{index + 1}</span><span className="action-type">{action.type === "run_command" ? "COMANDO" : "CAMBIO DE ARCHIVO"}</span><span className="action-status">{action.status === "completed" ? "COMPLETADO" : action.status === "cancelled" ? "DETENIDO" : action.status === "submitted" ? "ENVIADO" : action.status === "needs_review" ? "REVISAR" : action.status === "applied" ? "APLICADO" : action.status === "running" || action.status === "applying" ? "EN CURSO" : action.status === "error" ? "ERROR" : action.status === "rejected" ? "DESCARTADO" : "PENDIENTE"}</span></div>
+                  <div className="agent-action-top"><span className="action-number">{index + 1}</span><span className="action-type">{action.type === "run_command" ? appText.command : appText.fileChange}</span><span className="action-status">{action.status === "completed" ? appText.completed : action.status === "cancelled" ? appText.stopped : action.status === "submitted" ? appText.sent : action.status === "needs_review" ? appText.review : action.status === "applied" ? appText.applied : action.status === "running" || action.status === "applying" ? appText.running : action.status === "error" ? appText.error : action.status === "rejected" ? appText.discarded : appText.pending}</span></div>
                   <p className="action-reason">{action.reason}</p>
                   {action.type === "run_command" ? <pre className="action-code">{action.command}</pre> : <details className="file-preview"><summary>{action.path}</summary><pre>{action.content}</pre></details>}
-                  {action.type === "write_file" && backupVersions[index]?.length ? <div className="backup-controls"><select aria-label="Versión de copia" value={selectedBackups[index] ?? ""} onChange={event => setSelectedBackups(current => ({ ...current, [index]: event.currentTarget.value }))}>{backupVersions[index].map(version => <option key={version} value={version}>{version}</option>)}</select><button className="action-quiet" onClick={() => void restoreBackup(index, action.path)}>Restaurar copia</button><button className="action-quiet" onClick={() => void clearBackups(index, action.path)}>Eliminar copias</button></div> : null}{action.result && <p className={`action-result ${action.status === "error" || action.status === "needs_review" ? "warning" : ""}`}>{action.result}</p>}
-                  <div className="action-buttons">{action.type === "write_file" && action.status === "applied" ? <button className="action-quiet" onClick={() => void showBackups(index, action.path)}>Copias de seguridad</button> : null}{action.type === "run_command" ? !["submitted", "completed", "cancelled", "rejected", "running"].includes(action.status ?? "") && <button className="action-primary" onClick={() => void executeAgentCommand(index, true)}>{action.status === "needs_review" ? "Revisar y ejecutar" : "Aprobar y ejecutar"}</button> : action.status !== "applied" && action.status !== "rejected" && <button className="action-primary" onClick={() => void applyAgentFile(index)} disabled={!projectPath || action.status === "applying"}>Aplicar cambio</button>}
-                    {!(["submitted", "completed", "cancelled", "applied", "rejected", "running", "applying"].includes(action.status ?? "")) && <button className="action-quiet" onClick={() => updateAgentAction(index, { status: "rejected", result: "Acción descartada." })}>Descartar</button>}</div>
+                  {action.type === "write_file" && backupVersions[index]?.length ? <div className="backup-controls"><select aria-label={appText.backupVersion} value={selectedBackups[index] ?? ""} onChange={event => setSelectedBackups(current => ({ ...current, [index]: event.currentTarget.value }))}>{backupVersions[index].map(version => <option key={version} value={version}>{version}</option>)}</select><button className="action-quiet" onClick={() => void restoreBackup(index, action.path)}>{appText.restoreBackup}</button><button className="action-quiet" onClick={() => void clearBackups(index, action.path)}>{appText.deleteBackups}</button></div> : null}{action.result && <p className={`action-result ${action.status === "error" || action.status === "needs_review" ? "warning" : ""}`}>{action.result}</p>}
+                  <div className="action-buttons">{action.type === "write_file" && action.status === "applied" ? <button className="action-quiet" onClick={() => void showBackups(index, action.path)}>{appText.backups}</button> : null}{action.type === "run_command" ? !["submitted", "completed", "cancelled", "rejected", "running"].includes(action.status ?? "") && <button className="action-primary" onClick={() => void executeAgentCommand(index, true)}>{action.status === "needs_review" ? appText.approveReviewRun : appText.approveRun}</button> : action.status !== "applied" && action.status !== "rejected" && <button className="action-primary" onClick={() => void applyAgentFile(index)} disabled={!agentPlanProjectPath || action.status === "applying"}>{appText.applyChange}</button>}
+                    {!(["submitted", "completed", "cancelled", "applied", "rejected", "running", "applying"].includes(action.status ?? "")) && <button className="action-quiet" onClick={() => updateAgentAction(index, { status: "rejected", result: appText.discardedResult })}>{appText.discard}</button>}</div>
                 </article>)}</div>
               </div>}
-              {(chatBusy || agentPlanBusy || agentCommandBusy) && <div className="typing-indicator"><span /><span /><span /> {agentMode ? agentCommandBusy ? "El agente está esperando al shell" : "El agente está preparando el plan" : "El modelo está respondiendo"} {chatBusy && !agentMode && <button className="action-quiet" onClick={() => void stopChat()}>Detener</button>}{agentMode && <button className="action-quiet" onClick={() => void stopAgent()}>Detener agente</button>}</div>}
+              {(chatBusy || agentPlanBusy || agentCommandBusy) && <div className="typing-indicator"><span /><span /><span /> {agentMode ? agentCommandBusy ? appText.agentWaiting : appText.agentPlanning : appText.modelResponding} {chatBusy && !agentMode && <button className="action-quiet" onClick={() => void stopChat()}>{appText.stop}</button>}{agentMode && <button className="action-quiet" onClick={() => void stopAgent()}>{appText.stopAgent}</button>}</div>}
             </div>}
             <div className="composer-wrap">
               <form className="composer" onSubmit={submitPrompt}>
-                <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder={agentMode ? "Describe una tarea para el agente…" : "Pregunta sobre tu terminal…"} rows={3} />
-                {(contextFiles.length > 0 || gitDiffContext) && <div className="context-file-list">{contextFiles.map((path) => <button type="button" className="context-file-chip" key={path} title={path} onClick={() => setContextFiles((current) => current.filter((item) => item !== path))}><PaperclipIcon /> {path.split(/[\\/]/).pop()} <span>×</span></button>)}{gitDiffContext && <button type="button" className="context-file-chip" title="Quitar el diff Git del contexto" onClick={() => { setGitDiffContext(""); setGitDiffTruncated(false); }}><BranchIcon /> Diff Git{gitDiffTruncated ? " (parcial)" : ""} <span>×</span></button>}</div>}
-                <div className="composer-controls"><div className="composer-left"><button type="button" className="composer-tool" title="Adjuntar archivos" onClick={() => void addContextFiles()}><PaperclipIcon /></button><button type="button" className="context-chip" title="Revisar el contenido de terminal, proyecto y archivos que se enviará" onClick={() => void openContextPreview()}><span className="context-indicator" /> Revisar contexto</button>{projectPath && <span className="project-context-chip" title="Se incluirá contexto acotado del proyecto">Proyecto</span>}<button type="button" className="composer-tool" title="Seleccionar modelo" onClick={() => setProviderDialogOpen(true)}><ModelIcon /></button></div><button type="submit" className="send-button" aria-label="Enviar mensaje" disabled={!prompt.trim() || chatBusy || agentPlanBusy || agentCommandBusy}><ArrowUpIcon /></button></div>
+                <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder={agentMode ? appText.agentPlaceholder : appText.chatPlaceholder} rows={3} />
+                {(contextFiles.length > 0 || gitDiffContext) && <div className="context-file-list">{contextFiles.map((path) => <button type="button" className="context-file-chip" key={path} title={path} onClick={() => setContextFiles((current) => current.filter((item) => item !== path))}><PaperclipIcon /> {path.split(/[\\/]/).pop()} <span>×</span></button>)}{gitDiffContext && <button type="button" className="context-file-chip" title={appText.removeGitDiff} onClick={() => { setGitDiffContext(""); setGitDiffTruncated(false); }}><BranchIcon /> {appText.selectedGitDiff}{gitDiffTruncated ? ` (${appText.partial})` : ""} <span>×</span></button>}</div>}
+                <div className="composer-controls"><div className="composer-left"><button type="button" className="composer-tool" title={appText.attachFiles} onClick={() => void addContextFiles()}><PaperclipIcon /></button><button type="button" className="context-chip" title={appText.contextReviewTitle} onClick={() => void openContextPreview()}><span className="context-indicator" /> {appText.reviewContext}</button>{projectPath && <span className="project-context-chip" title={appText.projectContext}>{appText.project}</span>}<button type="button" className="composer-tool" title={appText.selectModel} onClick={() => setProviderDialogOpen(true)}><ModelIcon /></button></div><button type="submit" className="send-button" aria-label={appText.sendMessage} disabled={!prompt.trim() || chatBusy || agentPlanBusy || agentCommandBusy}><ArrowUpIcon /></button></div>
               </form>
-              <div className="composer-note"><span>{agentMode ? "Modo agente: ejecución pendiente" : provider ? `El contexto seleccionado se enviará a ${provider.name}` : "Conecta un proveedor para empezar"}</span><button onClick={() => setProviderDialogOpen(true)}>{provider ? "Ajustes" : "Configurar modelo"}</button></div>
+              <div className="composer-note"><span>{agentMode ? appText.agentModePending : provider ? appText.contextWillSend.replace("{provider}", provider.name) : appText.connectToStart}</span><button onClick={() => setProviderDialogOpen(true)}>{provider ? appText.modelSettings : appText.configureModel}</button></div>
             </div>
           </aside>}
         </div>
       </section>
 
-      {contextPreviewError && <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setContextPreviewError(""); }}><section className="provider-dialog context-error-dialog" role="alertdialog" aria-modal="true"><button className="dialog-close" onClick={() => setContextPreviewError("")} aria-label="Cerrar">×</button><p className="eyebrow">VISTA PREVIA</p><h2>No se pudo preparar el contexto</h2><p className="dialog-copy">{contextPreviewError}</p></section></div>}
+      {contextPreviewError && <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setContextPreviewError(""); }}><section className="provider-dialog context-error-dialog" role="alertdialog" aria-modal="true"><button className="dialog-close" onClick={() => setContextPreviewError("")} aria-label={appText.close}>×</button><p className="eyebrow">{appText.previewEyebrow}</p><h2>{appText.previewErrorTitle}</h2><p className="dialog-copy">{contextPreviewError}</p></section></div>}
 
-      <Suspense fallback={<div className="context-preview-loading" role="status">Abriendo panel…</div>}>
+      <Suspense fallback={<div className="context-preview-loading" role="status">{appText.previewOpen}</div>}>
       {gitPanelOpen && <GitPanel projectPath={projectPath} onClose={() => setGitPanelOpen(false)} onOpenProject={() => { setGitPanelOpen(false); void openProject(); }} onIncludeDiff={(content, truncated) => { setGitDiffContext(content); setGitDiffTruncated(truncated); setGitPanelOpen(false); }} />}
       {taskRecipesOpen && <TaskRecipes onClose={() => setTaskRecipesOpen(false)} onUse={(recipePrompt) => { setAgentMode(true); setPrompt(recipePrompt); }} />}
       {commandPaletteOpen && <CommandPalette commands={commandHistory.map((item) => ({ ...item, shell: shellNames[item.shell] }))} actions={paletteActions} view={commandPaletteView} onClose={() => setCommandPaletteOpen(false)} />}
-      {helpOpen && <HelpDialog onClose={() => setHelpOpen(false)} onConfigureProvider={() => { setHelpOpen(false); setProviderDialogOpen(true); }} onOpenSettings={() => { setHelpOpen(false); setSettingsOpen(true); }} onOpenPalette={() => { setHelpOpen(false); setCommandPaletteView("all"); setCommandPaletteOpen(true); }} />}
-      {notificationsOpen && <NotificationCenter syncNotice={syncNotice} onClose={() => setNotificationsOpen(false)} onOpenUpdates={() => { setNotificationsOpen(false); setUpdateSettingsOpen(true); }} onOpenAccount={() => { setNotificationsOpen(false); setAccountSettingsOpen(true); }} />}
+      {helpOpen && <HelpDialog onClose={() => setHelpOpen(false)} onConfigureProvider={() => { setHelpOpen(false); setReturnToSettings(false); setProviderDialogOpen(true); }} onOpenSettings={() => { setHelpOpen(false); openSettings(); }} onOpenPalette={() => { setHelpOpen(false); setCommandPaletteView("all"); setCommandPaletteOpen(true); }} />}
+      {notificationsOpen && <NotificationCenter syncNotice={syncNotice} onClose={() => setNotificationsOpen(false)} onOpenUpdates={() => { setNotificationsOpen(false); setReturnToSettings(false); setUpdateSettingsOpen(true); }} onOpenAccount={() => { setNotificationsOpen(false); setReturnToSettings(false); setAccountSettingsOpen(true); }} />}
 
       {contextPreview && <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setContextPreview(null); }}>
         <section className="context-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="context-preview-title">
-          <button className="dialog-close" onClick={() => setContextPreview(null)} aria-label="Cerrar">×</button>
-          <div className="dialog-mark"><PaperclipIcon /></div><p className="eyebrow">DATOS QUE SE ADJUNTAN</p><h2 id="context-preview-title">Revisa el contexto</h2>
-          <p className="dialog-copy">Este contenido se enviará al proveedor activo al mandar el siguiente mensaje. Comprueba que no incluya credenciales o datos privados.</p>
-          <span className="context-size">{contextPreview.totalCharacters.toLocaleString("es-ES")} caracteres</span>
-          {[ ["Salida de terminal", contextPreview.terminal], ["Proyecto", contextPreview.project], ["Archivos elegidos", contextPreview.selectedFiles], ["Diff Git seleccionado", contextPreview.gitDiff] ].map(([title, content]) => <details className="context-preview-section" key={title} open={Boolean(content)}>
-            <summary>{title}<span>{content ? `${content.length.toLocaleString("es-ES")} caracteres` : "Sin contenido"}</span></summary>
-            <pre>{content || "No se enviará contenido de esta fuente."}</pre>
+          <button className="dialog-close" onClick={() => setContextPreview(null)} aria-label={appText.close}>×</button>
+          <div className="dialog-mark"><PaperclipIcon /></div><p className="eyebrow">{appText.attachedData}</p><h2 id="context-preview-title">{appText.reviewContextTitle}</h2>
+          <p className="dialog-copy">{appText.contextWillSendInfo}</p>
+          <span className="context-size">{contextPreview.totalCharacters.toLocaleString(language)} {appText.characters}</span>
+          {[ [appText.terminalOutput, contextPreview.terminal], [appText.project, contextPreview.project], [appText.selectedFiles, contextPreview.selectedFiles], [appText.selectedGitDiff, contextPreview.gitDiff] ].map(([title, content]) => <details className="context-preview-section" key={title} open={Boolean(content)}>
+            <summary>{title}<span>{content ? `${content.length.toLocaleString(language)} ${appText.characters}` : appText.noContent}</span></summary>
+            <pre>{content || appText.sourceNotSent}</pre>
           </details>)}
-          <div className="provider-actions"><button className="primary-button" onClick={() => setContextPreview(null)}>Listo</button></div>
+          <div className="provider-actions"><button className="primary-button" onClick={() => setContextPreview(null)}>{appText.done}</button></div>
         </section>
       </div>}
 
-      {contextPreviewBusy && <div className="context-preview-loading" role="status">Preparando vista previa…</div>}
+      {contextPreviewBusy && <div className="context-preview-loading" role="status">{appText.preparingPreview}</div>}
 
       {providerDialogOpen && <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeProviderDialog(); }}>
         <section className="provider-dialog" role="dialog" aria-modal="true" aria-labelledby="provider-title">
-          <button className="dialog-close" onClick={closeProviderDialog} aria-label="Cerrar">×</button>
-          <div className="dialog-mark"><SparkIcon /></div><p className="eyebrow">CONFIGURACIÓN LOCAL</p><h2 id="provider-title">Conecta tu proveedor</h2>
-          <p className="dialog-copy">Usa Ollama, LM Studio o cualquier endpoint compatible con OpenAI. La clave se guarda en el almacén de credenciales de Windows.</p>
+          <button className="dialog-close" onClick={closeProviderDialog} aria-label={appText.close}>×</button>
+          <div className="dialog-mark"><SparkIcon /></div><p className="eyebrow">{appText.localSettings}</p><h2 id="provider-title">{appText.connectProvider}</h2>
+          <p className="dialog-copy">{appText.providerInfo}</p>
           <div className="form-row">
-            <label className="form-label">Perfiles guardados
+            <label className="form-label">{appText.savedProfiles}
               <select value={editingProviderId ?? ""} onChange={(event) => event.currentTarget.value ? void selectSavedProvider(event.currentTarget.value) : newProviderProfile()} disabled={providerBusy}>
-                <option value="">Nuevo perfil…</option>{providers.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.model}</option>)}
+                <option value="">{appText.newProfile}</option>{providers.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.model}</option>)}
               </select>
             </label>
-            <button className="secondary-button model-refresh" onClick={newProviderProfile} disabled={providerBusy}>Nuevo</button>
+            <button className="secondary-button model-refresh" onClick={newProviderProfile} disabled={providerBusy}>{appText.new}</button>
           </div>
-          <label className="form-label">Tipo de proveedor
+          <label className="form-label">{appText.providerType}
             <select value={providerKind} onChange={(event) => chooseProvider(event.currentTarget.value)}>
-              <option value="freellmapi">FreeLLMAPI</option><option value="ollama">Ollama</option><option value="lmstudio">LM Studio</option><option value="custom">Otro endpoint compatible</option>
+              <option value="freellmapi">FreeLLMAPI</option><option value="ollama">Ollama</option><option value="lmstudio">LM Studio</option><option value="custom">{appText.otherEndpoint}</option>
             </select>
           </label>
-          <label className="form-label">Nombre
-            <input value={providerName} onChange={(event) => setProviderName(event.currentTarget.value)} placeholder="Mi proveedor" />
+          <label className="form-label">{appText.name}
+            <input value={providerName} onChange={(event) => setProviderName(event.currentTarget.value)} placeholder={appText.myProvider} />
           </label>
-          <label className="form-label">URL base
-            <input readOnly={editingProviderId !== null} title={editingProviderId ? "Crea un perfil nuevo para cambiar el destino" : undefined} value={baseUrl} onChange={(event) => setBaseUrl(event.currentTarget.value)} placeholder="http://127.0.0.1:1234/v1" autoCapitalize="off" autoCorrect="off" />
+          <label className="form-label">{appText.baseUrl}
+            <input readOnly={editingProviderId !== null} title={editingProviderId ? appText.changeDestinationHint : undefined} value={baseUrl} onChange={(event) => setBaseUrl(event.currentTarget.value)} placeholder="http://127.0.0.1:1234/v1" autoCapitalize="off" autoCorrect="off" />
           </label>
-          <label className="transfer-check"><input type="checkbox" checked={shareCustomEndpoint} onChange={(event) => setShareCustomEndpoint(event.currentTarget.checked)} /> Permitir sincronizar esta URL si activo la sincronización</label>
-          <p className="dialog-copy">Desactivado por defecto. La URL solo se enviará a la cuenta de Laural si activas la sincronización; ese servicio todavía no está disponible.</p>
+          <label className="transfer-check"><input type="checkbox" checked={shareCustomEndpoint} onChange={(event) => setShareCustomEndpoint(event.currentTarget.checked)} /> {appText.shareEndpoint}</label>
+          <p className="dialog-copy">{appText.shareEndpointInfo}</p>
           <div className="form-row">
-            <label className="form-label">Modelo
-              <input value={model} onChange={(event) => setModel(event.currentTarget.value)} list="provider-model-list" placeholder="Selecciona o escribe un modelo" autoCapitalize="off" autoCorrect="off" />
+            <label className="form-label">{appText.model}
+              <input value={model} onChange={(event) => setModel(event.currentTarget.value)} list="provider-model-list" placeholder={appText.selectOrTypeModel} autoCapitalize="off" autoCorrect="off" />
               <datalist id="provider-model-list">{models.map((item) => <option key={item} value={item} />)}</datalist>
             </label>
-            <button className="secondary-button model-refresh" onClick={() => void testProvider()} disabled={providerBusy}>Probar</button>
+            <button className="secondary-button model-refresh" onClick={() => void testProvider()} disabled={providerBusy}>{appText.test}</button>
           </div>
-          <label className="form-label">Clave API <span className="optional-label">opcional para endpoints locales</span>
-            <input type="password" value={apiKey} onChange={(event) => setApiKey(event.currentTarget.value)} placeholder={editingHasApiKey ? "Clave guardada · deja vacío para mantenerla" : "Pega una clave nueva"} autoComplete="new-password" />
+          <label className="form-label">{appText.apiKey} <span className="optional-label">{appText.localOptional}</span>
+            <input type="password" value={apiKey} onChange={(event) => setApiKey(event.currentTarget.value)} placeholder={editingHasApiKey ? appText.savedKeyHint : appText.pasteNewKey} autoComplete="new-password" />
           </label>
           {providerError && <div className="form-message error">{providerError}</div>}
           {providerNotice && <div className="form-message success">{providerNotice}</div>}
-          <div className="provider-actions"><button className="secondary-button" onClick={() => void testProvider()} disabled={providerBusy}>{providerBusy ? "Conectando…" : "Probar conexión y modelos"}</button><button className="primary-button" onClick={() => void saveProvider()} disabled={providerBusy || !model.trim()}>{providerBusy ? "Guardando…" : "Guardar proveedor"}</button></div>
-          <div className="dialog-footnote"><LockIcon /> La clave nunca se escribe en el archivo de configuración.</div>
+          <div className="provider-actions"><button className="secondary-button" onClick={() => void testProvider()} disabled={providerBusy}>{providerBusy ? appText.connecting : appText.testModels}</button><button className="primary-button" onClick={() => void saveProvider()} disabled={providerBusy || !model.trim()}>{providerBusy ? appText.saving : appText.saveProvider}</button></div>
+          <div className="dialog-footnote"><LockIcon /> {appText.keyStorage}</div>
         </section>
       </div>}
 
-      {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)}>
-        <button className="settings-link" onClick={() => { setSettingsOpen(false); setAppearanceOpen(true); }}>Apariencia <span>{activeTheme.name} · {appearance === "dark" ? "Oscuro" : "Claro"}</span></button>
-        <button className="settings-link" onClick={() => { setSettingsOpen(false); setProviderDialogOpen(true); }}>Proveedores y modelos <span>{provider?.name ?? "Configurar"}</span></button>
-        <button className="settings-link" onClick={() => { setSettingsOpen(false); setTransferOpen(true); }}>Importar y exportar <span>Configuración entre equipos</span></button>
-        <button className="settings-link" onClick={() => { setSettingsOpen(false); setAccountSettingsOpen(true); }}>Cuenta y sincronización <span>Inicio de sesión de Laural</span></button>
-        <button className="settings-link" onClick={() => { setSettingsOpen(false); setUpdateSettingsOpen(true); }}>Actualizaciones <span>Versión y preferencias</span></button>
-        <div className="agent-policy-panel">
-              <label>Permisos del agente
-                <select value={executionMode} onChange={(event) => void changeExecutionMode(event.currentTarget.value as ExecutionMode)}>
-                  <option value="review">Confirmar cada comando</option>
-                  <option value="rules">Ejecutar reglas permitidas</option>
-                  <option value="automatic">Automático para consultas de estado de Git</option>
-                </select>
-              </label>
-              {executionMode === "rules" && <div className="rules-editor">
-                <textarea value={ruleDraft} onChange={(event) => setRuleDraft(event.currentTarget.value)} placeholder="Un comando exacto por línea" aria-label="Comandos exactos permitidos, uno por línea" rows={3} />
-                <button onClick={() => void saveExecutionRules()}>Guardar reglas</button>
-              </div>}
-              <BackupRetentionControl value={backupRetention} onChange={(value) => void changeBackupRetention(value)} />
-              {policyNotice && <span className="policy-notice">{policyNotice}</span>}
-              <p>Los cambios de archivos siempre requieren aprobación.</p>
-              <p>Los filtros no aíslan el shell. PowerShell, WSL y Git Bash pueden cargar perfiles con alias y funciones personalizados, así que los modos automático y por reglas requieren confirmación manual. CMD se inicia con AutoRun desactivado. Revisa cada comando antes de aprobarlo.</p>
-            </div>
-        <AgentActivity />
-        <button className="action-quiet" onClick={clearChat} disabled={!chatMessages.length || chatBusy || agentPlanBusy || agentCommandBusy}>Borrar historial del chat</button>
-      </SettingsDialog>}
+      {settingsOpen && <SettingsDialog
+        activeCategory={settingsCategory}
+        onCategoryChange={setSettingsCategory}
+        onClose={closeSettings}
+        sections={{
+          personalization: <section className="settings-section" aria-labelledby="settings-personalization-title">
+            <h3 id="settings-personalization-title">{messages.settings.categories.personalization}</h3>
+            <p>{messages.settings.personalization.description}</p>
+            <button className="settings-link" onClick={() => openSettingsChild(setAppearanceOpen)}>{messages.settings.personalization.appearance} <span>{messages.appearance.themeNames[activeTheme.id as keyof typeof messages.appearance.themeNames]} · {appearance === "dark" ? messages.appearance.dark : messages.appearance.light}</span></button>
+            <label className="settings-field">
+              <span>{messages.settings.personalization.language}<small>{messages.settings.personalization.languageDescription}</small></span>
+              <select aria-label={messages.settings.personalization.language} value={language} onChange={(event) => setLanguage(event.currentTarget.value === "en" ? "en" : "es")}>
+                <option value="es">{messages.settings.personalization.spanish}</option>
+                <option value="en">{messages.settings.personalization.english}</option>
+              </select>
+            </label>
+          </section>,
+          ai: <section className="settings-section" aria-labelledby="settings-ai-title">
+            <h3 id="settings-ai-title">{appText.settingsAi}</h3>
+            <p>{appText.settingsAiDescription}</p>
+            <button className="settings-link" onClick={() => openSettingsChild(setProviderDialogOpen)}>{appText.providersModels} <span>{provider?.name ?? appText.configure}</span></button>
+          </section>,
+          agent: <section className="settings-section" aria-labelledby="settings-agent-title">
+            <h3 id="settings-agent-title">{appText.settingsAgent}</h3>
+            <AgentSettings
+              mode={executionMode}
+              onModeChange={(mode) => void changeExecutionMode(mode)}
+              rules={ruleDraft}
+              onRulesChange={setRuleDraft}
+              onSaveRules={() => void saveExecutionRules()}
+              backupRetention={backupRetention}
+              onBackupRetentionChange={(value) => void changeBackupRetention(value)}
+              powerShellPredictionEnabled={powerShellPredictionEnabled}
+              onPowerShellPredictionChange={setPowerShellPredictionEnabled}
+              policyNotice={policyNotice}
+            >
+              <AgentActivity />
+              <button className="action-quiet" onClick={clearChat} disabled={!chatMessages.length || chatBusy || agentPlanBusy || agentCommandBusy}>{appText.clearChatHistory}</button>
+            </AgentSettings>
+          </section>,
+          data: <section className="settings-section" aria-labelledby="settings-data-title">
+            <h3 id="settings-data-title">{appText.settingsData}</h3>
+            <p>{appText.settingsDataDescription}</p>
+            <button className="settings-link" onClick={() => openSettingsChild(setTransferOpen)}>{appText.importExport} <span>{appText.configFile}</span></button>
+            <button className="settings-link" onClick={() => openSettingsChild(setAccountSettingsOpen)}>{appText.accountSync} <span>{appText.lauralLogin}</span></button>
+          </section>,
+          application: <section className="settings-section" aria-labelledby="settings-application-title">
+            <h3 id="settings-application-title">{appText.settingsApp}</h3>
+            <p>{appText.settingsAppDescription}</p>
+            <button className="settings-link" onClick={() => openSettingsChild(setUpdateSettingsOpen)}>{appText.updates} <span>{appText.versionPreferences}</span></button>
+          </section>,
+        }}
+      />}
       {transferOpen && <ConfigurationTransfer
         preferences={{
           themeId,
           appearance,
           updateMode: localStorage.getItem("laural.update-mode.v1") === "automatic" ? "automatic" : "manual",
+          language,
         }}
-        onClose={() => { setTransferOpen(false); setSettingsOpen(true); }}
+        onClose={() => closeSettingsChild(setTransferOpen)}
         onImported={applyImportedConfiguration}
       />}
       {accountSettingsOpen && <AccountSettings
@@ -1273,34 +1419,39 @@ function App() {
           themeId,
           appearance,
           updateMode: localStorage.getItem("laural.update-mode.v1") === "automatic" ? "automatic" : "manual",
+          language,
         }}
         onImported={applyImportedConfiguration}
         onSyncSettled={clearSyncNotice}
         syncRiskAcknowledged={syncRiskAcknowledged}
         onAcknowledgeSyncRisk={acknowledgeSyncRisk}
-        onClose={() => setAccountSettingsOpen(false)}
+        onClose={() => closeSettingsChild(setAccountSettingsOpen)}
       />}
       </Suspense>
-      {appearanceOpen && <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setAppearanceOpen(false); }}>
+      {appearanceOpen && <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeSettingsChild(setAppearanceOpen); }}>
         <section className="appearance-dialog" role="dialog" aria-modal="true" aria-labelledby="appearance-title">
-          <button className="dialog-close" onClick={() => setAppearanceOpen(false)} aria-label="Cerrar">×</button>
-          <div className="dialog-mark"><PaletteIcon /></div><p className="eyebrow">PERSONALIZACIÓN</p><h2 id="appearance-title">Apariencia</h2>
-          <p className="dialog-copy">Elige un tema de color y el modo de visualización. La preferencia se guarda solo en este equipo.</p>
-          <div className="appearance-mode" role="group" aria-label="Modo de color">
-            <button className={appearance === "light" ? "selected" : ""} aria-pressed={appearance === "light"} onClick={() => setAppearance("light")}><SunIcon /> Claro</button>
-            <button className={appearance === "dark" ? "selected" : ""} aria-pressed={appearance === "dark"} onClick={() => setAppearance("dark")}><MoonIcon /> Oscuro</button>
+          <button className="dialog-close" onClick={() => closeSettingsChild(setAppearanceOpen)} aria-label={messages.appearance.close}>×</button>
+          <div className="dialog-mark"><PaletteIcon /></div><p className="eyebrow">{messages.appearance.eyebrow}</p><h2 id="appearance-title">{messages.appearance.title}</h2>
+          <p className="dialog-copy">{messages.appearance.description}</p>
+          <div className="appearance-mode" role="group" aria-label={messages.appearance.mode}>
+            <button className={appearance === "light" ? "selected" : ""} aria-pressed={appearance === "light"} onClick={() => setAppearance("light")}><SunIcon /> {messages.appearance.light}</button>
+            <button className={appearance === "dark" ? "selected" : ""} aria-pressed={appearance === "dark"} onClick={() => setAppearance("dark")}><MoonIcon /> {messages.appearance.dark}</button>
           </div>
-          <div className="theme-picker-heading"><strong>Temas</strong><span>{themes.length} disponibles</span></div>
-          <div className="theme-grid" role="group" aria-label="Temas de color">
+          <div className="theme-picker-heading"><strong>{messages.appearance.themes}</strong><span>{themes.length} {messages.appearance.available}</span></div>
+          <div className="theme-grid" role="group" aria-label={messages.appearance.colorThemes}>
             {themes.map((theme) => <button key={theme.id} className={`theme-choice ${themeId === theme.id ? "selected" : ""}`} aria-pressed={themeId === theme.id} onClick={() => setThemeId(theme.id)}>
               <span className="theme-swatch"><i style={{ backgroundColor: theme.accentDark }} /><i style={{ backgroundColor: theme.accentLight }} /><i className="theme-swatch-surface" /></span>
-              <span className="theme-choice-name">{theme.name}</span><span className="theme-choice-check" aria-hidden="true">{themeId === theme.id ? "✓" : ""}</span>
+              <span className="theme-choice-name">{messages.appearance.themeNames[theme.id as keyof typeof messages.appearance.themeNames]}</span><span className="theme-choice-check" aria-hidden="true">{themeId === theme.id ? "✓" : ""}</span>
             </button>)}
           </div>
         </section>
       </div>}
     </main>
   );
+}
+
+export default function App() {
+  return <LanguageProvider><AppContent /></LanguageProvider>;
 }
 
 function TerminalIcon() { return <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2.5" y="3" width="15" height="14" rx="3"/><path d="m6 8 2.3 2-2.3 2M10.5 12h3.5"/></svg>; }
@@ -1328,5 +1479,3 @@ function PaperclipIcon() { return <svg viewBox="0 0 18 18" aria-hidden="true"><p
 function ModelIcon() { return <svg viewBox="0 0 18 18" aria-hidden="true"><path d="M9 2.5v13M2.5 9h13M4.4 4.4l9.2 9.2m0-9.2-9.2 9.2"/></svg>; }
 function ArrowUpIcon() { return <svg viewBox="0 0 18 18" aria-hidden="true"><path d="M9 14V4m-4 4 4-4 4 4"/></svg>; }
 function LockIcon() { return <svg viewBox="0 0 18 18" aria-hidden="true"><rect x="3.2" y="7.5" width="11.6" height="8" rx="2"/><path d="M5.5 7.5V5a3.5 3.5 0 0 1 7 0v2.5m-3.5 3v2"/></svg>; }
-
-export default App;

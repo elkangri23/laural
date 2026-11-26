@@ -88,9 +88,7 @@ export class NativeAuthService {
     const passwordHash = candidate?.passwordHash ?? await DUMMY_PASSWORD_HASH;
     const passwordMatches = await argon2.verify(passwordHash, input.password);
     if (!candidate || !candidate.accountId || !candidate.emailVerified || !passwordMatches) {
-      if (isOpaqueToken(input.cookieToken) && isOpaqueToken(input.csrfToken)) {
-        await this.store.failLogin(sha256(input.cookieToken), sha256(input.csrfToken));
-      }
+      await this.store.failLogin(sha256(input.cookieToken), sha256(input.csrfToken));
       return null;
     }
 

@@ -19,16 +19,19 @@ Los casos describen el comportamiento esperado del producto. Los estados disting
 | UC-15 | Consultar y borrar actividad del agente | Desarrollador | Implementado; registro local de metadatos acotado |
 | UC-17 | Exportar/importar perfil sin cuenta | Usuario | Implementación inicial; ensayo Windows pendiente |
 | UC-18 | Transferir claves en archivo cifrado | Usuario | Implementación inicial; pruebas de rollback pendientes |
-| UC-19 | Activar cuenta y escoger snapshot inicial | Usuario | Login Tauri y elección manual inicial disponibles; VPS pendiente |
-| UC-20 | Sincronizar cambios y resolver conflicto | Usuario | Cliente manual/automático inicial; VPS y reconexión real pendientes |
-| UC-21 | Recuperar acceso tras perder factores | Usuario/administrador | Flujo completo local implementado: PIN de buzón, decisión por CLI y reenrolamiento TOTP de un uso; ensayo VPS pendiente |
-| UC-22 | Consultar estado público del servicio | Visitante | Página y contrato iniciales; publicador SSH validado localmente; instalación VPS pendiente |
+| UC-19 | Activar cuenta y escoger snapshot inicial | Usuario | Servicio VPS desplegado; falta validar login y elección desde Laural instalada |
+| UC-20 | Sincronizar cambios y resolver conflicto | Usuario | Cliente manual/automático inicial y servicio desplegado; falta ensayo real de escritura, conflicto y reconexión |
+| UC-21 | Recuperar acceso tras perder factores | Usuario/administrador | Flujo local implementado; servicio desplegado, pero faltan Resend/Caddy y ensayo integral con flags antes de habilitarlo |
+| UC-22 | Consultar estado público del servicio | Visitante | Desplegado y comprobado en vivo el 24-11-2026: página y JSON 200, HTTPS, componentes visibles y sin errores de consola; estado publicado manualmente |
 | UC-23 | Consultar rama, cambios y diff Git | Desarrollador | Implementación inicial de solo lectura |
 | UC-24 | Preparar una tarea repetible con una receta del agente | Desarrollador | Implementación inicial; se guarda localmente |
-| UC-25 | Restablecer contraseña mediante PIN de correo | Titular de cuenta | Implementado localmente; despliegue Resend/VPS pendiente |
-| UC-26 | Recibir avisos por cambios de MFA | Titular de cuenta | Outbox transaccional e integración Resend iniciales; entrega VPS pendiente |
-| UC-27 | Eliminar la cuenta de sincronización | Titular de cuenta | API y cliente iniciales; ensayo Windows/VPS pendiente |
+| UC-25 | Restablecer contraseña mediante PIN de correo | Titular de cuenta | Implementado localmente; VPS desplegado; falta prueba de entrega Resend de extremo a extremo |
+| UC-26 | Recibir avisos por cambios de MFA | Titular de cuenta | Outbox transaccional e integración Resend iniciales; falta verificar entrega productiva |
+| UC-27 | Eliminar la cuenta de sincronización | Titular de cuenta | API y cliente iniciales; servicio desplegado; falta ensayo Windows y timeout ambiguo |
 | UC-28 | Registrarse o iniciar sesión con Google | Usuario | Implementación local detrás de flag; credenciales y prueba real pendientes |
+| UC-29 | Solicitar revisión por pérdida de factores | Usuario/administrador | Flujo local con PIN de verificación y revisión administrativa; servicio desplegado, pero falta ensayo de Resend/Caddy y habilitar flags |
+| UC-30 | Activar sugerencias locales de PowerShell | Desarrollador | Implementado localmente; validar PSReadLine en Windows |
+| UC-31 | Conservar idioma al transferir o sincronizar preferencias | Usuario | Transferencia v2 y cliente v2 implementados localmente; validar despliegue del VPS antes de publicar |
 
 Los casos UC-17 y UC-18 están disponibles en Configuración en su implementación inicial. UC-19 y UC-20 tienen un cliente inicial, pero requieren un servicio desplegado para su validación real. UC-21 permite usar códigos TOTP, pedir revisión por buzón y registrar la decisión del administrador desde el VPS. Tras aprobar, el usuario recibe un enlace temporal para configurar y confirmar un TOTP nuevo; solo entonces se reemplazan factores y se revocan sesiones, sin emitir sesión. Falta el ensayo VPS/Resend. UC-22 tiene una implementación local que requiere operación del VPS. UC-25 implementa restablecimiento de contraseña, independiente de recuperar factores. Los flujos de sincronización están detallados en [portabilidad y sincronización](sincronizacion-preferencias.md). El acceso Google se especifica en [UC-28](google-oauth.md).
 
@@ -167,7 +170,7 @@ Si la conexión se corta antes del final o el proveedor envía un evento inváli
 
 ## UC-13 — Gestionar preferencias del equipo
 
-Desde la barra lateral, abre Configuración. Selecciona Apariencia para cambiar la paleta o Proveedores y modelos para conectar un servidor. En Permisos del agente elige el modo y, si corresponde, guarda una regla por línea. Al reabrir Laural deben recuperarse los ajustes guardados. Si falla el guardado, revisa el mensaje del formulario antes de ejecutar el agente.
+Desde la barra lateral, abre Configuración y elige una de las categorías Personalización, IA, Agente y terminal, Datos y cuenta o Aplicación. Cambia la paleta, conecta un proveedor, ajusta permisos o administra datos y actualizaciones desde su categoría. Los subdiálogos abiertos desde Ajustes regresan a la categoría de origen al cerrarse. La navegación admite flechas, Inicio/Fin y un selector compacto. Al reabrir Laural deben recuperarse los ajustes guardados. Si falla el guardado, revisa el mensaje del formulario antes de ejecutar el agente.
 
 El menú de los tres puntos de **Perfil local** ofrece accesos directos a Configuración, Importar y exportar y Cuenta y sincronización. El perfil local guarda preferencias en este equipo; no representa una cuenta autenticada.
 

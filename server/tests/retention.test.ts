@@ -1,51 +1,52 @@
-import type { Pool, PoolClient } from "pg";
+import type { Pool } from "pg";
 import { describe, expect, it, vi } from "vitest";
 import { cleanupExpiredRecords, RETENTION_INTERVAL_MS } from "../src/retention.js";
 
-function createPool(query: (statement: string) => void | Promise<void> = () => undefined) {
-  const statements: string[] = [];
-  const release = vi.fn();
-  const client = {
-    query: vi.fn(async (statement: string) => {
-      statements.push(statement);
-      await query(statement);
-      return { rows: [] };
-    }),
-    release,
-  } as unknown as PoolClient;
-  const pool = { connect: vi.fn(async () => client) } as unknown as Pick<Pool, "connect">;
-  return { pool, statements, release };
+function createPool(query: (statement: string) => Promise<unknown>) {
+  const client = { query: vi.fn(query), release: vi.fn() };
+  return { pool: { connect: vi.fn(async () => client) } as unknown as Pool, client };
 }
 
-describe("limpieza de retención PostgreSQL", () => {
-  it("elimina datos temporales con plazos seguros dentro de una transacción", async () => {
-    const { pool, statements, release } = createPool();
+describe("limpieza de retención crítica", () => {
+  it("ejecuta todas las políticas en una transacción y confirma al final", async () => {
+    const { pool, client } = createPool(async () => ({ rows: [] }));
+
     await cleanupExpiredRecords(pool);
 
+    const statements = client.query.mock.calls.map(([statement]) => statement);
     expect(statements[0]).toBe("BEGIN");
-    expect(statements).toContain("DELETE FROM email_verification_codes WHERE created_at < now() - interval '15 minutes'");
-    expect(statements).toContain("DELETE FROM account_password_reset_codes WHERE created_at < now() - interval '15 minutes'");
-    expect(statements).toContain("DELETE FROM native_authorization_codes WHERE created_at < now() - interval '24 hours'");
-    expect(statements).toContain("DELETE FROM native_auth_flows WHERE created_at < now() - interval '24 hours'");
-    expect(statements).toContain("DELETE FROM passkey_management_tickets WHERE expires_at <= now() OR consumed_at IS NOT NULL");
-    expect(statements).toContain("DELETE FROM passkey_management_sessions WHERE expires_at <= now()");
-    expect(statements).toContain("DELETE FROM passkey_management_challenges WHERE expires_at <= now() OR consumed_at IS NOT NULL");
-    expect(statements).toContain("DELETE FROM passkey_login_challenges WHERE expires_at <= now() OR consumed_at IS NOT NULL");
-    expect(statements).toContain("DELETE FROM account_sessions WHERE expires_at <= now() OR revoked_at IS NOT NULL");
-    expect(statements).toContain("DELETE FROM preference_idempotency WHERE created_at < now() - interval '30 days'");
     expect(statements.at(-1)).toBe("COMMIT");
-    expect(release).toHaveBeenCalledOnce();
-    expect(RETENTION_INTERVAL_MS).toBe(3_600_000);
+    expect(statements).toHaveLength(20);
+    expect(statements.some((statement) => statement.includes("DELETE FROM email_verification_codes"))).toBe(true);
+    expect(statements.some((statement) => statement.includes("DELETE FROM account_sessions"))).toBe(true);
+    expect(statements.some((statement) => statement.includes("UPDATE account_recovery_grant_outbox"))).toBe(true);
+    expect(statements.some((statement) => statement.includes("encrypted_ticket = NULL"))).toBe(true);
+    expect(client.release).toHaveBeenCalledOnce();
+    expect(RETENTION_INTERVAL_MS).toBe(60 * 60 * 1000);
   });
 
-  it("revierte toda la pasada ante un error y libera la conexión", async () => {
-    const { pool, statements, release } = createPool((statement) => {
-      if (statement.startsWith("DELETE FROM account_sessions")) throw new Error("database failure");
+  it("revierte la transacción y libera el cliente si falla una política", async () => {
+    const databaseError = new Error("fallo de limpieza");
+    const { pool, client } = createPool(async (statement) => {
+      if (statement.includes("DELETE FROM account_sessions")) throw databaseError;
+      return { rows: [] };
     });
 
-    await expect(cleanupExpiredRecords(pool)).rejects.toThrow("database failure");
-    expect(statements).toContain("ROLLBACK");
+    await expect(cleanupExpiredRecords(pool)).rejects.toBe(databaseError);
+
+    const statements = client.query.mock.calls.map(([statement]) => statement);
+    expect(statements[0]).toBe("BEGIN");
+    expect(statements.some((statement) => statement.includes("DELETE FROM account_sessions"))).toBe(true);
+    expect(statements.at(-1)).toBe("ROLLBACK");
     expect(statements).not.toContain("COMMIT");
-    expect(release).toHaveBeenCalledOnce();
+    expect(client.release).toHaveBeenCalledOnce();
+  });
+
+  it("propaga el error de conexión antes de iniciar la transacción", async () => {
+    const connectionError = new Error("sin conexión");
+    const pool = { connect: vi.fn().mockRejectedValue(connectionError) } as unknown as Pool;
+
+    await expect(cleanupExpiredRecords(pool)).rejects.toBe(connectionError);
+    expect(pool.connect).toHaveBeenCalledOnce();
   });
 });

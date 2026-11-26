@@ -2,12 +2,14 @@ import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { useState } from "react";
 import { themes } from "../themes";
-import { SettingsDialog } from "./SettingsDialog";
+import { ModalShell } from "./ModalShell";
+import { useLanguage } from "../i18n";
 
 type TransferPreferences = {
   themeId: string;
   appearance: "dark" | "light";
   updateMode: "manual" | "automatic";
+  language?: "es" | "en";
 };
 
 type TransferPreview = {
@@ -18,7 +20,7 @@ type TransferPreview = {
 };
 
 export type ConfigurationImportResult = {
-  preferences: TransferPreferences;
+  preferences: TransferPreferences & { language: "es" | "en" };
   activeProvider: { id: string; providerKind: string; name: string; baseUrl: string; model: string; hasApiKey: boolean; shareCustomEndpoint: boolean } | null;
   providers: Array<{ id: string; providerKind: string; name: string; baseUrl: string; model: string; hasApiKey: boolean; shareCustomEndpoint: boolean }>;
   backupPath: string;
@@ -35,6 +37,8 @@ export function ConfigurationTransfer({
   onClose: () => void;
   onImported: (result: ConfigurationImportResult) => void;
 }) {
+  const { messages } = useLanguage();
+  const transferText = messages.transfer;
   const [includeApiKeys, setIncludeApiKeys] = useState(false);
   const [exportPassword, setExportPassword] = useState("");
   const [exportConfirmation, setExportConfirmation] = useState("");
@@ -52,14 +56,14 @@ export function ConfigurationTransfer({
     setNotice("");
     try {
       if (includeApiKeys && exportPassword !== exportConfirmation) {
-        throw new Error("Las contraseñas no coinciden.");
+        throw new Error(transferText.mismatch);
       }
       if (includeApiKeys && exportPassword.trim().length < 12) {
-        throw new Error("Usa una contraseña de al menos 12 caracteres para cifrar las claves.");
+        throw new Error(transferText.weakPassword);
       }
       const destination = await save({
-        defaultPath: "Laural-configuracion.laural",
-        filters: [{ name: "Configuración de Laural", extensions: ["laural"] }],
+        defaultPath: transferText.defaultFileName,
+        filters: [{ name: transferText.fileType, extensions: ["laural"] }],
       });
       if (!destination) return;
       await invoke("export_configuration", {
@@ -69,8 +73,8 @@ export function ConfigurationTransfer({
         password: includeApiKeys ? exportPassword : null,
       });
       setNotice(includeApiKeys
-        ? "Configuración exportada. Las claves están cifradas con tu contraseña."
-        : "Configuración exportada sin incluir claves API.");
+        ? transferText.exportWithKeys
+        : transferText.exportWithoutKeys);
       setExportPassword("");
       setExportConfirmation("");
     } catch (reason) {
@@ -87,13 +91,12 @@ export function ConfigurationTransfer({
     const selected = await open({
       multiple: false,
       directory: false,
-      filters: [{ name: "Configuración de Laural", extensions: ["laural"] }],
+      filters: [{ name: transferText.fileType, extensions: ["laural"] }],
     });
     if (typeof selected === "string") setSourcePath(selected);
   }
 
   async function previewImport() {
-    if (!sourcePath) return;
     setBusy(true);
     setError("");
     setNotice("");
@@ -103,7 +106,7 @@ export function ConfigurationTransfer({
         password: importPassword || null,
       });
       if (!themes.some((theme) => theme.id === result.preferences.themeId)) {
-        throw new Error("El archivo usa un tema que esta versión de Laural no reconoce.");
+        throw new Error(transferText.unknownTheme);
       }
       setPreview(result);
     } catch (reason) {
@@ -115,7 +118,6 @@ export function ConfigurationTransfer({
   }
 
   async function applyImport() {
-    if (!preview || !sourcePath) return;
     setBusy(true);
     setError("");
     setNotice("");
@@ -129,13 +131,13 @@ export function ConfigurationTransfer({
         currentPreferences: preferences,
       });
       if (!themes.some((theme) => theme.id === result.preferences.themeId)) {
-        throw new Error("El tema importado no está disponible en esta versión.");
+        throw new Error(transferText.unavailableTheme);
       }
       onImported(result);
       setImportPassword("");
       setPreview(null);
       setSourcePath("");
-      setNotice(`Configuración importada. Copia previa${result.backupEncrypted ? " cifrada con la misma contraseña del archivo" : " sin claves API"}: ${result.backupPath}`);
+      setNotice(`${transferText.importedBackup} ${result.backupEncrypted ? transferText.encryptedBackup : transferText.clearBackup}: ${result.backupPath}`);
     } catch (reason) {
       setError(String(reason));
     } finally {
@@ -143,55 +145,55 @@ export function ConfigurationTransfer({
     }
   }
 
-  return <SettingsDialog onClose={onClose}>
+  return <ModalShell onClose={onClose} title={transferText.title}>
     <section className="transfer-settings" aria-labelledby="transfer-title">
-      <p className="eyebrow">PORTABILIDAD LOCAL</p>
-      <h3 id="transfer-title">Exportar e importar configuración</h3>
-      <p className="dialog-copy">El archivo contiene preferencias y perfiles de proveedor. No incluye chats, terminales, proyectos ni reglas del agente.</p>
+      <p className="eyebrow">{transferText.eyebrow}</p>
+      <h3 id="transfer-title">{transferText.heading}</h3>
+      <p className="dialog-copy">{transferText.introduction}</p>
 
       <div className="transfer-card">
-        <strong>Exportar</strong>
-        <label className="transfer-check"><input type="checkbox" checked={includeApiKeys} onChange={(event) => setIncludeApiKeys(event.currentTarget.checked)} /> Incluir claves API</label>
+        <strong>{transferText.export}</strong>
+        <label className="transfer-check"><input type="checkbox" checked={includeApiKeys} onChange={(event) => setIncludeApiKeys(event.currentTarget.checked)} /> {transferText.includeApiKeys}</label>
         {includeApiKeys && <>
-          <p className="transfer-security-note">Las claves nunca se exportan en texto plano. Guárdalas con una contraseña que puedas recordar; Laural no podrá recuperarla.</p>
-          <label className="form-label">Contraseña del archivo
+          <p className="transfer-security-note">{transferText.encryptionNote}</p>
+          <label className="form-label">{transferText.filePassword}
             <input type="password" autoComplete="new-password" value={exportPassword} onChange={(event) => setExportPassword(event.currentTarget.value)} />
           </label>
-          <label className="form-label">Repite la contraseña
+          <label className="form-label">{transferText.repeatPassword}
             <input type="password" autoComplete="new-password" value={exportConfirmation} onChange={(event) => setExportConfirmation(event.currentTarget.value)} />
           </label>
         </>}
-        <button className="primary-button" onClick={() => void exportSettings()} disabled={busy}>{busy ? "Preparando…" : "Exportar archivo"}</button>
+        <button className="primary-button" onClick={() => void exportSettings()} disabled={busy}>{busy ? transferText.preparing : transferText.exportFile}</button>
       </div>
 
       <div className="transfer-card">
-        <strong>Importar</strong>
-        <button className="secondary-button" onClick={() => void chooseImportFile()} disabled={busy}>{sourcePath ? "Elegir otro archivo" : "Elegir archivo .laural"}</button>
+        <strong>{transferText.import}</strong>
+        <button className="secondary-button" onClick={() => void chooseImportFile()} disabled={busy}>{sourcePath ? transferText.chooseOtherFile : transferText.chooseFile}</button>
         {sourcePath && <span className="transfer-file-name">{sourcePath.split(/[\\/]/).pop()}</span>}
-        <label className="form-label">Contraseña del archivo, si está protegido
+        <label className="form-label">{transferText.protectedPassword}
           <input type="password" autoComplete="current-password" value={importPassword} onChange={(event) => { setImportPassword(event.currentTarget.value); setPreview(null); }} />
         </label>
-        {sourcePath && <button className="secondary-button" onClick={() => void previewImport()} disabled={busy}>Validar y previsualizar</button>}
+        {sourcePath && <button className="secondary-button" onClick={() => void previewImport()} disabled={busy}>{transferText.validatePreview}</button>}
         {preview && <>
           <div className="transfer-preview" role="status">
-            <strong>Vista previa</strong>
-            <span>{themes.find((theme) => theme.id === preview.preferences.themeId)?.name} · {preview.preferences.appearance === "dark" ? "Oscuro" : "Claro"}</span>
-            <span>{preview.providers.length} perfiles de proveedor · {preview.containsApiKeys ? "incluye claves cifradas" : "sin claves"}</span>
-            {preview.providers.map((provider) => <span key={provider.id}>{provider.name} · {provider.model} · {provider.baseUrl}{provider.hasApiKey ? " · clave incluida" : ""}</span>)}
+            <strong>{transferText.preview}</strong>
+            <span>{themes.find((theme) => theme.id === preview.preferences.themeId)?.name} · {preview.preferences.appearance === "dark" ? transferText.dark : transferText.light}</span>
+            <span>{preview.providers.length} {transferText.providerProfiles} · {preview.containsApiKeys ? transferText.encryptedKeys : transferText.noKeys}</span>
+            {preview.providers.map((provider) => <span key={provider.id}>{provider.name} · {provider.model} · {provider.baseUrl}{provider.hasApiKey ? ` · ${transferText.includedKey}` : ""}</span>)}
           </div>
-          <label className="form-label">Importación de perfiles
+          <label className="form-label">{transferText.profileImport}
             <select value={strategy} onChange={(event) => setStrategy(event.currentTarget.value as "merge" | "replace")}>
-              <option value="merge">Fusionar perfiles</option>
-              <option value="replace">Reemplazar perfiles guardados</option>
+              <option value="merge">{transferText.merge}</option>
+              <option value="replace">{transferText.replace}</option>
             </select>
           </label>
-          {strategy === "replace" && <p className="transfer-security-note">Los perfiles que no estén en el archivo se quitarán. Las claves afectadas necesitan una copia protegida antes del cambio.</p>}
-          <button className="primary-button" onClick={() => void applyImport()} disabled={busy}>{busy ? "Importando…" : "Aplicar importación"}</button>
+          {strategy === "replace" && <p className="transfer-security-note">{transferText.replaceWarning}</p>}
+          <button className="primary-button" onClick={() => void applyImport()} disabled={busy}>{busy ? transferText.importing : transferText.applyImport}</button>
         </>}
       </div>
 
       {error && <p className="form-message error" role="alert">{error}</p>}
       {notice && <p className="form-message success" role="status">{notice}</p>}
     </section>
-  </SettingsDialog>;
+  </ModalShell>;
 }

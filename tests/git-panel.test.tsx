@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { act } from "react";
+import { act, type ReactNode } from "react";
+import { LanguageProvider } from "../src/i18n";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { GitPanel } from "../src/components/GitPanel";
@@ -9,6 +10,11 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: mocks.invoke }));
 
 let root: Root | undefined;
 let host: HTMLDivElement;
+
+function renderWithLanguage(children: ReactNode) {
+  localStorage.setItem("laural.language.v1", "es");
+  return root!.render(<LanguageProvider>{children}</LanguageProvider>);
+}
 const props = { projectPath: "C:/proyecto", onClose: vi.fn(), onOpenProject: vi.fn(), onIncludeDiff: vi.fn() };
 
 beforeEach(() => {
@@ -30,7 +36,7 @@ afterEach(async () => {
 });
 
 test("muestra rama, cambios y diff sin pedir ejecución ni contexto", async () => {
-  await act(async () => root!.render(<GitPanel {...props} />));
+  await act(async () => renderWithLanguage(<GitPanel {...props} />));
   expect(host.textContent).toContain("feature/git");
   expect(host.textContent).toContain("src/App.tsx");
   expect(host.textContent).toContain("diff --git");
@@ -40,14 +46,14 @@ test("muestra rama, cambios y diff sin pedir ejecución ni contexto", async () =
 });
 
 test("solo añade el diff al contexto tras una acción explícita", async () => {
-  await act(async () => root!.render(<GitPanel {...props} />));
+  await act(async () => renderWithLanguage(<GitPanel {...props} />));
   await act(async () => (host.querySelector("button.git-include-diff") as HTMLButtonElement).click());
 
   expect(props.onIncludeDiff).toHaveBeenCalledWith("diff --git a/src/App.tsx b/src/App.tsx\n+ cambio", false);
 });
 
 test("ofrece elegir proyecto cuando no hay una carpeta abierta", async () => {
-  await act(async () => root!.render(<GitPanel projectPath={null} onClose={props.onClose} onOpenProject={props.onOpenProject} onIncludeDiff={props.onIncludeDiff} />));
+  await act(async () => renderWithLanguage(<GitPanel projectPath={null} onClose={props.onClose} onOpenProject={props.onOpenProject} onIncludeDiff={props.onIncludeDiff} />));
   expect(host.textContent).toContain("Abre una carpeta de proyecto");
   await act(async () => (host.querySelector("button.action-primary") as HTMLButtonElement).click());
   expect(props.onOpenProject).toHaveBeenCalledOnce();
@@ -56,6 +62,6 @@ test("ofrece elegir proyecto cuando no hay una carpeta abierta", async () => {
 
 test("informa de errores de lectura del repositorio", async () => {
   mocks.invoke.mockRejectedValueOnce("La carpeta seleccionada no contiene un repositorio Git.");
-  await act(async () => root!.render(<GitPanel {...props} />));
+  await act(async () => renderWithLanguage(<GitPanel {...props} />));
   expect(host.querySelector('[role="alert"]')?.textContent).toContain("no contiene un repositorio Git");
 });

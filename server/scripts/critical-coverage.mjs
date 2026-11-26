@@ -1,4 +1,4 @@
-export const CRITICAL_SERVER_FILES = ["src/config.ts", "src/auth.ts", "src/email-auth.ts", "scripts/critical-coverage.mjs"];
+export const CRITICAL_SERVER_FILES = ["src/config.ts", "src/auth.ts", "src/email-auth.ts", "src/account-deletion.ts", "src/account-mfa.ts", "src/account-passkeys.ts", "src/account-recovery.ts", "src/google-oauth.ts", "src/app.ts", "src/native-auth.ts", "src/recovery-ticket-crypto.ts", "src/retention.ts", "src/security-email-outbox.ts", "src/resend-mailer.ts", "src/migration-runner.ts", "src/snapshot-validation.ts", "src/auth-pages.ts", "scripts/critical-coverage.mjs"];
 
 export function checkCriticalCoverage(report, files = CRITICAL_SERVER_FILES) {
   const entries = Object.values(report ?? {}).filter((entry) => typeof entry?.path === "string");

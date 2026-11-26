@@ -18,6 +18,12 @@ const snapshot: PreferenceSnapshot = {
   activeProviderId: "local",
   providers: [{ id: "local", kind: "ollama", name: "Local", model: "llama3" }],
 };
+const snapshotV2: PreferenceSnapshot = {
+  schemaVersion: 2,
+  preferences: { themeId: "laurel", appearance: "dark", updateMode: "manual", language: "es" },
+  activeProviderId: "local",
+  providers: [{ id: "local", kind: "ollama", name: "Local", model: "llama3" }],
+};
 
 class MemoryStore implements PreferenceStore {
   private records = new Map<string, StoredSnapshot>();
@@ -112,15 +118,23 @@ afterEach(async () => {
 
 describe("alta del factor tras recuperación", () => {
   it("limita el flujo al enrolamiento y exige CSRF antes de confirmar", async () => {
+    let enrollmentAvailable = false;
+    let confirmationCodes: string[] | null = null;
     const accountRecovery = {
-      startEnrollment: vi.fn(async () => ({ cookieToken: "c".repeat(43), csrfToken: "s".repeat(43), secret: "A".repeat(32), provisioningUri: "otpauth://totp/Laural:test?secret=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" })),
-      confirmEnrollment: vi.fn(async () => ["AAAA-BBBB-CCCC-DDDD"]),
+      startEnrollment: vi.fn(async () => enrollmentAvailable ? ({ cookieToken: "c".repeat(43), csrfToken: "s".repeat(43), secret: "A".repeat(32), provisioningUri: "otpauth://totp/Laural:test?secret=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" }) : null),
+      confirmEnrollment: vi.fn(async () => confirmationCodes),
     } as unknown as AccountRecoveryService;
     const app = createTestApp({ accountRecovery });
     const page = await app.inject({ method: "GET", url: "/auth/recovery" });
     expect(page.statusCode).toBe(200);
     expect(page.body).toContain("sustituir factores anteriores");
     expect(page.headers["content-security-policy"]).toContain("default-src 'none'");
+    const script = await app.inject({ method: "GET", url: "/auth/recovery.js" });
+    expect(script.statusCode).toBe(200);
+    expect(script.headers["content-type"]).toContain("javascript");
+    const expiredTicket = await app.inject({ method: "POST", url: "/auth/recovery/start", payload: { ticket: "x".repeat(43) } });
+    expect(expiredTicket.statusCode).toBe(400);
+    enrollmentAvailable = true;
     const start = await app.inject({ method: "POST", url: "/auth/recovery/start", payload: { ticket: "t".repeat(43) } });
     expect(start.statusCode).toBe(200);
     expect(start.headers["set-cookie"]).toContain("HttpOnly; Secure; SameSite=Strict");
@@ -129,6 +143,10 @@ describe("alta del factor tras recuperación", () => {
     const denied = await app.inject({ method: "POST", url: "/auth/recovery/confirm", headers: { cookie }, payload: { csrf: "s".repeat(43), code: "123456" } });
     expect(denied.statusCode).toBe(403);
     expect(accountRecovery.confirmEnrollment).not.toHaveBeenCalled();
+    const expiredCode = await app.inject({ method: "POST", url: "/auth/recovery/confirm", headers: { cookie: "unrelated=value", "x-csrf-token": "s".repeat(43) }, payload: { csrf: "s".repeat(43), code: "123456" } });
+    expect(expiredCode.statusCode).toBe(400);
+    expect(accountRecovery.confirmEnrollment).toHaveBeenCalledWith("", "s".repeat(43), "123456");
+    confirmationCodes = ["AAAA-BBBB-CCCC-DDDD"];
     const confirmed = await app.inject({ method: "POST", url: "/auth/recovery/confirm", headers: { cookie, "x-csrf-token": "s".repeat(43) }, payload: { csrf: "s".repeat(43), code: "123456" } });
     expect(confirmed.statusCode).toBe(200);
     expect(confirmed.json()).toEqual({ recoveryCodes: ["AAAA-BBBB-CCCC-DDDD"] });
@@ -156,6 +174,60 @@ describe("rutas MFA de cuenta", () => {
     const valid = await app.inject({ method: "POST", url: "/v1/auth/mfa/totp/enrollment/confirm", headers: { authorization: "Bearer account-user1" }, payload: { code: "123456" } });
     expect(valid.statusCode).toBe(200);
     expect(valid.json()).toEqual({ recoveryCodes: ["AAAA-BBBB-CCCC-DDDD"] });
+  });
+
+  it("protege las acciones restantes de MFA y traduce los estados de conflicto", async () => {
+    let enrollment: { secret: string; provisioningUri: string } | null = null;
+    let acknowledged = false;
+    let rotated: string[] | null = null;
+    let disabled = false;
+    const recoveryCodes = ["AAAA-BBBB-CCCC-DDDD"];
+    const accountMfa = {
+      startEnrollment: vi.fn(async () => enrollment),
+      confirmEnrollment: vi.fn(async () => null),
+      acknowledgeRecoveryCodes: vi.fn(async () => acknowledged),
+      cancelEnrollment: vi.fn(async () => undefined),
+      rotateRecoveryCodes: vi.fn(async () => rotated),
+      disableTotp: vi.fn(async () => disabled),
+    } as unknown as AccountMfaService;
+    const app = createTestApp({ accountMfa });
+    const headers = { authorization: "Bearer account-user1" };
+
+    expect((await app.inject({ method: "POST", url: "/v1/auth/mfa/totp/enrollment/confirm", payload: { code: "123456" } })).statusCode).toBe(401);
+    const invalidConfirmation = await app.inject({ method: "POST", url: "/v1/auth/mfa/totp/enrollment/confirm", headers, payload: { code: "123456" } });
+    expect(invalidConfirmation.statusCode).toBe(400);
+
+    expect((await app.inject({ method: "POST", url: "/v1/auth/mfa/totp/enrollment" })).statusCode).toBe(401);
+    const blockedEnrollment = await app.inject({ method: "POST", url: "/v1/auth/mfa/totp/enrollment", headers });
+    expect(blockedEnrollment.statusCode).toBe(409);
+    enrollment = { secret: "S".repeat(32), provisioningUri: "otpauth://totp/Laural:user?secret=SSSS" };
+    const started = await app.inject({ method: "POST", url: "/v1/auth/mfa/totp/enrollment", headers });
+    expect(started.statusCode).toBe(200);
+    expect(started.json()).toEqual(enrollment);
+
+    expect((await app.inject({ method: "POST", url: "/v1/auth/mfa/totp/enrollment/complete" })).statusCode).toBe(401);
+    const incomplete = await app.inject({ method: "POST", url: "/v1/auth/mfa/totp/enrollment/complete", headers });
+    expect(incomplete.statusCode).toBe(409);
+    acknowledged = true;
+    expect((await app.inject({ method: "POST", url: "/v1/auth/mfa/totp/enrollment/complete", headers })).statusCode).toBe(204);
+
+    expect((await app.inject({ method: "DELETE", url: "/v1/auth/mfa/totp/enrollment" })).statusCode).toBe(401);
+    expect((await app.inject({ method: "DELETE", url: "/v1/auth/mfa/totp/enrollment", headers })).statusCode).toBe(204);
+    expect(accountMfa.cancelEnrollment).toHaveBeenCalledWith("user1", "Bearer account-user1");
+
+    expect((await app.inject({ method: "POST", url: "/v1/auth/mfa/recovery-codes/rotate" })).statusCode).toBe(401);
+    const deniedRotation = await app.inject({ method: "POST", url: "/v1/auth/mfa/recovery-codes/rotate", headers });
+    expect(deniedRotation.statusCode).toBe(409);
+    rotated = recoveryCodes;
+    const rotation = await app.inject({ method: "POST", url: "/v1/auth/mfa/recovery-codes/rotate", headers });
+    expect(rotation.statusCode).toBe(200);
+    expect(rotation.json()).toEqual({ recoveryCodes });
+
+    expect((await app.inject({ method: "DELETE", url: "/v1/auth/mfa/totp" })).statusCode).toBe(401);
+    const deniedDisable = await app.inject({ method: "DELETE", url: "/v1/auth/mfa/totp", headers });
+    expect(deniedDisable.statusCode).toBe(409);
+    disabled = true;
+    expect((await app.inject({ method: "DELETE", url: "/v1/auth/mfa/totp", headers })).statusCode).toBe(204);
   });
 });
 
@@ -204,6 +276,35 @@ describe("límites de acceso nativo por cuenta", () => {
     expect(confirm.body).toContain("el administrador revisará el caso");
     expect(requestAccountRecovery).toHaveBeenCalledWith("unknown@example.test");
     expect(verifyAccountRecovery).toHaveBeenCalledWith("unknown@example.test", "000000");
+
+    const missingCookieHeaders = { "content-type": "application/x-www-form-urlencoded" };
+    const expiredRequest = await app.inject({
+      method: "POST", url: "/auth/native/recovery/request", headers: missingCookieHeaders,
+      payload: new URLSearchParams({ csrf, email: "unknown@example.test" }).toString(),
+    });
+    const expiredConfirm = await app.inject({
+      method: "POST", url: "/auth/native/recovery/confirm", headers: missingCookieHeaders,
+      payload: new URLSearchParams({ csrf, email: "unknown@example.test", pin: "000000" }).toString(),
+    });
+    expect(expiredRequest.statusCode).toBe(400);
+    expect(expiredConfirm.statusCode).toBe(400);
+
+    const blockedLimiter: RequestRateLimiter = { consume: async (scope) => !scope.endsWith("-email") };
+    const limitedApp = createTestApp({ emailAuth, nativeAuth, accountRecoveryEnabled: true, requestRateLimiter: blockedLimiter });
+    const limitedRequest = await limitedApp.inject({
+      method: "POST", url: "/auth/native/recovery/request", headers,
+      payload: new URLSearchParams({ csrf, email: "unknown@example.test" }).toString(),
+    });
+    const limitedConfirm = await limitedApp.inject({
+      method: "POST", url: "/auth/native/recovery/confirm", headers,
+      payload: new URLSearchParams({ csrf, email: "unknown@example.test", pin: "000000" }).toString(),
+    });
+    expect(limitedRequest.statusCode).toBe(429);
+    expect(limitedRequest.headers["retry-after"]).toBe("900");
+    expect(limitedConfirm.statusCode).toBe(429);
+    expect(limitedConfirm.headers["retry-after"]).toBe("300");
+    expect(requestAccountRecovery).toHaveBeenCalledTimes(1);
+    expect(verifyAccountRecovery).toHaveBeenCalledTimes(1);
   });
 
   it("comparte entre IP el límite de intentos y no consume el contador si falla CSRF", async () => {
@@ -250,6 +351,23 @@ describe("límites de acceso nativo por cuenta", () => {
     }
     expect(login).toHaveBeenCalledTimes(10);
     expect(hits.get("native-login-email:persona@example.test")).toBe(11);
+
+    login.mockResolvedValueOnce({ kind: "mfa_required" });
+    const mfaRequired = await app.inject({
+      method: "POST", url: "/auth/native/login", remoteAddress: "198.51.100.31",
+      payload: { csrf: validCsrf, email: "mfa@example.test", password: "password de prueba 2026" },
+    });
+    expect(mfaRequired.statusCode).toBe(200);
+    expect(mfaRequired.body).toContain("Verifica tu identidad");
+
+    login.mockResolvedValueOnce({ kind: "authorized", redirectUri: "http://127.0.0.1:49152/callback", state: "s".repeat(43), code: "one-time-code" });
+    const authorized = await app.inject({
+      method: "POST", url: "/auth/native/login", remoteAddress: "198.51.100.32",
+      payload: { csrf: validCsrf, email: "authorized@example.test", password: "password de prueba 2026" },
+    });
+    expect(authorized.statusCode).toBe(303);
+    expect(authorized.headers.location).toContain("code=one-time-code");
+    expect(authorized.headers.location).toContain(`state=${"s".repeat(43)}`);
   });
 
   it("comparte el límite TOTP entre flujos y toma la cuenta de la asociación validada", async () => {
@@ -297,6 +415,12 @@ describe("límites de acceso nativo por cuenta", () => {
     expect(unrelatedEmail.statusCode).toBe(400);
     expect(hits.has("native-mfa-account:account-123")).toBe(false);
 
+    const missingCookie = await app.inject({
+      method: "POST", url: "/auth/native/login/mfa", payload: { csrf, email: "otra@example.test", proof: "123456" },
+    });
+    expect(missingCookie.statusCode).toBe(400);
+    expect(pendingMfaLoginAccountId).toHaveBeenLastCalledWith("", csrf, "otra@example.test");
+
     for (let index = 0; index < 11; index += 1) {
       const response = await app.inject({
         method: "POST", url: "/auth/native/login/mfa", remoteAddress: `198.51.100.${index + 10}`, headers,
@@ -305,8 +429,24 @@ describe("límites de acceso nativo por cuenta", () => {
       expect(response.statusCode).toBe(index < 10 ? 400 : 429);
       if (index === 10) expect(response.headers["retry-after"]).toBe("300");
     }
-    expect(completeMfa).toHaveBeenCalledTimes(11);
+    expect(completeMfa).toHaveBeenCalledTimes(12);
     expect(hits.get("native-mfa-account:account-123")).toBe(11);
+
+    completeMfa.mockResolvedValue({ kind: "authorized", redirectUri: "http://127.0.0.1:49152/callback", state: "s".repeat(43), code: "mfa-one-time-code" });
+    const completed = await app.inject({
+      method: "POST", url: "/auth/native/login/mfa", remoteAddress: "198.51.100.31", headers,
+      payload: { csrf, email: "otra@example.test", proof: "123456" },
+    });
+    expect(completed.statusCode).toBe(303);
+    expect(completed.headers.location).toContain("code=mfa-one-time-code");
+
+    const noAccountMfaApp = createTestApp({ emailAuth, nativeAuth });
+    const withoutAccountLookup = await noAccountMfaApp.inject({
+      method: "POST", url: "/auth/native/login/mfa",
+      payload: { csrf, email: "otra@example.test", proof: "123456" },
+    });
+    expect(withoutAccountLookup.statusCode).toBe(303);
+    expect(completeMfa).toHaveBeenLastCalledWith({ cookieToken: "", csrfToken: csrf, email: "otra@example.test", proof: "123456" });
   });
 });
 
@@ -355,6 +495,114 @@ describe("rutas de passkeys", () => {
     ]));
     expect(redeemed.body).not.toContain("t".repeat(43));
   });
+
+  it("valida el flujo de acceso con passkey y los resultados de autenticación", async () => {
+    const csrf = "c".repeat(43);
+    const cookieToken = "f".repeat(43);
+    let flowValid = false;
+    let loginOptions: { challenge: string } | null = null;
+    let verified: { accountId: string } | null = null;
+    let loginResult: { kind: "mfa_required"; email?: string } | { kind: "authorized"; redirectUri: string; state: string; code: string } | null = null;
+    const passkeys = {
+      createLoginOptions: vi.fn(async () => loginOptions),
+      verifyLogin: vi.fn(async () => verified),
+    } as unknown as AccountPasskeyService;
+    const nativeAuth = {
+      isBrowserFlowValid: vi.fn(async () => flowValid),
+      failPasskeyLogin: vi.fn(async () => undefined),
+      completePasskeyLogin: vi.fn(async () => loginResult),
+    } as unknown as NativeAuthService;
+    const app = createTestApp({ accountPasskeys: passkeys, nativeAuth });
+    const headers = { cookie: `__Host-laural-flow=${cookieToken}` };
+
+    const invalidOptions = await app.inject({ method: "POST", url: "/auth/native/passkey/options", headers, payload: { csrf } });
+    expect(invalidOptions.statusCode).toBe(400);
+    flowValid = true;
+    const missingOptions = await app.inject({ method: "POST", url: "/auth/native/passkey/options", headers, payload: { csrf } });
+    expect(missingOptions.statusCode).toBe(400);
+    loginOptions = { challenge: "challenge" };
+    const options = await app.inject({ method: "POST", url: "/auth/native/passkey/options", headers, payload: { csrf } });
+    expect(options.json()).toEqual(loginOptions);
+    const optionsWithoutCookie = await app.inject({ method: "POST", url: "/auth/native/passkey/options", payload: { csrf } });
+    expect(optionsWithoutCookie.json()).toEqual(loginOptions);
+
+    flowValid = false;
+    const expiredFlow = await app.inject({ method: "POST", url: "/auth/native/passkey/verify", headers, payload: { csrf, response: {} } });
+    expect(expiredFlow.statusCode).toBe(400);
+    flowValid = true;
+    const rejected = await app.inject({ method: "POST", url: "/auth/native/passkey/verify", headers, payload: { csrf, response: { id: "invalid" } } });
+    expect(rejected.statusCode).toBe(401);
+    expect(nativeAuth.failPasskeyLogin).toHaveBeenCalledWith(cookieToken, csrf);
+
+    verified = { accountId: "account-a" };
+    const missingLogin = await app.inject({ method: "POST", url: "/auth/native/passkey/verify", headers, payload: { csrf, response: { id: "valid" } } });
+    expect(missingLogin.statusCode).toBe(401);
+    loginResult = { kind: "mfa_required", email: "user@example.test" };
+    const mfaRequired = await app.inject({ method: "POST", url: "/auth/native/passkey/verify", headers, payload: { csrf, response: { id: "valid" } } });
+    expect(mfaRequired.json()).toEqual({ mfaRequired: true, email: "user@example.test" });
+
+    loginResult = { kind: "authorized", redirectUri: "http://127.0.0.1:49152/callback", state: "s".repeat(43), code: "passkey-code" };
+    const authorized = await app.inject({ method: "POST", url: "/auth/native/passkey/verify", headers, payload: { csrf, response: { id: "valid" } } });
+    expect(authorized.statusCode).toBe(200);
+    expect(authorized.json().redirect).toContain("code=passkey-code");
+    expect(authorized.headers["set-cookie"]).toContain("Max-Age=0");
+    const authorizedWithoutCookie = await app.inject({ method: "POST", url: "/auth/native/passkey/verify", payload: { csrf, response: { id: "valid" } } });
+    expect(authorizedWithoutCookie.json().redirect).toContain("code=passkey-code");
+    expect(nativeAuth.completePasskeyLogin).toHaveBeenLastCalledWith({ cookieToken: "", csrfToken: csrf, accountId: "account-a" });
+  });
+
+  it("exige CSRF en la gestión de passkeys y conserva los errores de sesión y registro", async () => {
+    const csrf = "c".repeat(43);
+    const sessionCookie = `__Host-laural-passkey-session=${"s".repeat(43)}`;
+    const csrfCookie = `__Host-laural-passkey-csrf=${csrf}`;
+    const validHeaders = { cookie: `${sessionCookie}; ${csrfCookie}`, "x-csrf-token": csrf };
+    const passkeyId = "d5363ea7-f6cb-4cca-8e03-85aa33089e7a";
+    let listed: Array<{ id: string; name: string; createdAt: string }> | null = null;
+    let registrationOptions: { challenge: string } | null = null;
+    let registrationSaved = false;
+    let removed = false;
+    const passkeys = {
+      createManagementTicket: vi.fn(async () => "t".repeat(43)),
+      managementUrl: vi.fn(() => "https://sync.example.test/auth/passkeys/manage"),
+      consumeManagementTicket: vi.fn(async (ticket: string) => ticket === "t".repeat(43) ? { cookieToken: "x".repeat(43), csrfToken: "y".repeat(43) } : null),
+      listManagementPasskeys: vi.fn(async () => listed),
+      createRegistrationOptions: vi.fn(async () => registrationOptions),
+      verifyRegistration: vi.fn(async () => registrationSaved),
+      removeManagementPasskey: vi.fn(async () => removed),
+    } as unknown as AccountPasskeyService;
+    const nativeAuth = { isBrowserFlowValid: vi.fn(async () => true) } as unknown as NativeAuthService;
+    const app = createTestApp({ accountPasskeys: passkeys, nativeAuth });
+
+    const script = await app.inject({ method: "GET", url: "/auth/passkeys.js" });
+    expect(script.statusCode).toBe(200);
+    expect(script.headers["content-type"]).toContain("javascript");
+
+    expect((await app.inject({ method: "POST", url: "/v1/auth/passkeys/manage-link" })).statusCode).toBe(401);
+    expect((await app.inject({ method: "POST", url: "/auth/passkeys/manage/redeem", payload: { ticket: "z".repeat(43) } })).statusCode).toBe(410);
+    expect((await app.inject({ method: "GET", url: "/auth/passkeys/manage" })).body).toContain("Validando el enlace de un solo uso");
+    expect((await app.inject({ method: "GET", url: "/auth/passkeys/manage/list" })).statusCode).toBe(403);
+    expect((await app.inject({ method: "GET", url: "/auth/passkeys/manage/list", headers: validHeaders })).statusCode).toBe(401);
+    const unmatchedCookieHeaders = { cookie: "other=value", "x-csrf-token": csrf };
+    expect((await app.inject({ method: "POST", url: "/auth/passkeys/manage/options", headers: unmatchedCookieHeaders, payload: { csrf, displayName: "Portátil" } })).statusCode).toBe(403);
+    expect((await app.inject({ method: "POST", url: "/auth/passkeys/manage/options", headers: validHeaders, payload: { csrf, displayName: "Portátil" } })).statusCode).toBe(409);
+    expect((await app.inject({ method: "POST", url: "/auth/passkeys/manage/register", headers: unmatchedCookieHeaders, payload: { csrf, response: {} } })).statusCode).toBe(403);
+    expect((await app.inject({ method: "POST", url: "/auth/passkeys/manage/register", headers: validHeaders, payload: { csrf, response: {} } })).statusCode).toBe(400);
+    expect((await app.inject({ method: "DELETE", url: `/auth/passkeys/manage/${passkeyId}`, headers: unmatchedCookieHeaders })).statusCode).toBe(403);
+    expect((await app.inject({ method: "DELETE", url: `/auth/passkeys/manage/${passkeyId}`, headers: validHeaders })).statusCode).toBe(404);
+
+    listed = [{ id: passkeyId, name: "Portátil personal", createdAt: "2026-11-24T10:00:00.000Z" }];
+    const managementPage = await app.inject({ method: "GET", url: "/auth/passkeys/manage", headers: validHeaders });
+    expect(managementPage.statusCode).toBe(200);
+    expect(managementPage.body).toContain("Portátil personal");
+    expect((await app.inject({ method: "GET", url: "/auth/passkeys/manage/list", headers: validHeaders })).json()).toEqual(listed);
+
+    registrationOptions = { challenge: "registration-challenge" };
+    expect((await app.inject({ method: "POST", url: "/auth/passkeys/manage/options", headers: validHeaders, payload: { csrf, displayName: "Portátil" } })).json()).toEqual(registrationOptions);
+    registrationSaved = true;
+    expect((await app.inject({ method: "POST", url: "/auth/passkeys/manage/register", headers: validHeaders, payload: { csrf, response: {} } })).statusCode).toBe(201);
+    removed = true;
+    expect((await app.inject({ method: "DELETE", url: `/auth/passkeys/manage/${passkeyId}`, headers: validHeaders })).statusCode).toBe(204);
+  });
 });
 
 describe("ruta de borrado de cuenta", () => {
@@ -380,6 +628,14 @@ describe("ruta de borrado de cuenta", () => {
     expect(response.statusCode).toBe(403);
     expect(response.json()).toEqual({ error: "recent_auth_required" });
   });
+
+  it("devuelve no autorizado si el servicio rechaza la eliminación", async () => {
+    const deletion = { deleteAccount: vi.fn(async () => "unauthorized" as const) } as unknown as AccountDeletionService;
+    const app = createTestApp({ accountDeletion: deletion });
+    const response = await app.inject({ method: "DELETE", url: "/v1/auth/account", headers: { authorization: "Bearer account-user1" }, payload: { confirmation: "ELIMINAR" } });
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toEqual({ error: "unauthorized" });
+  });
 });
 
 describe("API de snapshots de preferencias", () => {
@@ -398,6 +654,18 @@ describe("API de snapshots de preferencias", () => {
     expect(revokeSession).toHaveBeenCalledWith("a", "Bearer account-a");
   });
 
+  it("rechaza el cierre si el almacén no revoca la sesión", async () => {
+    const revokeSession = vi.fn(async () => false);
+    const app = createTestApp({ revokeSession });
+    const response = await app.inject({
+      method: "POST", url: "/v1/auth/session/revoke",
+      headers: { authorization: "Bearer account-a" },
+    });
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toEqual({ error: "unauthorized" });
+    expect(revokeSession).toHaveBeenCalledWith("a", "Bearer account-a");
+  });
+
   it("lista sesiones propias y revoca otra sin permitir revocar la actual", async () => {
     const listAccountSessions = vi.fn(async () => [{ id: "d5363ea7-f6cb-4cca-8e03-85aa33089e7a", createdAt: "2026-11-21T10:00:00.000Z", expiresAt: "2026-12-21T10:00:00.000Z", current: false }]);
     const revokeAccountSession = vi.fn(async () => true);
@@ -411,6 +679,17 @@ describe("API de snapshots de preferencias", () => {
     expect((await app.inject({ method: "DELETE", url: "/v1/auth/sessions/not-a-uuid", headers })).statusCode).toBe(400);
     expect((await app.inject({ method: "DELETE", url: "/v1/auth/sessions/d5363ea7-f6cb-4cca-8e03-85aa33089e7a", headers })).statusCode).toBe(204);
     expect(revokeAccountSession).toHaveBeenCalledWith("a", "Bearer account-a", "d5363ea7-f6cb-4cca-8e03-85aa33089e7a");
+  });
+
+  it("devuelve no encontrado si la sesión no pertenece a la cuenta", async () => {
+    const revokeAccountSession = vi.fn(async () => false);
+    const app = createTestApp({ revokeAccountSession });
+    const response = await app.inject({
+      method: "DELETE", url: "/v1/auth/sessions/d5363ea7-f6cb-4cca-8e03-85aa33089e7a",
+      headers: { authorization: "Bearer account-a" },
+    });
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({ error: "not_found" });
   });
 
   it("revoca todas las demás sesiones conservando la autenticada", async () => {
@@ -484,6 +763,9 @@ describe("API de snapshots de preferencias", () => {
     expect(registration.statusCode).toBe(202);
     expect(registration.json()).toEqual({ status: "accepted" });
     expect(registration.body).not.toContain(sentPin);
+    const resent = await app.inject({ method: "POST", url: "/v1/auth/verification/resend", payload: { email: "a@example.test" } });
+    expect(resent.statusCode).toBe(202);
+    expect(resent.json()).toEqual({ status: "accepted" });
 
     const wrongPinValue = sentPin === "000000" ? "000001" : "000000";
     const wrongPin = await app.inject({ method: "POST", url: "/v1/auth/verification/confirm", payload: { email: "a@example.test", pin: wrongPinValue } });
@@ -503,6 +785,25 @@ describe("API de snapshots de preferencias", () => {
     expect(resetResponse.statusCode).toBe(202);
     expect(resetResponse.json()).toEqual({ status: "accepted" });
     expect(resetResponse.headers.authorization).toBeUndefined();
+
+    const invalidRegistration = await app.inject({
+      method: "POST", url: "/v1/auth/register",
+      payload: { displayName: "A", email: "       ", password: "a long password 2026" },
+    });
+    const invalidResend = await app.inject({ method: "POST", url: "/v1/auth/verification/resend", payload: { email: "       " } });
+    const invalidResetRequest = await app.inject({ method: "POST", url: "/v1/auth/password-reset/request", payload: { email: "       " } });
+    const invalidResetConfirm = await app.inject({
+      method: "POST", url: "/v1/auth/password-reset/confirm",
+      payload: { email: "       ", pin: "000000", password: "una nueva contraseña 2026" },
+    });
+    expect(invalidRegistration.statusCode).toBe(400);
+    expect(invalidRegistration.json()).toEqual({ error: "invalid_request" });
+    expect(invalidResend.statusCode).toBe(400);
+    expect(invalidResend.json()).toEqual({ error: "invalid_request" });
+    expect(invalidResetRequest.statusCode).toBe(400);
+    expect(invalidResetRequest.json()).toEqual({ error: "invalid_request" });
+    expect(invalidResetConfirm.statusCode).toBe(400);
+    expect(invalidResetConfirm.json()).toEqual({ error: "invalid_request" });
   });
 
   it("comparte el límite de recuperación entre IP y normaliza el correo", async () => {
@@ -598,6 +899,9 @@ describe("API de snapshots de preferencias", () => {
     const cookie = String(response.headers["set-cookie"]).split(";")[0] ?? "";
     const csrf = /name="csrf" value="([^"]+)"/.exec(response.body)?.[1] ?? "";
     const pageHeaders = { cookie };
+    const loginPage = await app.inject({ method: "GET", url: `/auth/native/login?csrf=${csrf}`, headers: pageHeaders });
+    expect(loginPage.statusCode).toBe(200);
+    expect(loginPage.body).toContain("Iniciar sesión");
     const registerPage = await app.inject({ method: "GET", url: `/auth/native/register?csrf=${csrf}`, headers: pageHeaders });
     expect(registerPage.statusCode).toBe(200);
     expect(registerPage.body).toContain("Crea tu cuenta");
@@ -637,14 +941,54 @@ describe("API de snapshots de preferencias", () => {
     expect(invalidExchange.statusCode).toBe(400);
   });
 
+  it("valida el CSRF de las páginas de acceso y limita sus consultas", async () => {
+    const nativeStore: NativeAuthStore = {
+      createFlow: async () => undefined,
+      isFlowActive: async () => true,
+      findLoginCandidate: async () => null,
+      failLogin: async () => undefined,
+      completeLogin: async () => null,
+      exchangeCode: async () => null,
+    };
+    const emailAuth = new EmailAuthService({
+      createUnverifiedAccount: async () => null,
+      createVerification: async () => null,
+      verifyEmail: async () => false,
+      createPasswordReset: async () => null,
+      checkPasswordReset: async () => false,
+      resetPassword: async () => false,
+    }, { sendVerification: async () => undefined, sendPasswordReset: async () => undefined }, "a-pepper-long-enough-for-auth-page-test");
+    const app = createTestApp({ emailAuth, nativeAuth: new NativeAuthService(nativeStore) });
+    const query = new URLSearchParams({
+      redirect_uri: "http://127.0.0.1:49152/callback",
+      state: "s".repeat(43), code_challenge: "c".repeat(43), code_challenge_method: "S256",
+    });
+    const start = await app.inject({ method: "GET", url: `/auth/native?${query}` });
+    const cookie = String(start.headers["set-cookie"]).split(";")[0] ?? "";
+    const csrf = /name="csrf" value="([^"]+)"/.exec(start.body)?.[1] ?? "";
+
+    expect((await app.inject({ method: "GET", url: "/auth/native/register?csrf=invalid", headers: { cookie } })).statusCode).toBe(400);
+    const pageRequest = { method: "GET" as const, url: `/auth/native/register?csrf=${csrf}`, headers: { cookie } };
+    for (let index = 0; index < 30; index += 1) {
+      expect((await app.inject(pageRequest)).statusCode).toBe(200);
+    }
+    const limited = await app.inject(pageRequest);
+    expect(limited.statusCode).toBe(429);
+    expect(limited.headers["retry-after"]).toBe("60");
+  });
+
   it("inicia Google desde un flujo válido y entrega el callback al estado nativo existente", async () => {
     const hash = (value: string) => createHash("sha256").update(value).digest("hex");
     const redirectUri = "http://127.0.0.1:49152/callback";
     let cookieDigest = "";
     let csrfDigest = "";
+    let finishReturnsNull = false;
+    let completeLoginReturnsNull = false;
+    let mfaEnabled = false;
+    let federatedEmail: string | undefined = "person@example.test";
     const oauth = {
       start: vi.fn(async () => "https://accounts.google.com/o/oauth2/v2/auth?state=opaque"),
-      finish: vi.fn(async () => ({ cookieDigest, csrfDigest, accountId: "account-google" })),
+      finish: vi.fn(async () => finishReturnsNull ? null : ({ cookieDigest, csrfDigest, accountId: "account-google" })),
       cancel: vi.fn(async () => undefined),
     } as unknown as GoogleOAuthService;
     const nativeStore: NativeAuthStore = {
@@ -653,12 +997,12 @@ describe("API de snapshots de preferencias", () => {
       findLoginCandidate: async () => null,
       findPasskeyLoginCandidate: async (_cookie, _csrf, accountId) => ({
         flowId: "flow-google", redirectUri, state: "n".repeat(43), codeChallenge: "c".repeat(43),
-        accountId, email: "person@example.test", passwordHash: null, emailVerified: true, mfaEnabled: false,
+        accountId, email: federatedEmail, passwordHash: null, emailVerified: true, mfaEnabled,
       }),
       rotateFlowCsrf: async (_cookie, _csrf, next) => { expect(next).toHaveLength(64); return true; },
       failLogin: async () => undefined,
       requireMfa: async () => true,
-      completeLogin: async () => ({ redirectUri, state: "n".repeat(43) }),
+      completeLogin: async () => completeLoginReturnsNull ? null : ({ redirectUri, state: "n".repeat(43) }),
       exchangeCode: async () => null,
     };
     const emailAuth = new EmailAuthService({
@@ -688,6 +1032,39 @@ describe("API de snapshots de preferencias", () => {
     expect(callback.headers.location).toContain("127.0.0.1:49152/callback");
     expect(callback.headers.location).toContain("state=" + "n".repeat(43));
     expect(oauth.finish).toHaveBeenCalledWith("g".repeat(43), "google-code");
+
+    const missingState = await app.inject({ method: "GET", url: "/auth/google/callback?code=google-code" });
+    expect(missingState.statusCode).toBe(400);
+    expect(oauth.finish).toHaveBeenCalledTimes(1);
+
+    const state = "g".repeat(43);
+    const bothResults = await app.inject({ method: "GET", url: `/auth/google/callback?${new URLSearchParams({ state, code: "code", error: "access_denied" })}` });
+    const noResult = await app.inject({ method: "GET", url: `/auth/google/callback?state=${state}` });
+    const denied = await app.inject({ method: "GET", url: `/auth/google/callback?${new URLSearchParams({ state, error: "access_denied" })}` });
+    expect(bothResults.statusCode).toBe(400);
+    expect(noResult.statusCode).toBe(400);
+    expect(denied.statusCode).toBe(400);
+    expect(oauth.cancel).toHaveBeenCalledTimes(3);
+    expect(oauth.finish).toHaveBeenCalledTimes(1);
+
+    finishReturnsNull = true;
+    const expiredState = await app.inject({ method: "GET", url: `/auth/google/callback?${new URLSearchParams({ state, code: "expired-code" })}` });
+    expect(expiredState.statusCode).toBe(400);
+    finishReturnsNull = false;
+
+    completeLoginReturnsNull = true;
+    const missingNativeFlow = await app.inject({ method: "GET", url: `/auth/google/callback?${new URLSearchParams({ state, code: "google-code" })}` });
+    expect(missingNativeFlow.statusCode).toBe(400);
+    completeLoginReturnsNull = false;
+
+    mfaEnabled = true;
+    const mfa = await app.inject({ method: "GET", url: `/auth/google/callback?${new URLSearchParams({ state, code: "google-code" })}` });
+    expect(mfa.statusCode).toBe(200);
+    expect(mfa.body).toContain("Verifica tu segundo factor para continuar");
+    federatedEmail = undefined;
+    const mfaWithoutEmail = await app.inject({ method: "GET", url: `/auth/google/callback?${new URLSearchParams({ state, code: "google-code" })}` });
+    expect(mfaWithoutEmail.statusCode).toBe(200);
+    expect(mfaWithoutEmail.body).toContain('name="email" type="email"');
     const invalidStart = await app.inject({ method: "POST", url: "/auth/native/google/start", payload: { csrf: "x".repeat(43) } });
     expect(invalidStart.statusCode).toBe(400);
   });
@@ -744,6 +1121,25 @@ describe("API de snapshots de preferencias", () => {
     expect(registered.statusCode).toBe(200);
     expect(registered.body).toContain("Si los datos son válidos");
 
+    const expiredResend = await app.inject({
+      method: "POST", url: "/auth/native/verification/resend",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      payload: new URLSearchParams({ csrf, email: verificationEmail }).toString(),
+    });
+    const expiredVerification = await app.inject({
+      method: "POST", url: "/auth/native/verification/confirm",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      payload: new URLSearchParams({ csrf, email: verificationEmail, pin: "012345" }).toString(),
+    });
+    const expiredResetConfirmation = await app.inject({
+      method: "POST", url: "/auth/native/password-reset/confirm",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      payload: new URLSearchParams({ csrf, email: verificationEmail, pin: "012345", password: "nueva contraseña segura 2026" }).toString(),
+    });
+    expect(expiredResend.statusCode).toBe(400);
+    expect(expiredVerification.statusCode).toBe(400);
+    expect(expiredResetConfirmation.statusCode).toBe(400);
+
     const resent = await app.inject({
       method: "POST", url: "/auth/native/verification/resend",
       headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
@@ -782,6 +1178,61 @@ describe("API de snapshots de preferencias", () => {
     });
     expect(passwordReset.statusCode).toBe(200);
     expect(passwordReset.body).toContain("no inicia sesión ni elimina factores de seguridad");
+  });
+
+  it("limita los formularios por correo y presenta el rechazo de un restablecimiento inválido", async () => {
+    const blockedScopes = new Set([
+      "auth-register-email",
+      "auth-resend-email",
+      "auth-verify-email",
+      "password-reset-request-email",
+      "password-reset-confirm-email",
+    ]);
+    const requestRateLimiter: RequestRateLimiter = {
+      consume: async (scope) => !blockedScopes.has(scope),
+    };
+    const emailAuth = new EmailAuthService({
+      createUnverifiedAccount: async () => null,
+      createVerification: async () => null,
+      verifyEmail: async () => false,
+      createPasswordReset: async () => null,
+      checkPasswordReset: async () => false,
+      resetPassword: async () => false,
+    }, { sendVerification: async () => undefined, sendPasswordReset: async () => undefined }, "a-pepper-long-enough-for-browser-form-limits");
+    const register = vi.spyOn(emailAuth, "register");
+    const resendVerification = vi.spyOn(emailAuth, "resendVerification");
+    const verify = vi.spyOn(emailAuth, "verify");
+    const requestPasswordReset = vi.spyOn(emailAuth, "requestPasswordReset");
+    const confirmPasswordReset = vi.spyOn(emailAuth, "confirmPasswordReset");
+    const nativeAuth = { isBrowserFlowValid: vi.fn(async () => true) } as unknown as NativeAuthService;
+    const app = createTestApp({ emailAuth, nativeAuth, requestRateLimiter });
+    const headers = { cookie: "__Host-laural-flow=flow-token", "content-type": "application/json" };
+    const csrf = "c".repeat(43);
+    const email = "person@example.test";
+    const responses = await Promise.all([
+      app.inject({ method: "POST", url: "/auth/native/register", headers, payload: { csrf, displayName: "User", email, password: "a valid password 2026" } }),
+      app.inject({ method: "POST", url: "/auth/native/verification/resend", headers, payload: { csrf, email } }),
+      app.inject({ method: "POST", url: "/auth/native/verification/confirm", headers, payload: { csrf, email, pin: "012345" } }),
+      app.inject({ method: "POST", url: "/auth/native/password-reset/request", headers, payload: { csrf, email } }),
+      app.inject({ method: "POST", url: "/auth/native/password-reset/confirm", headers, payload: { csrf, email, pin: "012345", password: "a new valid password 2026" } }),
+    ]);
+    expect(responses.map(({ statusCode }) => statusCode)).toEqual([429, 429, 429, 429, 429]);
+    expect(responses.map(({ headers: responseHeaders }) => responseHeaders["retry-after"])).toEqual(["900", "900", "300", "900", "300"]);
+    expect(register).not.toHaveBeenCalled();
+    expect(resendVerification).not.toHaveBeenCalled();
+    expect(verify).not.toHaveBeenCalled();
+    expect(requestPasswordReset).not.toHaveBeenCalled();
+    expect(confirmPasswordReset).not.toHaveBeenCalled();
+
+    blockedScopes.clear();
+    confirmPasswordReset.mockResolvedValue("invalid_request");
+    const invalidReset = await app.inject({
+      method: "POST", url: "/auth/native/password-reset/confirm", headers,
+      payload: { csrf, email, pin: "012345", password: "a new valid password 2026" },
+    });
+    expect(invalidReset.statusCode).toBe(400);
+    expect(invalidReset.body).toContain("Revisa el formato de los datos");
+    expect(confirmPasswordReset).toHaveBeenCalledWith(email, "012345", "a new valid password 2026");
   });
 
   it("hace login en navegador y canjea PKCE sin entregar el token en la página", async () => {
@@ -886,6 +1337,30 @@ describe("API de snapshots de preferencias", () => {
     expect(otherAccount.json()).toEqual({ snapshot: null, revision: 0 });
   });
 
+  it("acepta v2, conserva el idioma al leer y no altera la revisión ante un snapshot inválido", async () => {
+    const app = createTestApp();
+    const headers = { authorization: "Bearer account-a", "if-match": '"0"', "idempotency-key": "snapshot-v2-write-001" };
+    const saved = await app.inject({ method: "PUT", url: "/v1/preferences/current", headers, payload: snapshotV2 });
+
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json()).toEqual({ snapshot: snapshotV2, revision: 1 });
+    expect((await app.inject({ method: "GET", url: "/v1/preferences/current", headers })).json()).toEqual({ snapshot: snapshotV2, revision: 1 });
+
+    const invalidLanguage = await app.inject({
+      method: "PUT", url: "/v1/preferences/current",
+      headers: { ...headers, "if-match": '"1"', "idempotency-key": "snapshot-v2-invalid-001" },
+      payload: { ...snapshotV2, preferences: { ...snapshotV2.preferences, language: "fr" } },
+    });
+    const unsupportedVersion = await app.inject({
+      method: "PUT", url: "/v1/preferences/current",
+      headers: { ...headers, "if-match": '"1"', "idempotency-key": "snapshot-v2-invalid-002" },
+      payload: { ...snapshotV2, schemaVersion: 3 },
+    });
+    expect(invalidLanguage.statusCode).toBe(400);
+    expect(unsupportedVersion.statusCode).toBe(400);
+    expect((await app.inject({ method: "GET", url: "/v1/preferences/current", headers })).json()).toEqual({ snapshot: snapshotV2, revision: 1 });
+  });
+
   it("lista, restaura y elimina versiones de forma aislada y con concurrencia", async () => {
     const app = createTestApp();
     const auth = { authorization: "Bearer account-a" };
@@ -923,9 +1398,46 @@ describe("API de snapshots de preferencias", () => {
     expect((await app.inject({ method: "GET", url: "/v1/preferences/history?limit=0", headers: auth })).statusCode).toBe(400);
     expect((await app.inject({ method: "DELETE", url: "/v1/preferences/history/0", headers: auth })).statusCode).toBe(400);
     expect((await app.inject({ method: "POST", url: "/v1/preferences/history/0/restore", headers: auth })).statusCode).toBe(400);
+    expect((await app.inject({ method: "GET", url: "/v1/preferences/history?before=9999999999999999", headers: auth })).statusCode).toBe(400);
+    expect((await app.inject({ method: "DELETE", url: "/v1/preferences/history/9999999999999999", headers: auth })).statusCode).toBe(400);
     expect((await app.inject({ method: "POST", url: "/v1/preferences/history/1/restore", headers: auth })).statusCode).toBe(428);
     expect((await app.inject({ method: "POST", url: "/v1/preferences/history/1/restore", headers: { ...auth, "if-match": '"0"', "idempotency-key": "short" } })).statusCode).toBe(400);
     expect((await app.inject({ method: "POST", url: "/v1/preferences/history/1/restore", headers: { ...auth, "if-match": '"0"', "idempotency-key": "history-restore-missing" } })).statusCode).toBe(404);
+  });
+
+  it("maneja las respuestas de autorización e idempotencia del almacén", async () => {
+    let putResult: WriteSnapshotResult = { kind: "unauthorized" };
+    let historyRevision: number | undefined = 7;
+    const store: PreferenceStore = {
+      get: async () => ({ snapshot: null, revision: 0 }),
+      listHistory: async () => [{ revision: historyRevision as number, createdAt: new Date(0).toISOString() }],
+      getHistory: async (_accountId, revision) => ({ revision, createdAt: new Date(0).toISOString(), snapshot }),
+      deleteHistory: async () => false,
+      put: async () => putResult,
+    };
+    const app = createTestApp({ store });
+    const auth = { authorization: "Bearer account-a" };
+    const writeHeaders = { ...auth, "if-match": '"0"', "idempotency-key": "unauthorized-write-key" };
+
+    expect((await app.inject({ method: "PUT", url: "/v1/preferences/current", headers: { ...writeHeaders, authorization: "" }, payload: snapshot })).statusCode).toBe(401);
+    const write = await app.inject({ method: "PUT", url: "/v1/preferences/current", headers: writeHeaders, payload: snapshot });
+    expect(write.statusCode).toBe(401);
+
+    const fullPage = await app.inject({ method: "GET", url: "/v1/preferences/history?limit=1", headers: auth });
+    expect(fullPage.json()).toEqual({ entries: [{ revision: 7, createdAt: new Date(0).toISOString() }], nextBefore: 7 });
+    historyRevision = undefined;
+    const missingCursor = await app.inject({ method: "GET", url: "/v1/preferences/history?limit=1", headers: auth });
+    expect(missingCursor.json().nextBefore).toBeNull();
+    expect((await app.inject({ method: "DELETE", url: "/v1/preferences/history/1" })).statusCode).toBe(401);
+    expect((await app.inject({ method: "POST", url: "/v1/preferences/history/1/restore" })).statusCode).toBe(401);
+
+    const restoreHeaders = { ...auth, "if-match": '"0"', "idempotency-key": "restore-unauthorized-01" };
+    const restore = await app.inject({ method: "POST", url: "/v1/preferences/history/1/restore", headers: restoreHeaders });
+    expect(restore.statusCode).toBe(401);
+    putResult = { kind: "idempotency_key_reused" };
+    const reused = await app.inject({ method: "POST", url: "/v1/preferences/history/1/restore", headers: { ...restoreHeaders, "idempotency-key": "restore-reused-key-01" } });
+    expect(reused.statusCode).toBe(409);
+    expect(reused.json()).toEqual({ error: "idempotency_key_reused" });
   });
 
   it("rechaza claves y campos que no forman parte del snapshot", async () => {

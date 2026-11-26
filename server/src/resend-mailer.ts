@@ -188,7 +188,8 @@ function securityNoticeMessage(eventType: SecurityEmailEvent): { subject: string
 }
 
 function escapeHtml(value: string): string {
-  return value.replace(/[&<>"']/gu, (character) => ({
+  const replacements: Record<string, string> = {
     "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;",
-  })[character] ?? character);
+  };
+  return value.replace(/[&<>"']/gu, (character) => replacements[character]!);
 }

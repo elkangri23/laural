@@ -298,6 +298,10 @@ fn config_path(app: &AppHandle) -> Result<PathBuf, String> {
 
 fn read_provider_store(app: &AppHandle) -> Result<ProviderStore, String> {
     let path = config_path(app)?;
+    read_provider_store_at(&path)
+}
+
+fn read_provider_store_at(path: &Path) -> Result<ProviderStore, String> {
     if !path.is_file() {
         // Migrate the first version's single-provider file without losing its configuration.
         let legacy = path.with_file_name("provider.json");
@@ -404,7 +408,7 @@ fn build_preference_snapshot(
     preferences: SnapshotPreferences,
 ) -> Result<PreferenceSnapshot, String> {
     let snapshot = PreferenceSnapshot {
-        schema_version: 1,
+        schema_version: 2,
         preferences,
         active_provider_id: store.active_provider_id,
         providers: store
@@ -456,7 +460,11 @@ fn apply_remote_preference_snapshot_inner(
 ) -> Result<TransferImportResult, String> {
     snapshot::encode(&snapshot)?;
     let old_store = read_provider_store(&app)?;
-    let incoming = remote_transfer_data(snapshot.clone(), &old_store)?;
+    let incoming = remote_transfer_data(
+        snapshot.clone(),
+        &old_store,
+        current_preferences.language.as_deref(),
+    )?;
     for provider in &incoming.providers {
         validate_base_url(&provider.base_url)?;
     }
@@ -475,6 +483,7 @@ fn apply_remote_preference_snapshot_inner(
             theme_id: incoming.preferences.theme_id.clone(),
             appearance: incoming.preferences.appearance.clone(),
             update_mode: incoming.preferences.update_mode.clone(),
+            language: incoming.preferences.language.clone(),
         },
     )?;
     crate::sync::record_sync_baseline(&app, local_snapshot, snapshot, revision)?;
@@ -492,6 +501,7 @@ fn apply_remote_preference_snapshot_inner(
 fn remote_transfer_data(
     snapshot: PreferenceSnapshot,
     local_store: &ProviderStore,
+    local_language: Option<&str>,
 ) -> Result<TransferData, String> {
     let local_by_id: HashMap<&str, &ProviderSettings> = local_store
         .providers
@@ -525,6 +535,10 @@ fn remote_transfer_data(
             theme_id: snapshot.preferences.theme_id.clone(),
             appearance: snapshot.preferences.appearance.clone(),
             update_mode: snapshot.preferences.update_mode.clone(),
+            language: Some(configuration_transfer::resolve_import_language(
+                snapshot.preferences.language.clone(),
+                local_language,
+            )?),
         },
         active_provider_id: snapshot.active_provider_id.clone(),
         providers,
@@ -635,6 +649,22 @@ fn endpoint(base_url: &str, suffix: &str) -> Result<reqwest::Url, String> {
         .map_err(|_| "La dirección del endpoint no es válida.".to_string())
 }
 
+fn provider_request_error(base_url: &str) -> String {
+    let authority = reqwest::Url::parse(base_url)
+        .ok()
+        .and_then(|url| {
+            let host = url.host_str()?;
+            Some(match url.port() {
+                Some(port) => format!("{host}:{port}"),
+                None => host.to_string(),
+            })
+        })
+        .unwrap_or_else(|| "configurado".to_string());
+    format!(
+        "No se pudo contactar con el proveedor en {authority}. Comprueba que el servicio esté activo y que la URL base del endpoint sea correcta."
+    )
+}
+
 fn chat_request(
     http: &reqwest::Client,
     base_url: &str,
@@ -728,7 +758,7 @@ async fn get_models(base_url: &str, api_key: Option<&str>) -> Result<Vec<String>
     } else {
         first
     }
-    .map_err(|error| format!("No se pudo conectar con el proveedor: {error}"))?;
+    .map_err(|_| provider_request_error(base_url))?;
     let status = response.status();
     let body = read_provider_response(response).await?;
     if !status.is_success() {
@@ -1205,7 +1235,11 @@ fn import_configuration_inner(
 ) -> Result<TransferImportResult, String> {
     let bytes = read_transfer_file(&source)?;
     let password = zeroize::Zeroizing::new(password.unwrap_or_default());
-    let decoded = configuration_transfer::decode(&bytes, Some(password.as_str()))?;
+    let mut decoded = configuration_transfer::decode(&bytes, Some(password.as_str()))?;
+    decoded.data.preferences.language = Some(configuration_transfer::resolve_import_language(
+        decoded.data.preferences.language.take(),
+        current_preferences.language.as_deref(),
+    )?);
     for provider in &decoded.data.providers {
         validate_base_url(&provider.base_url)?;
     }
@@ -1469,7 +1503,7 @@ pub async fn send_chat(
     )?
     .send()
     .await
-    .map_err(|error| format!("No se pudo enviar la consulta: {error}"))?;
+    .map_err(|_| provider_request_error(&provider.base_url))?;
     let status = request.status();
     let body = read_provider_response(request).await?;
     if !status.is_success() {
@@ -1551,7 +1585,7 @@ pub async fn send_chat_stream(
                 request
                     .send()
                     .await
-                    .map_err(|error| format!("No se pudo enviar la consulta: {error}"))
+                    .map_err(|_| provider_request_error(&provider.base_url))
             },
             &cancelled,
             "Consulta cancelada.",
@@ -1681,7 +1715,7 @@ pub async fn plan_agent(
                 request
                     .send()
                     .await
-                    .map_err(|error| format!("No se pudo generar el plan: {error}"))
+                    .map_err(|_| provider_request_error(&provider.base_url))
             },
             &cancelled,
             "Planificación cancelada.",
@@ -3492,6 +3526,7 @@ mod tests {
                 theme_id: "laurel".into(),
                 appearance: "dark".into(),
                 update_mode: "manual".into(),
+                language: None,
             },
             active_provider_id: Some(provider.id.clone()),
             providers: vec![provider],
@@ -3519,9 +3554,22 @@ mod tests {
             custom_endpoint: None,
         });
 
-        let incoming = remote_transfer_data(snapshot, &local).unwrap();
+        let incoming = remote_transfer_data(snapshot, &local, Some("en")).unwrap();
         assert_eq!(incoming.providers[0].base_url, "https://privado.example/v1");
         assert!(!incoming.providers[0].share_custom_endpoint);
+        assert_eq!(incoming.preferences.language.as_deref(), Some("en"));
+
+        let mut cloud_v2 = sync_snapshot(SnapshotProvider {
+            id: "perfil".into(),
+            kind: "custom".into(),
+            name: "Privado".into(),
+            model: "modelo".into(),
+            custom_endpoint: None,
+        });
+        cloud_v2.schema_version = 2;
+        cloud_v2.preferences.language = Some("es".into());
+        let incoming = remote_transfer_data(cloud_v2, &local, Some("en")).unwrap();
+        assert_eq!(incoming.preferences.language.as_deref(), Some("es"));
     }
 
     #[test]
@@ -3534,10 +3582,10 @@ mod tests {
             model: "modelo".into(),
             custom_endpoint: None,
         };
-        assert!(remote_transfer_data(sync_snapshot(custom.clone()), &empty).is_err());
+        assert!(remote_transfer_data(sync_snapshot(custom.clone()), &empty, Some("es")).is_err());
 
         custom.custom_endpoint = Some("https://llm.example/v1".into());
-        let incoming = remote_transfer_data(sync_snapshot(custom), &empty).unwrap();
+        let incoming = remote_transfer_data(sync_snapshot(custom), &empty, Some("es")).unwrap();
         assert_eq!(incoming.providers[0].base_url, "https://llm.example/v1");
         assert!(!incoming.providers[0].share_custom_endpoint);
     }
@@ -3559,6 +3607,7 @@ mod tests {
                 theme_id: "laurel".into(),
                 appearance: "dark".into(),
                 update_mode: "manual".into(),
+                language: Some("es".into()),
             },
             active_provider_id: active.map(str::to_string),
             providers,
@@ -3629,6 +3678,7 @@ mod tests {
             theme_id: "laurel".into(),
             appearance: "dark".into(),
             update_mode: "manual".into(),
+            language: Some("es".into()),
         };
 
         let snapshot = build_preference_snapshot(store, preferences).unwrap();
@@ -3640,11 +3690,12 @@ mod tests {
         assert_eq!(
             serialized,
             json!({
-                "schemaVersion": 1,
+                "schemaVersion": 2,
                 "preferences": {
                     "themeId": "laurel",
                     "appearance": "dark",
-                    "updateMode": "manual"
+                    "updateMode": "manual",
+                    "language": "es"
                 },
                 "activeProviderId": "local",
                 "providers": [{
@@ -3674,6 +3725,7 @@ mod tests {
             theme_id: "laurel".into(),
             appearance: "dark".into(),
             update_mode: "manual".into(),
+            language: Some("en".into()),
         };
 
         let snapshot = build_preference_snapshot(store, preferences).unwrap();
@@ -4045,6 +4097,97 @@ mod tests {
         assert!(
             validate_chat_input(&[], "", &[], &"x".repeat(MAX_GIT_DIFF_CONTEXT_BYTES + 1)).is_err()
         );
+        let selected_files = vec!["archivo.txt".into(); 13];
+        assert!(validate_chat_input(&[], "", &selected_files, "").is_err());
+        let selected_files = vec!["x".repeat(4_097)];
+        assert!(validate_chat_input(&[], "", &selected_files, "").is_err());
+        assert!(validate_chat_input(&[], "", &["archivo.txt".into()], "").is_ok());
+    }
+
+    #[test]
+    fn valida_identificadores_de_consulta_y_recupera_mutex_envenenado() {
+        assert!(!valid_request_id(""));
+        assert!(!valid_request_id(&"x".repeat(101)));
+        assert!(!valid_request_id("consulta\nmalformada"));
+        assert!(valid_request_id("consulta-1"));
+        assert!(valid_request_id(&"x".repeat(100)));
+
+        let registry = Arc::new(ChatStreamRegistry::default());
+        let poisoned_registry = Arc::clone(&registry);
+        let poisoner = std::thread::spawn(move || {
+            let _guard = poisoned_registry.0.lock().unwrap();
+            panic!("envenenar mutex de prueba");
+        });
+        assert!(poisoner.join().is_err());
+        assert_eq!(
+            register_ai_request(&registry, "consulta-1", Arc::new(AtomicBool::new(false)))
+                .unwrap_err(),
+            "No se pudo iniciar la consulta."
+        );
+    }
+
+    #[test]
+    fn limita_contexto_terminal_conservando_unicode_y_eliminando_ansi() {
+        assert_eq!(recent_terminal_context("\u{1b}[31mListo\u{1b}[0m"), "Listo");
+        let context = format!("inicio{}", "á".repeat(MAX_TERMINAL_CONTEXT_CHARS));
+        let recent = recent_terminal_context(&context);
+        assert_eq!(recent.chars().count(), MAX_TERMINAL_CONTEXT_CHARS);
+        assert_eq!(recent, "á".repeat(MAX_TERMINAL_CONTEXT_CHARS));
+    }
+
+    #[test]
+    fn agente_usa_modos_y_limites_seguros_por_defecto() {
+        let settings = AgentSettings::default();
+        assert_eq!(settings.mode, "review");
+        assert_eq!(settings.allowed_prefixes, ["git status", "git diff"]);
+        assert_eq!(settings.backup_retention, None);
+
+        let project_prompt = agent_system_prompt("powershell", true);
+        assert!(project_prompt.contains(r#""type":"write_file""#));
+        assert!(project_prompt.contains("rutas relativas dentro del proyecto seleccionado"));
+        assert!(project_prompt.contains("requerirán aprobación y backup"));
+    }
+
+    #[test]
+    fn lee_configuracion_legacy_y_actual_con_rechazo_de_datos_danados() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("providers.json");
+        assert!(read_provider_store_at(&path).unwrap().providers.is_empty());
+
+        let legacy = directory.path().join("provider.json");
+        let provider = ProviderSettings {
+            id: "legacy".into(),
+            provider_kind: None,
+            name: "Ollama local".into(),
+            base_url: "http://127.0.0.1:11434/v1".into(),
+            model: "qwen".into(),
+            share_custom_endpoint: false,
+        };
+        fs::write(&legacy, serde_json::to_vec(&provider).unwrap()).unwrap();
+        let loaded = read_provider_store_at(&path).unwrap();
+        assert_eq!(loaded.active_provider_id.as_deref(), Some("legacy"));
+        assert_eq!(loaded.providers[0].name, "Ollama local");
+
+        fs::write(&legacy, b"json invalido").unwrap();
+        assert!(read_provider_store_at(&path).is_err());
+
+        let current = ProviderStore {
+            active_provider_id: Some("actual".into()),
+            providers: vec![ProviderSettings {
+                id: "actual".into(),
+                ..provider
+            }],
+        };
+        fs::write(&path, serde_json::to_vec(&current).unwrap()).unwrap();
+        assert_eq!(
+            read_provider_store_at(&path)
+                .unwrap()
+                .active_provider_id
+                .as_deref(),
+            Some("actual")
+        );
+        fs::write(&path, b"json invalido").unwrap();
+        assert!(read_provider_store_at(&path).is_err());
     }
 
     #[test]
@@ -4118,6 +4261,62 @@ mod tests {
                 Vec::new(),
                 "x".repeat(MAX_GIT_DIFF_CONTEXT_BYTES + 1),
             )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn vista_previa_acota_terminal_y_omite_secretos_y_directorios_generados() {
+        let project = tempfile::tempdir().unwrap();
+        fs::write(project.path().join("README.md"), "documentación segura").unwrap();
+        fs::write(project.path().join(".env.local"), "api_key=secreto").unwrap();
+        let generated = project.path().join("node_modules");
+        fs::create_dir(&generated).unwrap();
+        fs::write(generated.join("paquete.txt"), "contenido generado").unwrap();
+
+        let terminal = format!("\u{1b}[32m{}\u{1b}[0m", "á".repeat(16_500));
+        let project_path = project.path().to_string_lossy().into_owned();
+        let preview =
+            preview_context(terminal, Some(project_path), Vec::new(), String::new()).unwrap();
+
+        assert_eq!(preview.terminal.chars().count(), 16_000);
+        assert!(!preview.terminal.contains('\u{1b}'));
+        assert!(preview.project.contains("README.md"));
+        assert!(preview.project.contains("documentación segura"));
+        assert!(!preview.project.contains("api_key=secreto"));
+        assert!(!preview.project.contains("contenido generado"));
+        assert_eq!(
+            preview.total_characters,
+            16_000 + preview.project.chars().count()
+        );
+    }
+
+    #[test]
+    fn archivos_seleccionados_omite_binarios_directorios_y_archivos_excesivos() {
+        let directory = tempfile::tempdir().unwrap();
+        let visible = directory.path().join("visible.txt");
+        let binary = directory.path().join("binario.txt");
+        let oversized = directory.path().join("grande.txt");
+        let subdirectory = directory.path().join("carpeta");
+        fs::write(&visible, "contenido visible").unwrap();
+        fs::write(&binary, [0xff, 0xfe]).unwrap();
+        fs::write(&oversized, vec![b'x'; 32_001]).unwrap();
+        fs::create_dir(&subdirectory).unwrap();
+
+        let selected = [visible, binary, oversized, subdirectory]
+            .map(|path| path.to_string_lossy().into_owned());
+        let context = read_selected_files(&selected).unwrap();
+
+        assert!(context.contains("contenido visible"));
+        assert!(!context.contains("grande"));
+        assert!(!context.contains("binario"));
+        assert!(!context.contains("### carpeta"));
+        assert!(
+            read_selected_files(&[directory
+                .path()
+                .join("inexistente.txt")
+                .to_string_lossy()
+                .into_owned()])
             .is_err()
         );
     }
@@ -6247,6 +6446,51 @@ mod tests {
         ] {
             assert!(validate_base_url(url).is_err(), "{url}");
         }
+    }
+
+    #[test]
+    fn rechaza_hosts_http_que_solo_parecen_loopback() {
+        for url in [
+            "http://localhost.atacante.example/v1",
+            "http://127.0.0.1.atacante.example/v1",
+            "http://127.0.0.1%2eatacante.example/v1",
+            "http://localhost@atacante.example/v1",
+            "http://[::ffff:127.0.0.1]/v1",
+        ] {
+            assert!(validate_base_url(url).is_err(), "se rechazó {url}");
+        }
+    }
+
+    #[test]
+    fn explica_fallos_de_conexion_sin_revelar_rutas_ni_credenciales() {
+        let local = provider_request_error("http://127.0.0.1:31415/v1/private-path");
+        assert_eq!(
+            local,
+            "No se pudo contactar con el proveedor en 127.0.0.1:31415. Comprueba que el servicio esté activo y que la URL base del endpoint sea correcta."
+        );
+        assert!(!local.contains("private-path"));
+
+        let remote = provider_request_error("https://api.example.test/v1/private-path");
+        assert!(remote.contains("api.example.test"));
+        assert!(!remote.contains("private-path"));
+
+        let without_authority = provider_request_error("file:///private-path");
+        assert!(without_authority.contains("proveedor en configurado"));
+        assert!(!without_authority.contains("private-path"));
+    }
+
+    #[test]
+    fn valida_el_limite_inclusivo_de_longitud_de_endpoint() {
+        let prefix = "https://example.org/";
+        let at_limit = format!("{prefix}{}", "x".repeat(2_048 - prefix.len()));
+        assert_eq!(at_limit.len(), 2_048);
+        assert!(validate_base_url(&at_limit).is_ok());
+
+        let over_limit = format!("{at_limit}x");
+        assert_eq!(
+            validate_base_url(&over_limit).unwrap_err(),
+            "La URL del proveedor supera el límite de 2.048 caracteres."
+        );
     }
 
     #[test]

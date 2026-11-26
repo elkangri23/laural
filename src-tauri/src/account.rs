@@ -791,6 +791,24 @@ pub(crate) fn session_token() -> Result<Zeroizing<String>, String> {
 mod tests {
     use super::*;
 
+    async fn local_response(raw_response: String) -> reqwest::Response {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = [0; 1024];
+            let _ = stream.read(&mut request);
+            stream.write_all(raw_response.as_bytes()).unwrap();
+        });
+        let response = reqwest::Client::new()
+            .get(format!("http://{address}"))
+            .send()
+            .await
+            .unwrap();
+        server.join().unwrap();
+        response
+    }
+
     fn request(target: &str) -> Vec<u8> {
         format!("GET {target} HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n").into_bytes()
     }
@@ -852,6 +870,28 @@ mod tests {
     }
 
     #[test]
+    fn rechaza_callback_sin_tokens_validos_o_con_fragmento() {
+        let code = "a".repeat(43);
+        let state = "b".repeat(43);
+        for target in [
+            format!("/callback?state={state}"),
+            format!("/callback?code={code}"),
+            format!("/callback?code=short&state={state}"),
+            format!("/callback?code={code}&state=short"),
+            format!("/callback?code={code}&state={state}#fragment"),
+        ] {
+            assert!(
+                parse_callback(&request(&target)).is_err(),
+                "se rechazó el destino {target}"
+            );
+        }
+
+        let mut invalid_utf8 = request(&format!("/callback?code={code}&state={state}"));
+        invalid_utf8[5] = 0xff;
+        assert!(parse_callback(&invalid_utf8).is_err());
+    }
+
+    #[test]
     fn compara_state_sin_ataques_de_tiempo() {
         assert!(constant_time_equal(b"state", b"state"));
         assert!(!constant_time_equal(b"state", b"other"));
@@ -867,7 +907,7 @@ mod tests {
     }
 
     #[test]
-    fn callback_local_responde_con_html_estatico_y_sin_cache() {
+    fn callback_local_responde_con_html_estatico_generico_y_sin_cache() {
         let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
         let address = listener.local_addr().unwrap();
         let server = thread::spawn(move || {
@@ -899,6 +939,24 @@ mod tests {
         assert!(page.contains("No se pudo completar el inicio de sesión"));
         assert!(page.contains("Vuelve a Laural e inténtalo de nuevo."));
         assert!(page.contains("status error"));
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            write_callback_response(&mut stream, false);
+        });
+        let mut failure_response = String::new();
+        TcpStream::connect(address)
+            .unwrap()
+            .read_to_string(&mut failure_response)
+            .unwrap();
+        server.join().unwrap();
+
+        assert!(failure_response.starts_with("HTTP/1.1 400 Bad Request"));
+        assert!(failure_response.contains("No se pudo completar el inicio de sesión"));
+        assert!(failure_response.contains("Cache-Control: no-store"));
+        assert!(!failure_response.contains("code="));
+        assert!(!failure_response.contains("state="));
     }
 
     #[test]
@@ -906,6 +964,10 @@ mod tests {
         let token = random_token().unwrap();
         assert!(valid_token(&token));
         assert!(!valid_token("bad token"));
+        assert!(!valid_token(&"a".repeat(42)));
+        assert!(!valid_token(&"a".repeat(44)));
+        assert!(!valid_token(&format!("{}+", "a".repeat(42))));
+        assert!(valid_token(&format!("{}_-", "a".repeat(41))));
     }
 
     #[test]
@@ -924,6 +986,187 @@ mod tests {
         assert!(valid_session_id("d5363ea7-f6cb-4cca-8e03-85aa33089e7a"));
         assert!(!valid_session_id("../../v1/auth/session/revoke"));
         assert!(!valid_session_id("d5363ea7-f6cb-4cca-8e03-85aa33089e7z"));
+    }
+
+    #[test]
+    fn valida_codigo_totp_con_seis_digitos_ascii() {
+        assert!(valid_totp_code("012345"));
+        assert!(!valid_totp_code("12345"));
+        assert!(!valid_totp_code("1234567"));
+        assert!(!valid_totp_code("１２３４５６"));
+        assert!(!valid_totp_code("12 456"));
+    }
+
+    #[tokio::test]
+    async fn limita_y_valida_respuestas_json_de_la_api_de_cuenta() {
+        let valid = local_response(
+            "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}".into(),
+        )
+        .await;
+        assert_eq!(
+            bounded_response_json::<serde_json::Value>(valid, "fallo")
+                .await
+                .unwrap(),
+            serde_json::json!({})
+        );
+
+        let denied = local_response(
+            "HTTP/1.1 403 Forbidden\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}".into(),
+        )
+        .await;
+        assert_eq!(
+            bounded_response_json::<serde_json::Value>(denied, "fallo")
+                .await
+                .unwrap_err(),
+            "fallo"
+        );
+
+        let oversized_header = local_response(
+            "HTTP/1.1 200 OK\r\nContent-Length: 4097\r\nConnection: close\r\n\r\n".into(),
+        )
+        .await;
+        assert_eq!(
+            bounded_response_json::<serde_json::Value>(oversized_header, "fallo")
+                .await
+                .unwrap_err(),
+            "fallo"
+        );
+
+        let malformed = local_response(
+            "HTTP/1.1 200 OK\r\nContent-Length: 3\r\nConnection: close\r\n\r\nno!".into(),
+        )
+        .await;
+        assert_eq!(
+            bounded_response_json::<serde_json::Value>(malformed, "fallo")
+                .await
+                .unwrap_err(),
+            "fallo"
+        );
+
+        let oversized_body = "x".repeat(4097);
+        let response = local_response(format!(
+            "HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n{oversized_body}"
+        ))
+        .await;
+        assert_eq!(
+            bounded_response_json::<serde_json::Value>(response, "fallo")
+                .await
+                .unwrap_err(),
+            "fallo"
+        );
+
+        let truncated = local_response(
+            "HTTP/1.1 200 OK\r\nContent-Length: 5\r\nConnection: close\r\n\r\n{}".into(),
+        )
+        .await;
+        assert_eq!(
+            bounded_response_json::<serde_json::Value>(truncated, "fallo")
+                .await
+                .unwrap_err(),
+            "fallo"
+        );
+    }
+
+    #[tokio::test]
+    async fn acepta_respuesta_json_en_el_limite_de_bytes_permitido() {
+        let body = format!("\"{}\"", "x".repeat(4094));
+        assert_eq!(body.len(), 4096);
+        let response = local_response(format!(
+            "HTTP/1.1 200 OK\r\nContent-Length: 4096\r\nConnection: close\r\n\r\n{body}"
+        ))
+        .await;
+
+        let parsed = bounded_response_json::<String>(response, "fallo")
+            .await
+            .unwrap();
+        assert_eq!(parsed.len(), 4094);
+    }
+
+    #[tokio::test]
+    async fn cliente_de_cuenta_rechaza_http_antes_de_conectar() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let address = listener.local_addr().unwrap();
+
+        let result = account_api_client()
+            .unwrap()
+            .get(format!("http://{address}/v1/auth/sessions"))
+            .bearer_auth("credencial-de-prueba")
+            .send()
+            .await;
+
+        assert!(result.is_err());
+        assert_eq!(
+            listener.accept().unwrap_err().kind(),
+            std::io::ErrorKind::WouldBlock
+        );
+    }
+
+    #[tokio::test]
+    async fn rechaza_codigo_totp_y_uuid_de_sesion_invalidos_antes_de_acceder_a_credenciales() {
+        assert_eq!(
+            confirm_totp_enrollment("12345".into()).await.unwrap_err(),
+            "Introduce el código de seis dígitos de tu aplicación."
+        );
+        assert_eq!(
+            revoke_account_session("../../session".into())
+                .await
+                .unwrap_err(),
+            "El identificador de sesión no es válido."
+        );
+    }
+
+    #[test]
+    fn limita_la_lectura_del_callback_local_y_rechaza_cierre_incompleto() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .write_all(&vec![b'x'; MAX_CALLBACK_BYTES + 1])
+                .unwrap();
+        });
+        let mut stream = TcpStream::connect(address).unwrap();
+        assert!(read_callback_request(&mut stream).is_err());
+        server.join().unwrap();
+
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let (stream, _) = listener.accept().unwrap();
+            drop(stream);
+        });
+        let mut stream = TcpStream::connect(address).unwrap();
+        assert!(read_callback_request(&mut stream).is_err());
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn acepta_callback_local_que_ocupa_exactamente_el_limite_de_bytes() {
+        let code = "a".repeat(43);
+        let state = "b".repeat(43);
+        let mut request = format!(
+            "GET /callback?code={code}&state={state} HTTP/1.1\r\nHost: 127.0.0.1\r\nX-Padding: "
+        )
+        .into_bytes();
+        let ending = b"\r\n\r\n";
+        let padding_length = MAX_CALLBACK_BYTES - request.len() - ending.len();
+        request.extend(std::iter::repeat_n(b'x', padding_length));
+        request.extend_from_slice(ending);
+        assert_eq!(request.len(), MAX_CALLBACK_BYTES);
+
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream.write_all(&request).unwrap();
+        });
+        let mut stream = TcpStream::connect(address).unwrap();
+
+        let received = read_callback_request(&mut stream).unwrap();
+        server.join().unwrap();
+        assert_eq!(received.len(), MAX_CALLBACK_BYTES);
+        assert_eq!(parse_callback(&received).unwrap(), (code, state));
     }
 
     #[test]
