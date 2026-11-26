@@ -175,6 +175,22 @@ Verificación en vivo el 2026-11-24:
   menos de un minuto. Registro de cada ejecución en
   `/var/lib/laural/status-watchdog.log`.
 
+- Arreglo del inicio de sesión (commits `3c6ca16` y `6f89605`, desplegado
+  2026-11-26): el primer registro real (Antonio, 2026-11-26) verificó el
+  correo, pero el inicio de sesión no se completaba: el servidor emitía el
+  código dos veces y la app no lo canjeaba nunca. Causa: la CSP global
+  (`form-action 'self'`) la aplica Chrome/Safari también a la redirección
+  303 tras enviar el formulario, y esa redirección va al callback loopback
+  (`http://127.0.0.1:puerto/callback`), así que el navegador la bloqueaba en
+  silencio y la app se quedaba esperando; el segundo envío daba «sesión
+  caducó» porque el flujo ya estaba consumido. Arreglo: `form-action
+  'self' http://127.0.0.1:*` en `server/src/app.ts` (la redirección solo
+  puede ir a loopback, validado por `validateNativeFlowParameters`), con
+  tests que lo comprueban en la página y en la propia 303 del login.
+  Pendiente relacionado: el botón de Google (apagado) tiene el mismo
+  problema latente — su 303 va a `accounts.google.com` —; habrá que
+  añadirlo a `form-action` al activarlo.
+
 ## Pendiente tras el despliegue
 
 - Primer registro real de una cuenta (idealmente la de Antonio):
