@@ -4739,6 +4739,8 @@ mod tests {
             "git branch --edit-description nueva",
             "git branch --track nueva origin/main",
             "git branch --color=always nueva",
+            "git branch -",
+            "git branch -x",
             "git branch --unknown-option",
         ] {
             assert!(command_is_high_risk("git-bash", command), "{command}");
@@ -4753,6 +4755,7 @@ mod tests {
             "git branch --show-current",
             "git branch --contains principal",
             "git branch --merged principal",
+            "git branch --sort --list",
             "git branch --sort=-committerdate --list",
             "git branch --format %(refname) --list",
         ] {
