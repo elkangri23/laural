@@ -206,6 +206,7 @@ mod tests {
             b"data: {",
             b"data: {\"error\":{}}",
             b"data: \xff",
+            b"data: \xff\n",
         ] {
             assert!(parse(&[input]).is_err());
         }
