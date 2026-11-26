@@ -823,6 +823,7 @@ fn random_idempotency_key() -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use base64::Engine;
     use std::io::{Read, Write};
     use std::net::TcpListener;
     use std::thread::JoinHandle;
@@ -1970,10 +1971,10 @@ mod tests {
     fn genera_claves_de_idempotencia_compatibles_con_el_api() {
         let key = random_idempotency_key().unwrap();
         assert!((16..=128).contains(&key.len()));
-        assert!(
-            key.bytes()
-                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-')
-        );
+        let decoded = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .decode(key)
+            .unwrap();
+        assert_eq!(decoded.len(), 32);
     }
 
     #[test]
