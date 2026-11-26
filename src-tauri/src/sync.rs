@@ -294,10 +294,14 @@ pub async fn confirm_remote_preferences(
     let _guard = lock_sync().await;
     let token = account::session_token()?;
     let remote = fetch_remote_preferences(&token).await?;
-    if remote.revision != revision || remote.snapshot.as_ref() != Some(&snapshot) {
+    let Some(remote_snapshot) = remote.snapshot else {
+        return Ok(false);
+    };
+    if remote.revision != revision || !snapshot::snapshots_equivalent(&remote_snapshot, &snapshot)
+    {
         return Ok(false);
     }
-    record_sync_baseline(&app, snapshot.clone(), snapshot, revision)?;
+    record_sync_baseline(&app, snapshot, remote_snapshot, revision)?;
     Ok(true)
 }
 
@@ -369,7 +373,11 @@ fn decide_sync(
     remote: &RemoteSnapshot,
     local: &PreferenceSnapshot,
 ) -> SyncDecision {
-    if remote.snapshot.as_ref() == Some(local) {
+    if remote
+        .snapshot
+        .as_ref()
+        .is_some_and(|remote| snapshot::snapshots_equivalent(remote, local))
+    {
         return SyncDecision::AlreadyEqual;
     }
     let Some(state) = state else {
@@ -382,10 +390,15 @@ fn decide_sync(
     ) else {
         return SyncDecision::NeedsChoice;
     };
-    if remote.revision != previous_revision || remote.snapshot.as_ref() != Some(cloud_snapshot) {
+    if remote.revision != previous_revision
+        || !remote
+            .snapshot
+            .as_ref()
+            .is_some_and(|remote| snapshot::snapshots_equivalent(remote, cloud_snapshot))
+    {
         return SyncDecision::Conflict;
     }
-    if local_snapshot == local {
+    if snapshot::snapshots_equivalent(local_snapshot, local) {
         SyncDecision::AlreadyEqual
     } else {
         SyncDecision::Upload
@@ -419,7 +432,12 @@ pub(crate) async fn verify_remote_snapshot(
 ) -> Result<(), String> {
     let token = account::session_token()?;
     let remote = fetch_remote_preferences(&token).await?;
-    if remote.revision != revision || remote.snapshot.as_ref() != Some(snapshot) {
+    let matches = remote.revision == revision
+        && remote
+            .snapshot
+            .as_ref()
+            .is_some_and(|remote| snapshot::snapshots_equivalent(remote, snapshot));
+    if !matches {
         return Err(
             "La nube cambió desde la comparación. Vuelve a sincronizar antes de aplicar.".into(),
         );
@@ -1357,6 +1375,32 @@ mod tests {
                 &local
             ),
             SyncDecision::AlreadyEqual
+        );
+    }
+
+    #[test]
+    fn v1_en_la_nube_y_v2_en_local_con_los_mismos_ajustes_no_piden_eleccion() {
+        let mut cloud = snapshot("laurel");
+        cloud.schema_version = 1;
+        cloud.preferences.language = None;
+        let local = snapshot("laurel");
+        let remote = RemoteSnapshot {
+            snapshot: Some(cloud),
+            revision: 5,
+        };
+        assert_eq!(decide_sync(None, &remote, &local), SyncDecision::AlreadyEqual);
+
+        let mut other_language = local.clone();
+        other_language.preferences.language = Some("en".into());
+        assert_eq!(
+            decide_sync(None, &remote, &other_language),
+            SyncDecision::AlreadyEqual
+        );
+
+        let different = snapshot("ocean");
+        assert_eq!(
+            decide_sync(None, &remote, &different),
+            SyncDecision::NeedsChoice
         );
     }
 

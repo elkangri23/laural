@@ -63,6 +63,35 @@ pub fn encode(snapshot: &PreferenceSnapshot) -> Result<Vec<u8>, String> {
     Ok(bytes)
 }
 
+/// Dos snapshots son el mismo ajuste aunque uno sea v1 y el otro v2: la v1
+/// no tiene idioma porque entonces no se sincronizaba, y la versión del
+/// esquema no es un ajuste en sí. Sin esta equivalencia, un snapshot v1 en
+/// la nube nunca coincide con el snapshot v2 local y cada comparación dice
+/// que difieren, aunque nada haya cambiado (la descarga vuelve a dejarlo
+/// todo igual y la siguiente comparación vuelve a decir que difiere).
+pub fn snapshots_equivalent(left: &PreferenceSnapshot, right: &PreferenceSnapshot) -> bool {
+    if left.preferences.theme_id != right.preferences.theme_id
+        || left.preferences.appearance != right.preferences.appearance
+        || left.preferences.update_mode != right.preferences.update_mode
+        || left.active_provider_id != right.active_provider_id
+    {
+        return false;
+    }
+    if let (Some(left_language), Some(right_language)) = (
+        left.preferences.language.as_deref(),
+        right.preferences.language.as_deref(),
+    ) {
+        if left_language != right_language {
+            return false;
+        }
+    }
+    let mut left_providers = left.providers.clone();
+    let mut right_providers = right.providers.clone();
+    left_providers.sort_by(|left, right| left.id.cmp(&right.id));
+    right_providers.sort_by(|left, right| left.id.cmp(&right.id));
+    left_providers == right_providers
+}
+
 fn validate(snapshot: &PreferenceSnapshot) -> Result<(), String> {
     if !matches!(snapshot.schema_version, 1 | 2) {
         return Err("La versión del snapshot de sincronización no es compatible.".into());
@@ -373,6 +402,34 @@ mod tests {
         let mut missing: serde_json::Value = serde_json::from_slice(&fixture()).unwrap();
         missing["schemaVersion"] = 2.into();
         assert!(decode(&serde_json::to_vec(&missing).unwrap()).is_err());
+    }
+
+    #[test]
+    fn v1_y_v2_con_los_mismos_ajustes_son_equivalentes() {
+        let v1: PreferenceSnapshot = serde_json::from_slice(&fixture()).unwrap();
+        assert_eq!(v1.schema_version, 1);
+        assert_eq!(v1.preferences.language, None);
+        let mut v2 = v1.clone();
+        v2.schema_version = 2;
+        v2.preferences.language = Some("es".into());
+        assert!(snapshots_equivalent(&v1, &v2));
+        assert!(snapshots_equivalent(&v2, &v1));
+
+        let mut other_language = v2.clone();
+        other_language.preferences.language = Some("en".into());
+        assert!(!snapshots_equivalent(&v2, &other_language));
+
+        let mut other_theme = v2.clone();
+        other_theme.preferences.theme_id = "ocean".into();
+        assert!(!snapshots_equivalent(&v1, &other_theme));
+
+        let mut other_endpoint = v2.clone();
+        other_endpoint.providers[1].custom_endpoint = None;
+        assert!(!snapshots_equivalent(&v1, &other_endpoint));
+
+        let mut shuffled = v2.clone();
+        shuffled.providers.reverse();
+        assert!(snapshots_equivalent(&v1, &shuffled));
     }
 
     #[test]

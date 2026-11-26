@@ -630,12 +630,23 @@ export function AccountSettings({ onClose, preferences, onImported, onSyncSettle
 }
 
 function snapshotsMatch(left: Snapshot, right: Snapshot) {
-  return JSON.stringify(normalizeSnapshot(left)) === JSON.stringify(normalizeSnapshot(right));
+  return JSON.stringify(normalizeSnapshot(left, right)) === JSON.stringify(normalizeSnapshot(right, left));
 }
 
-function normalizeSnapshot(snapshot: Snapshot) {
+function normalizeSnapshot(snapshot: Snapshot, other: Snapshot) {
+  // Un snapshot v1 no tiene idioma: no es una diferencia, es que entonces no se sincronizaba.
+  // La versión del esquema tampoco es un ajuste. Sin esto, una nube en v1 nunca coincide con
+  // el snapshot v2 local y la comparación siempre dice que difieren, aunque nada haya cambiado.
+  const sharedLanguage = snapshot.preferences.language !== undefined && other.preferences.language !== undefined;
   return {
-    ...snapshot,
+    schemaVersion: 2,
+    preferences: {
+      themeId: snapshot.preferences.themeId,
+      appearance: snapshot.preferences.appearance,
+      updateMode: snapshot.preferences.updateMode,
+      ...(sharedLanguage ? { language: snapshot.preferences.language } : {}),
+    },
+    activeProviderId: snapshot.activeProviderId,
     providers: [...snapshot.providers].sort((left, right) => left.id.localeCompare(right.id)),
   };
 }
