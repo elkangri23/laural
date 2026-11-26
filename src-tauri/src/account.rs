@@ -191,13 +191,32 @@ pub async fn delete_account(
         return Err("Escribe ELIMINAR para confirmar el borrado definitivo.".into());
     }
     let token = session_token()?;
-    let response = account_api_client()?
-        .delete(format!("{SYNC_ORIGIN}/v1/auth/account"))
-        .bearer_auth(token.as_str())
+    request_account_deletion(
+        &account_api_client()?,
+        &format!("{SYNC_ORIGIN}/v1/auth/account"),
+        token.as_str(),
+        &confirmation,
+    )
+    .await?;
+    clear_deleted_account_local_data_inner(&app).await
+}
+
+async fn request_account_deletion(
+    client: &Client,
+    endpoint: &str,
+    token: &str,
+    confirmation: &str,
+) -> Result<(), String> {
+    let response = client
+        .delete(endpoint)
+        .bearer_auth(token)
         .json(&serde_json::json!({ "confirmation": confirmation }))
         .send()
         .await
-        .map_err(|_| "No se pudo confirmar el borrado de la cuenta. Comprueba la conexión antes de volver a intentarlo.".to_string())?;
+        .map_err(|_| {
+            "No se pudo confirmar el borrado de la cuenta. Comprueba la conexión antes de volver a intentarlo."
+                .to_string()
+        })?;
     if response.status() == reqwest::StatusCode::FORBIDDEN {
         return Err("La sesión ya no es reciente. Vuelve a iniciar sesión y confirma el borrado dentro de los diez minutos siguientes.".into());
     }
@@ -206,8 +225,7 @@ pub async fn delete_account(
             "No se pudo borrar la cuenta. Comprueba la sesión e inténtalo de nuevo.".into(),
         );
     }
-
-    clear_deleted_account_local_data_inner(&app).await
+    Ok(())
 }
 
 #[tauri::command]
@@ -1716,6 +1734,77 @@ mod tests {
         assert_eq!(
             untrusted_link.err().unwrap(),
             "El servicio devolvió un enlace de passkeys no permitido."
+        );
+        server.join().unwrap();
+    }
+
+    #[tokio::test]
+    async fn borrado_de_cuenta_exige_sesion_reciente_y_confirmacion_explicita() {
+        let (origin, server) = local_api_server(
+            "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".into(),
+        );
+        request_account_deletion(
+            &Client::new(),
+            &format!("{origin}/v1/auth/account"),
+            "token-de-prueba",
+            "ELIMINAR",
+        )
+        .await
+        .unwrap();
+        let request = server.join().unwrap().to_ascii_lowercase();
+        assert!(request.contains("delete /v1/auth/account http/1.1"));
+        assert!(request.contains("authorization: bearer token-de-prueba"));
+        assert!(request.contains("\"confirmation\":\"eliminar\""));
+
+        let (origin, server) = local_api_server(
+            "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".into(),
+        );
+        let stale_session = request_account_deletion(
+            &Client::new(),
+            &format!("{origin}/v1/auth/account"),
+            "token-de-prueba",
+            "ELIMINAR",
+        )
+        .await;
+        assert_eq!(
+            stale_session.err().unwrap(),
+            "La sesión ya no es reciente. Vuelve a iniciar sesión y confirma el borrado dentro de los diez minutos siguientes."
+        );
+        server.join().unwrap();
+
+        let (origin, server) = local_api_server(
+            "HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                .into(),
+        );
+        let failed = request_account_deletion(
+            &Client::new(),
+            &format!("{origin}/v1/auth/account"),
+            "token-de-prueba",
+            "ELIMINAR",
+        )
+        .await;
+        assert_eq!(
+            failed.err().unwrap(),
+            "No se pudo borrar la cuenta. Comprueba la sesión e inténtalo de nuevo."
+        );
+        server.join().unwrap();
+
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let (stream, _) = listener.accept().unwrap();
+            drop(stream);
+        });
+        let unavailable = request_account_deletion(
+            &Client::new(),
+            &format!("http://{address}/v1/auth/account"),
+            "token-de-prueba",
+            "ELIMINAR",
+        )
+        .await;
+        assert_eq!(
+            unavailable.err().unwrap(),
+            "No se pudo confirmar el borrado de la cuenta. Comprueba la conexión antes de volver a intentarlo."
         );
         server.join().unwrap();
     }
