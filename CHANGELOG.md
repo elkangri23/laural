@@ -1,6 +1,7 @@
 # Registro de cambios
 
 ## Próxima versión
+- La lectura del estado local queda aislada y probada para archivo válido, ausente, carpeta o contenido dañado. La verificación remota devuelve un error explícito si la revisión o los datos ya cambiaron. Suite Rust: 254 pasadas, 2 pruebas manuales ignoradas.
 - El guardado del estado local de sincronización se prueba de forma aislada: reemplazo atómico, límite de tamaño sin perder el archivo previo y errores al crear o sustituir el archivo. Suite Rust: 253 pasadas, 2 pruebas manuales ignoradas.
 - La verificación previa a restaurar preferencias se extrae a una comparación probada: exige que coincidan revisión y contenido y rechaza snapshots ausentes o modificados. Suite Rust: 250 pasadas, 2 pruebas manuales ignoradas.
 - La decisión de sincronización exige elegir si falta cualquier dato de la línea base y detecta cambios de contenido remoto aunque la revisión sea la misma. Suite Rust: 249 pasadas, 2 pruebas manuales ignoradas.

@@ -440,24 +440,24 @@ pub(crate) async fn verify_remote_snapshot(
 ) -> Result<(), String> {
     let token = account::session_token()?;
     let remote = fetch_remote_preferences(&token).await?;
-    if !remote_snapshot_matches(&remote, snapshot, revision) {
-        return Err(
-            "La nube cambió desde la comparación. Vuelve a sincronizar antes de aplicar.".into(),
-        );
-    }
-    Ok(())
+    validate_remote_snapshot(&remote, snapshot, revision)
 }
 
-fn remote_snapshot_matches(
+fn validate_remote_snapshot(
     remote: &RemoteSnapshot,
     expected: &PreferenceSnapshot,
     revision: u64,
-) -> bool {
-    remote.revision == revision
+) -> Result<(), String> {
+    let matches = remote.revision == revision
         && remote
             .snapshot
             .as_ref()
-            .is_some_and(|snapshot| snapshot::snapshots_equivalent(snapshot, expected))
+            .is_some_and(|snapshot| snapshot::snapshots_equivalent(snapshot, expected));
+    if matches {
+        Ok(())
+    } else {
+        Err("La nube cambió desde la comparación. Vuelve a sincronizar antes de aplicar.".into())
+    }
 }
 
 pub(crate) fn record_sync_baseline(
@@ -499,6 +499,10 @@ fn sync_state_path(app: &AppHandle) -> Result<PathBuf, String> {
 
 fn read_sync_state(app: &AppHandle) -> Result<Option<SyncState>, String> {
     let path = sync_state_path(app)?;
+    read_sync_state_file(&path)
+}
+
+fn read_sync_state_file(path: &Path) -> Result<Option<SyncState>, String> {
     if !path.is_file() {
         return Ok(None);
     }
@@ -820,6 +824,27 @@ mod tests {
             revision: Some(revision),
             pending: false,
         }
+    }
+
+    #[test]
+    fn lee_el_estado_local_solo_si_la_ruta_es_un_archivo_valido() {
+        let directory = tempfile::tempdir().unwrap();
+        let absent = directory.path().join("ausente.json");
+        assert!(matches!(read_sync_state_file(&absent).unwrap(), None));
+
+        let path = directory.path().join(SYNC_STATE_FILE);
+        write_sync_state_file(&path, &state(9, snapshot("laurel"))).unwrap();
+        assert_eq!(
+            read_sync_state_file(&path).unwrap().unwrap().revision,
+            Some(9)
+        );
+
+        fs::write(&path, b"{").unwrap();
+        assert_error_contains(read_sync_state_file(&path), "no es válido");
+
+        fs::remove_file(&path).unwrap();
+        fs::create_dir(&path).unwrap();
+        assert!(matches!(read_sync_state_file(&path).unwrap(), None));
     }
 
     #[test]
@@ -1521,25 +1546,33 @@ mod tests {
             snapshot: Some(expected.clone()),
             revision: 8,
         };
-        assert!(remote_snapshot_matches(&matching_remote, &expected, 8));
+        assert_eq!(
+            validate_remote_snapshot(&matching_remote, &expected, 8),
+            Ok(())
+        );
 
-        assert!(!remote_snapshot_matches(&matching_remote, &expected, 9));
-        assert!(!remote_snapshot_matches(
-            &RemoteSnapshot {
-                snapshot: None,
-                revision: 8,
-            },
-            &expected,
-            8
-        ));
-        assert!(!remote_snapshot_matches(
-            &RemoteSnapshot {
-                snapshot: Some(snapshot("ocean")),
-                revision: 8,
-            },
-            &expected,
-            8
-        ));
+        for (remote, revision) in [
+            (matching_remote, 9),
+            (
+                RemoteSnapshot {
+                    snapshot: None,
+                    revision: 8,
+                },
+                8,
+            ),
+            (
+                RemoteSnapshot {
+                    snapshot: Some(snapshot("ocean")),
+                    revision: 8,
+                },
+                8,
+            ),
+        ] {
+            assert_error_contains(
+                validate_remote_snapshot(&remote, &expected, revision),
+                "La nube cambió",
+            );
+        }
     }
 
     #[test]
