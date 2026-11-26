@@ -36,11 +36,9 @@ jobs:
           releaseBody: |
             Actualización de Laural para Windows x64.
 
-            ## Novedades de alpha.18
-            - Varios proyectos locales con terminales independientes y planes del agente ligados a su carpeta de origen.
-            - Ajustes reorganizados, español/inglés y sugerencias discretas de rutas en PowerShell.
-            - Diagnósticos de proveedor más claros, sin mostrar rutas ni claves en errores de conexión.
-            - Inicio de sesión OAuth corregido y plantillas de correo unificadas en el servicio.
+            ## Novedades de alpha.19
+            - El agente propone comandos según el shell de la pestaña activa: PowerShell, CMD, WSL o Git Bash.
+            - En PowerShell evita opciones incompatibles de CMD como `dir /b` y ofrece equivalentes nativos.
 
             Consulta [el registro de cambios](https://github.com/elkangri23/laural/blob/main/CHANGELOG.md) para el detalle. El instalador NSIS incluye el manifiesto firmado para el actualizador integrado. Esta versión sigue siendo una pre-release.
           prerelease: true

@@ -1,8 +1,8 @@
 # Registro de cambios
 
-## Próxima versión
-- El agente recibe instrucciones y ejemplos de comandos según el shell activo. En PowerShell se excluyen opciones de CMD como `dir /b`; PowerShell, CMD, WSL y Git Bash quedan cubiertos por una regresión del prompt.
-- Pruebas Rust: 228 pasadas y 2 manuales ignoradas.
+## 0.1.0-alpha.19 · 2026-11-26
+- El agente propone comandos según el shell de la pestaña activa: PowerShell, CMD, WSL o Git Bash. Para PowerShell muestra `Get-ChildItem` y prohíbe opciones de CMD como `dir /b`.
+- La regresión cubre las cuatro variantes de shell. Pruebas Rust: 228 pasadas y 2 manuales ignoradas.
 
 ## 0.1.0-alpha.18 · 2026-11-26
 - La barra lateral admite varios proyectos abiertos: añadir uno nuevo no sustituye los anteriores; seleccionar un proyecto activa o crea una terminal con esa raíz. Quitar un proyecto de la lista no cierra sus terminales. Las rutas y el proyecto activo se guardan solo localmente y quedan fuera de la sincronización. Los planes del agente conservan la raíz con la que se generaron. Rust/UI focalizados: 55/55 pruebas; `projectWorkspace.ts` Crítico 100/100 y `App.tsx` Estándar 81,82 % de líneas; build pasa.
