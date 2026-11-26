@@ -278,9 +278,23 @@ pub async fn revoke_account_session(session_id: String) -> Result<bool, String> 
         return Err("El identificador de sesión no es válido.".into());
     }
     let token = session_token()?;
-    let response = account_api_client()?
-        .delete(format!("{SYNC_ORIGIN}/v1/auth/sessions/{session_id}"))
-        .bearer_auth(token.as_str())
+    let client = account_api_client()?;
+    request_revoke_account_session(
+        &client,
+        &format!("{SYNC_ORIGIN}/v1/auth/sessions/{session_id}"),
+        token.as_str(),
+    )
+    .await
+}
+
+async fn request_revoke_account_session(
+    client: &Client,
+    endpoint: &str,
+    token: &str,
+) -> Result<bool, String> {
+    let response = client
+        .delete(endpoint)
+        .bearer_auth(token)
         .send()
         .await
         .map_err(|_| "No se pudo revocar la sesión seleccionada.".to_string())?;
@@ -290,9 +304,23 @@ pub async fn revoke_account_session(session_id: String) -> Result<bool, String> 
 #[tauri::command]
 pub async fn revoke_other_account_sessions() -> Result<u32, String> {
     let token = session_token()?;
-    let response = account_api_client()?
-        .post(format!("{SYNC_ORIGIN}/v1/auth/sessions/revoke-others"))
-        .bearer_auth(token.as_str())
+    let client = account_api_client()?;
+    request_revoke_other_account_sessions(
+        &client,
+        &format!("{SYNC_ORIGIN}/v1/auth/sessions/revoke-others"),
+        token.as_str(),
+    )
+    .await
+}
+
+async fn request_revoke_other_account_sessions(
+    client: &Client,
+    endpoint: &str,
+    token: &str,
+) -> Result<u32, String> {
+    let response = client
+        .post(endpoint)
+        .bearer_auth(token)
         .send()
         .await
         .map_err(|_| "No se pudieron revocar las demás sesiones.".to_string())?;
@@ -846,9 +874,7 @@ mod tests {
         response
     }
 
-    async fn local_account_sessions_request(
-        raw_response: String,
-    ) -> (Result<Vec<AccountSession>, String>, String) {
+    fn local_api_server(raw_response: String) -> (String, thread::JoinHandle<String>) {
         let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
         let address = listener.local_addr().unwrap();
         let server = thread::spawn(move || {
@@ -858,9 +884,16 @@ mod tests {
             stream.write_all(raw_response.as_bytes()).unwrap();
             String::from_utf8_lossy(&request[..count]).into_owned()
         });
+        (format!("http://{address}"), server)
+    }
+
+    async fn local_account_sessions_request(
+        raw_response: String,
+    ) -> (Result<Vec<AccountSession>, String>, String) {
+        let (origin, server) = local_api_server(raw_response);
         let result = request_account_sessions(
             &Client::new(),
-            &format!("http://{address}/v1/auth/sessions"),
+            &format!("{origin}/v1/auth/sessions"),
             "token-de-prueba",
         )
         .await;
@@ -1310,6 +1343,123 @@ mod tests {
         assert_eq!(
             unavailable.err().unwrap(),
             "No se pudieron consultar las sesiones de la cuenta."
+        );
+    }
+
+    #[tokio::test]
+    async fn revoca_sesiones_y_valida_resultados_del_api() {
+        let (origin, server) = local_api_server(
+            "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".into(),
+        );
+        let id = "d5363ea7-f6cb-4cca-8e03-85aa33089e7a";
+        let revoked = request_revoke_account_session(
+            &Client::new(),
+            &format!("{origin}/v1/auth/sessions/{id}"),
+            "token-de-prueba",
+        )
+        .await
+        .unwrap();
+        let request = server.join().unwrap().to_ascii_lowercase();
+        assert!(revoked);
+        assert!(request.contains(&format!("delete /v1/auth/sessions/{id} http/1.1")));
+        assert!(request.contains("authorization: bearer token-de-prueba"));
+
+        let (origin, server) = local_api_server(
+            "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}".into(),
+        );
+        assert!(
+            !request_revoke_account_session(
+                &Client::new(),
+                &format!("{origin}/v1/auth/sessions/{id}"),
+                "token-de-prueba"
+            )
+            .await
+            .unwrap()
+        );
+        server.join().unwrap();
+
+        let (origin, server) = local_api_server(
+            "HTTP/1.1 200 OK\r\nContent-Length: 13\r\nConnection: close\r\n\r\n{\"revoked\":3}"
+                .into(),
+        );
+        assert_eq!(
+            request_revoke_other_account_sessions(
+                &Client::new(),
+                &format!("{origin}/v1/auth/sessions/revoke-others"),
+                "token-de-prueba"
+            )
+            .await
+            .unwrap(),
+            3
+        );
+        let request = server.join().unwrap().to_ascii_lowercase();
+        assert!(request.contains("post /v1/auth/sessions/revoke-others http/1.1"));
+        assert!(request.contains("authorization: bearer token-de-prueba"));
+
+        let (origin, server) = local_api_server(
+            "HTTP/1.1 401 Unauthorized\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}".into(),
+        );
+        let denied = request_revoke_other_account_sessions(
+            &Client::new(),
+            &format!("{origin}/v1/auth/sessions/revoke-others"),
+            "token-de-prueba",
+        )
+        .await;
+        assert_eq!(
+            denied.err().unwrap(),
+            "No se pudieron revocar las demás sesiones."
+        );
+        server.join().unwrap();
+
+        let (origin, server) = local_api_server(
+            "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}".into(),
+        );
+        let malformed = request_revoke_other_account_sessions(
+            &Client::new(),
+            &format!("{origin}/v1/auth/sessions/revoke-others"),
+            "token-de-prueba",
+        )
+        .await;
+        assert_eq!(
+            malformed.err().unwrap(),
+            "La respuesta de revocación no tiene un formato válido."
+        );
+        server.join().unwrap();
+
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let (stream, _) = listener.accept().unwrap();
+            drop(stream);
+        });
+        let unavailable = request_revoke_account_session(
+            &Client::new(),
+            &format!("http://{address}/v1/auth/sessions/{id}"),
+            "token-de-prueba",
+        )
+        .await;
+        server.join().unwrap();
+        assert_eq!(
+            unavailable.err().unwrap(),
+            "No se pudo revocar la sesión seleccionada."
+        );
+
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let (stream, _) = listener.accept().unwrap();
+            drop(stream);
+        });
+        let unavailable = request_revoke_other_account_sessions(
+            &Client::new(),
+            &format!("http://{address}/v1/auth/sessions/revoke-others"),
+            "token-de-prueba",
+        )
+        .await;
+        server.join().unwrap();
+        assert_eq!(
+            unavailable.err().unwrap(),
+            "No se pudieron revocar las demás sesiones."
         );
     }
 
