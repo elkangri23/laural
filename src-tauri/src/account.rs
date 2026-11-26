@@ -371,9 +371,25 @@ pub async fn get_account_passkeys_enabled() -> Result<bool, String> {
 #[tauri::command]
 pub async fn start_passkey_management(app: AppHandle) -> Result<(), String> {
     let token = session_token()?;
-    let response = account_api_client()?
-        .post(format!("{SYNC_ORIGIN}/v1/auth/passkeys/manage-link"))
-        .bearer_auth(token.as_str())
+    let url = request_passkey_management_url(
+        &account_api_client()?,
+        &format!("{SYNC_ORIGIN}/v1/auth/passkeys/manage-link"),
+        token.as_str(),
+    )
+    .await?;
+    app.opener()
+        .open_url(url.as_str(), None::<&str>)
+        .map_err(|_| "No se pudo abrir el navegador para gestionar passkeys.".to_string())
+}
+
+async fn request_passkey_management_url(
+    client: &Client,
+    endpoint: &str,
+    token: &str,
+) -> Result<Url, String> {
+    let response = client
+        .post(endpoint)
+        .bearer_auth(token)
         .send()
         .await
         .map_err(|_| "No se pudo abrir la gestión de passkeys.".to_string())?;
@@ -390,9 +406,7 @@ pub async fn start_passkey_management(app: AppHandle) -> Result<(), String> {
     if !is_allowed_passkey_management_url(&url) {
         return Err("El servicio devolvió un enlace de passkeys no permitido.".into());
     }
-    app.opener()
-        .open_url(url.as_str(), None::<&str>)
-        .map_err(|_| "No se pudo abrir el navegador para gestionar passkeys.".to_string())
+    Ok(url)
 }
 
 fn is_allowed_passkey_management_url(url: &Url) -> bool {
@@ -1648,6 +1662,61 @@ mod tests {
         )
         .await;
         assert_eq!(unavailable.err().unwrap(), "fallo de transporte");
+        server.join().unwrap();
+    }
+
+    #[tokio::test]
+    async fn solicita_enlace_passkey_autenticado_y_rechaza_respuestas_no_seguras() {
+        let ticket = "a".repeat(43);
+        let url = format!("{SYNC_ORIGIN}/auth/passkeys/manage#ticket={ticket}");
+        let body = serde_json::json!({ "url": url }).to_string();
+        let (origin, server) = local_api_server(format!(
+            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        ));
+        let link = request_passkey_management_url(
+            &Client::new(),
+            &format!("{origin}/v1/auth/passkeys/manage-link"),
+            "token-de-prueba",
+        )
+        .await
+        .unwrap();
+        assert_eq!(link.as_str(), url);
+        let request = server.join().unwrap().to_ascii_lowercase();
+        assert!(request.contains("post /v1/auth/passkeys/manage-link http/1.1"));
+        assert!(request.contains("authorization: bearer token-de-prueba"));
+
+        let (origin, server) = local_api_server(
+            "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".into(),
+        );
+        let forbidden = request_passkey_management_url(
+            &Client::new(),
+            &format!("{origin}/v1/auth/passkeys/manage-link"),
+            "token-de-prueba",
+        )
+        .await;
+        assert_eq!(
+            forbidden.err().unwrap(),
+            "Vuelve a iniciar sesión para gestionar tus passkeys."
+        );
+        server.join().unwrap();
+
+        let attacker_url = format!("https://attacker.example/auth/passkeys/manage#ticket={ticket}");
+        let body = serde_json::json!({ "url": attacker_url }).to_string();
+        let (origin, server) = local_api_server(format!(
+            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        ));
+        let untrusted_link = request_passkey_management_url(
+            &Client::new(),
+            &format!("{origin}/v1/auth/passkeys/manage-link"),
+            "token-de-prueba",
+        )
+        .await;
+        assert_eq!(
+            untrusted_link.err().unwrap(),
+            "El servicio devolvió un enlace de passkeys no permitido."
+        );
         server.join().unwrap();
     }
 
