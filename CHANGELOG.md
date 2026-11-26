@@ -1,6 +1,7 @@
 # Registro de cambios
 
 ## Próxima versión
+- El guardado del estado local de sincronización se prueba de forma aislada: reemplazo atómico, límite de tamaño sin perder el archivo previo y errores al crear o sustituir el archivo. Suite Rust: 253 pasadas, 2 pruebas manuales ignoradas.
 - La verificación previa a restaurar preferencias se extrae a una comparación probada: exige que coincidan revisión y contenido y rechaza snapshots ausentes o modificados. Suite Rust: 250 pasadas, 2 pruebas manuales ignoradas.
 - La decisión de sincronización exige elegir si falta cualquier dato de la línea base y detecta cambios de contenido remoto aunque la revisión sea la misma. Suite Rust: 249 pasadas, 2 pruebas manuales ignoradas.
 - CI de cobertura confirma `sync.rs` en 80,38 % de líneas y 83,06 % de ramas tras añadir la verificación contra snapshots remotos obsoletos.

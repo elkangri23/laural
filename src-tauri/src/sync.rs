@@ -545,6 +545,10 @@ fn validate_sync_state(state: SyncState) -> Result<SyncState, String> {
 
 fn write_sync_state(app: &AppHandle, state: &SyncState) -> Result<(), String> {
     let path = sync_state_path(app)?;
+    write_sync_state_file(&path, state)
+}
+
+fn write_sync_state_file(path: &Path, state: &SyncState) -> Result<(), String> {
     let bytes = serde_json::to_vec(state)
         .map_err(|_| "No se pudo guardar el estado local de sincronización.".to_string())?;
     if bytes.len() > MAX_SYNC_STATE_BYTES {
@@ -816,6 +820,62 @@ mod tests {
             revision: Some(revision),
             pending: false,
         }
+    }
+
+    #[test]
+    fn escribe_y_reemplaza_el_estado_local_de_forma_atomica() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join(SYNC_STATE_FILE);
+        fs::write(&path, b"estado anterior").unwrap();
+
+        write_sync_state_file(&path, &state(9, snapshot("laurel"))).unwrap();
+
+        let written = parse_sync_state(&fs::read(&path).unwrap()).unwrap();
+        assert_eq!(written.revision, Some(9));
+        assert_eq!(
+            written.local_snapshot.unwrap().preferences.theme_id,
+            "laurel"
+        );
+        assert_eq!(fs::read_dir(directory.path()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn rechaza_un_estado_excesivo_sin_alterar_el_archivo_anterior() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join(SYNC_STATE_FILE);
+        fs::write(&path, b"estado anterior").unwrap();
+        let mut oversized = state(9, snapshot("laurel"));
+        oversized
+            .local_snapshot
+            .as_mut()
+            .unwrap()
+            .preferences
+            .theme_id = "x".repeat(MAX_SYNC_STATE_BYTES);
+
+        let error = write_sync_state_file(&path, &oversized).unwrap_err();
+
+        assert!(error.contains("supera el límite"));
+        assert_eq!(fs::read(path).unwrap(), b"estado anterior");
+        assert_eq!(fs::read_dir(directory.path()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn informa_fallos_al_preparar_o_reemplazar_el_archivo_de_estado() {
+        let directory = tempfile::tempdir().unwrap();
+        let state = state(9, snapshot("laurel"));
+        let missing_parent = directory.path().join("ausente").join(SYNC_STATE_FILE);
+
+        assert_error_contains(
+            write_sync_state_file(&missing_parent, &state),
+            "preparar el estado",
+        );
+
+        let target_directory = directory.path().join("destino");
+        fs::create_dir(&target_directory).unwrap();
+        assert_error_contains(
+            write_sync_state_file(&target_directory, &state),
+            "actualizar el estado",
+        );
     }
 
     fn assert_error_contains<T>(result: Result<T, String>, expected: &str) {
