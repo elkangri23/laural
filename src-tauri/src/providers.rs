@@ -1425,8 +1425,17 @@ pub async fn test_provider(app: AppHandle, input: ProviderInput) -> Result<Vec<S
     get_models(&base_url, api_key).await
 }
 
-#[tauri::command]
-pub fn save_provider(app: AppHandle, input: ProviderInput) -> Result<PublicProvider, String> {
+struct ValidatedProviderInput<'a> {
+    id: &'a str,
+    provider_kind: &'a str,
+    name: &'a str,
+    base_url: String,
+    model: &'a str,
+    api_key: Option<&'a str>,
+    share_custom_endpoint: bool,
+}
+
+fn validate_provider_input(input: &ProviderInput) -> Result<ValidatedProviderInput<'_>, String> {
     let id = input.id.trim();
     if id.is_empty() || id.len() > 64 {
         return Err("El identificador del proveedor no es válido.".to_string());
@@ -1447,24 +1456,42 @@ pub fn save_provider(app: AppHandle, input: ProviderInput) -> Result<PublicProvi
         return Err("La clave del proveedor supera el límite permitido.".into());
     }
     let base_url = validate_base_url(&input.base_url)?;
+    Ok(ValidatedProviderInput {
+        id,
+        provider_kind,
+        name,
+        base_url,
+        model,
+        api_key: input
+            .api_key
+            .as_deref()
+            .map(str::trim)
+            .filter(|key| !key.is_empty()),
+        share_custom_endpoint: input.share_custom_endpoint,
+    })
+}
+
+#[tauri::command]
+pub fn save_provider(app: AppHandle, input: ProviderInput) -> Result<PublicProvider, String> {
+    let input = validate_provider_input(&input)?;
     let mut store = read_provider_store(&app)?;
-    check_profile_destination(&store, id, &base_url)?;
-    if let Some(api_key) = input
-        .api_key
-        .as_deref()
-        .filter(|key| !key.trim().is_empty())
-    {
-        write_api_key(id, api_key.trim())?;
+    check_profile_destination(&store, input.id, &input.base_url)?;
+    if let Some(api_key) = input.api_key {
+        write_api_key(input.id, api_key)?;
     }
     let provider = ProviderSettings {
-        id: id.to_string(),
-        provider_kind: Some(provider_kind.to_string()),
-        name: name.to_string(),
-        base_url,
-        model: model.to_string(),
+        id: input.id.to_string(),
+        provider_kind: Some(input.provider_kind.to_string()),
+        name: input.name.to_string(),
+        base_url: input.base_url,
+        model: input.model.to_string(),
         share_custom_endpoint: input.share_custom_endpoint,
     };
-    if let Some(existing) = store.providers.iter_mut().find(|entry| entry.id == id) {
+    if let Some(existing) = store
+        .providers
+        .iter_mut()
+        .find(|entry| entry.id == input.id)
+    {
         *existing = provider.clone();
     } else {
         store.providers.push(provider.clone());
@@ -4344,6 +4371,84 @@ mod tests {
 
         let unknown = agent_system_prompt("shell-desconocido", true);
         assert!(unknown.contains("pregunta en vez de mezclar sintaxis"));
+    }
+
+    #[test]
+    fn valida_campos_de_perfil_de_proveedor_antes_de_persistir() {
+        fn validation_error(input: &ProviderInput) -> String {
+            validate_provider_input(input).err().unwrap()
+        }
+
+        let valid = || ProviderInput {
+            id: " perfil ".into(),
+            provider_kind: " custom ".into(),
+            name: " Perfil de prueba ".into(),
+            base_url: "https://example.org/v1".into(),
+            model: " modelo ".into(),
+            api_key: Some(" clave de prueba ".into()),
+            share_custom_endpoint: false,
+        };
+
+        let valid_input = valid();
+        let validated = validate_provider_input(&valid_input).unwrap();
+        assert_eq!(validated.id, "perfil");
+        assert_eq!(validated.provider_kind, "custom");
+        assert_eq!(validated.name, "Perfil de prueba");
+        assert_eq!(validated.model, "modelo");
+        assert_eq!(validated.api_key, Some("clave de prueba"));
+
+        for provider_kind in ["freellmapi", "ollama", "lmstudio", "custom"] {
+            let mut input = valid();
+            input.provider_kind = provider_kind.into();
+            assert!(validate_provider_input(&input).is_ok(), "{provider_kind}");
+        }
+
+        let mut at_limits = valid();
+        at_limits.id = "i".repeat(64);
+        at_limits.name = "n".repeat(128);
+        at_limits.model = "m".repeat(256);
+        at_limits.api_key = Some("k".repeat(16_384));
+        assert!(validate_provider_input(&at_limits).is_ok());
+
+        let mut empty_id = valid();
+        empty_id.id = " \t".into();
+        assert!(validation_error(&empty_id).contains("identificador"));
+
+        let mut long_id = valid();
+        long_id.id = "i".repeat(65);
+        assert!(validation_error(&long_id).contains("identificador"));
+
+        let mut empty_name = valid();
+        empty_name.name.clear();
+        assert!(validation_error(&empty_name).contains("nombre"));
+
+        let mut empty_model = valid();
+        empty_model.model = " \n".into();
+        assert!(validation_error(&empty_model).contains("nombre"));
+
+        let mut long_name = valid();
+        long_name.name = "n".repeat(129);
+        assert!(validation_error(&long_name).contains("nombre"));
+
+        let mut long_model = valid();
+        long_model.model = "m".repeat(257);
+        assert!(validation_error(&long_model).contains("nombre"));
+
+        let mut unknown_kind = valid();
+        unknown_kind.provider_kind = "desconocido".into();
+        assert!(validation_error(&unknown_kind).contains("tipo"));
+
+        let mut long_key = valid();
+        long_key.api_key = Some("k".repeat(16_385));
+        assert!(validation_error(&long_key).contains("clave"));
+
+        let mut blank_key = valid();
+        blank_key.api_key = Some(" \t ".into());
+        assert_eq!(validate_provider_input(&blank_key).unwrap().api_key, None);
+
+        let mut invalid_url = valid();
+        invalid_url.base_url = "https://user:pass@example.org/v1".into();
+        assert!(validate_provider_input(&invalid_url).is_err());
     }
 
     #[test]
