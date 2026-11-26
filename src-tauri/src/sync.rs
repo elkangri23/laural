@@ -299,14 +299,23 @@ pub async fn confirm_remote_preferences(
     let _guard = lock_sync().await;
     let token = account::session_token()?;
     let remote = fetch_remote_preferences(&token).await?;
-    let Some(remote_snapshot) = remote.snapshot else {
+    let Some(remote_snapshot) = confirmed_cloud_snapshot(remote, &snapshot, revision) else {
         return Ok(false);
     };
-    if remote.revision != revision || !snapshot::snapshots_equivalent(&remote_snapshot, &snapshot) {
-        return Ok(false);
-    }
     record_sync_baseline(&app, snapshot, remote_snapshot, revision)?;
     Ok(true)
+}
+
+fn confirmed_cloud_snapshot(
+    remote: RemoteSnapshot,
+    expected: &PreferenceSnapshot,
+    revision: u64,
+) -> Option<PreferenceSnapshot> {
+    if remote.revision != revision {
+        return None;
+    }
+    let snapshot = remote.snapshot?;
+    snapshot::snapshots_equivalent(&snapshot, expected).then_some(snapshot)
 }
 
 #[command]
@@ -1573,6 +1582,41 @@ mod tests {
                 "La nube cambió",
             );
         }
+    }
+
+    #[test]
+    fn solo_confirma_la_nube_si_revision_y_preferencias_coinciden() {
+        let expected = snapshot("laurel");
+        let confirmed = confirmed_cloud_snapshot(
+            RemoteSnapshot {
+                snapshot: Some(expected.clone()),
+                revision: 8,
+            },
+            &expected,
+            8,
+        );
+        assert_eq!(
+            confirmed.unwrap().preferences.theme_id,
+            expected.preferences.theme_id
+        );
+
+        let stale_revision = RemoteSnapshot {
+            snapshot: Some(expected.clone()),
+            revision: 7,
+        };
+        assert!(confirmed_cloud_snapshot(stale_revision, &expected, 8).is_none());
+
+        let absent_snapshot = RemoteSnapshot {
+            snapshot: None,
+            revision: 8,
+        };
+        assert!(confirmed_cloud_snapshot(absent_snapshot, &expected, 8).is_none());
+
+        let changed_snapshot = RemoteSnapshot {
+            snapshot: Some(snapshot("ocean")),
+            revision: 8,
+        };
+        assert!(confirmed_cloud_snapshot(changed_snapshot, &expected, 8).is_none());
     }
 
     #[test]
