@@ -61,11 +61,15 @@ jobs:
         run: cargo llvm-cov --manifest-path src-tauri/Cargo.toml --lib --branch --json --output-path src-tauri/target/critical-rust-branch-coverage.json
       - name: Exigir cobertura de ramas crítica del 65 %
         run: node scripts/check-critical-rust-coverage.mjs src-tauri/target/critical-rust-branch-coverage.json --branches
+      - name: Generar informe HTML detallado de ramas
+        run: cargo llvm-cov report --manifest-path src-tauri/Cargo.toml --branch --html --output-dir src-tauri/target/llvm-cov-branch-html
       - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: cobertura-ramas-rust
-          path: src-tauri/target/critical-rust-branch-coverage.json
+          path: |
+            src-tauri/target/critical-rust-branch-coverage.json
+            src-tauri/target/llvm-cov-branch-html/
           if-no-files-found: warn
   cobertura-servicio-sync:
     runs-on: ubuntu-latest
