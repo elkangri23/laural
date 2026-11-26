@@ -635,6 +635,46 @@ test("el agente automático observa la salida y solicita la validación final", 
   expect(host.textContent).toContain("Objetivo completado según la evidencia: Se encontraron dos imágenes PNG");
 });
 
+test("el agente automático se detiene ante un código de salida distinto de cero", async () => {
+  let planCount = 0;
+  mocks.invoke.mockImplementation(async (command: string) => {
+    if (command === "get_provider") return { id: "local", name: "Local", model: "test" };
+    if (command === "get_providers") return [{ id: "local", name: "Local", model: "test" }];
+    if (command === "get_agent_settings") return { mode: "automatic", allowedPrefixes: [], backupRetention: null };
+    if (command === "plan_agent") {
+      planCount += 1;
+      return { summary: "Consultar el estado", actions: [{ type: "run_command", command: "git status --short", reason: "Consultar cambios" }] };
+    }
+    if (command === "run_agent_command") return undefined;
+    return undefined;
+  });
+  await act(async () => root!.render(<App />));
+  await act(async () => buttonIncluding("Agente").click());
+
+  const composer = host.querySelector<HTMLTextAreaElement>(".composer textarea")!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set?.call(composer, "consulta el estado del repositorio");
+    composer.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => host.querySelector<HTMLFormElement>(".composer")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+  await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+  const commandCall = mocks.invoke.mock.calls.find(([name]) => name === "run_agent_command");
+  expect(commandCall?.[1]).toMatchObject({ command: "git status --short", approved: false });
+  await act(async () => {
+    mocks.agentFinishCallbacks.at(-1)?.(
+      commandCall?.[1]?.terminalId as string,
+      commandCall?.[1]?.completionToken as string,
+      7,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
+  expect(planCount).toBe(1);
+  expect(mocks.invoke.mock.calls.filter(([name]) => name === "run_agent_command")).toHaveLength(1);
+  expect(host.textContent).toContain("El comando terminó con código 7.");
+});
+
 test("pausa el ciclo automático al completar ocho acciones", async () => {
   let planCount = 0;
   mocks.invoke.mockImplementation(async (command: string) => {
