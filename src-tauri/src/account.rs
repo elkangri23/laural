@@ -9,9 +9,10 @@ use std::{
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use futures_util::StreamExt;
 use keyring::Entry;
-use reqwest::{Client, redirect::Policy};
+use reqwest::{Client, Method, redirect::Policy};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Emitter};
 use tauri_plugin_opener::OpenerExt;
@@ -337,26 +338,30 @@ async fn request_revoke_other_account_sessions(
 #[tauri::command]
 pub async fn get_account_mfa_status() -> Result<AccountMfaStatus, String> {
     let token = session_token()?;
-    let response = account_api_client()?
-        .get(format!("{SYNC_ORIGIN}/v1/auth/mfa"))
-        .bearer_auth(token.as_str())
-        .send()
-        .await
-        .map_err(|_| "No se pudo consultar la seguridad de la cuenta.".to_string())?;
-    bounded_response_json(response, "No se pudo consultar la seguridad de la cuenta.").await
+    let client = account_api_client()?;
+    request_account_json(
+        &client,
+        Method::GET,
+        &format!("{SYNC_ORIGIN}/v1/auth/mfa"),
+        token.as_str(),
+        None,
+        "No se pudo consultar la seguridad de la cuenta.",
+        "No se pudo consultar la seguridad de la cuenta.",
+    )
+    .await
 }
 
 #[tauri::command]
 pub async fn get_account_passkeys_enabled() -> Result<bool, String> {
     let token = session_token()?;
-    let response = account_api_client()?
-        .get(format!("{SYNC_ORIGIN}/v1/auth/passkeys/status"))
-        .bearer_auth(token.as_str())
-        .send()
-        .await
-        .map_err(|_| "No se pudo consultar la disponibilidad de passkeys.".to_string())?;
-    bounded_response_json::<PasskeyStatusResponse>(
-        response,
+    let client = account_api_client()?;
+    request_account_json::<PasskeyStatusResponse>(
+        &client,
+        Method::GET,
+        &format!("{SYNC_ORIGIN}/v1/auth/passkeys/status"),
+        token.as_str(),
+        None,
+        "No se pudo consultar la disponibilidad de passkeys.",
         "No se pudo consultar la disponibilidad de passkeys.",
     )
     .await
@@ -406,13 +411,16 @@ fn is_allowed_passkey_management_url(url: &Url) -> bool {
 #[tauri::command]
 pub async fn start_totp_enrollment() -> Result<TotpEnrollment, String> {
     let token = session_token()?;
-    let response = account_api_client()?
-        .post(format!("{SYNC_ORIGIN}/v1/auth/mfa/totp/enrollment"))
-        .bearer_auth(token.as_str())
-        .send()
-        .await
-        .map_err(|_| "No se pudo iniciar la configuración de TOTP.".to_string())?;
-    bounded_response_json(response, "Vuelve a iniciar sesión e inténtalo de nuevo.").await
+    request_account_json(
+        &account_api_client()?,
+        Method::POST,
+        &format!("{SYNC_ORIGIN}/v1/auth/mfa/totp/enrollment"),
+        token.as_str(),
+        None,
+        "No se pudo iniciar la configuración de TOTP.",
+        "Vuelve a iniciar sesión e inténtalo de nuevo.",
+    )
+    .await
 }
 
 #[tauri::command]
@@ -421,15 +429,13 @@ pub async fn confirm_totp_enrollment(code: String) -> Result<Vec<String>, String
         return Err("Introduce el código de seis dígitos de tu aplicación.".into());
     }
     let token = session_token()?;
-    let response = account_api_client()?
-        .post(format!("{SYNC_ORIGIN}/v1/auth/mfa/totp/enrollment/confirm"))
-        .bearer_auth(token.as_str())
-        .json(&serde_json::json!({ "code": code }))
-        .send()
-        .await
-        .map_err(|_| "No se pudo verificar el código TOTP.".to_string())?;
-    bounded_response_json::<RecoveryCodesResponse>(
-        response,
+    request_account_json::<RecoveryCodesResponse>(
+        &account_api_client()?,
+        Method::POST,
+        &format!("{SYNC_ORIGIN}/v1/auth/mfa/totp/enrollment/confirm"),
+        token.as_str(),
+        Some(serde_json::json!({ "code": code })),
+        "No se pudo verificar el código TOTP.",
         "El código caducó o no es válido. Inicia sesión de nuevo si hace más de diez minutos.",
     )
     .await
@@ -439,48 +445,41 @@ pub async fn confirm_totp_enrollment(code: String) -> Result<Vec<String>, String
 #[tauri::command]
 pub async fn complete_totp_enrollment() -> Result<(), String> {
     let token = session_token()?;
-    let response = account_api_client()?
-        .post(format!(
-            "{SYNC_ORIGIN}/v1/auth/mfa/totp/enrollment/complete"
-        ))
-        .bearer_auth(token.as_str())
-        .send()
-        .await
-        .map_err(|_| "No se pudo activar TOTP.".to_string())?;
-    if response.status() == reqwest::StatusCode::NO_CONTENT {
-        Ok(())
-    } else {
-        Err("No se pudo activar TOTP. Confirma que guardaste los códigos e inicia sesión de nuevo si es necesario.".into())
-    }
+    request_account_no_content(
+        &account_api_client()?,
+        Method::POST,
+        &format!("{SYNC_ORIGIN}/v1/auth/mfa/totp/enrollment/complete"),
+        token.as_str(),
+        "No se pudo activar TOTP.",
+        "No se pudo activar TOTP. Confirma que guardaste los códigos e inicia sesión de nuevo si es necesario.",
+    )
+    .await
 }
 
 #[tauri::command]
 pub async fn cancel_totp_enrollment() -> Result<(), String> {
     let token = session_token()?;
-    let response = account_api_client()?
-        .delete(format!("{SYNC_ORIGIN}/v1/auth/mfa/totp/enrollment"))
-        .bearer_auth(token.as_str())
-        .send()
-        .await
-        .map_err(|_| "No se pudo cancelar el enrolamiento TOTP.".to_string())?;
-    if response.status() == reqwest::StatusCode::NO_CONTENT {
-        Ok(())
-    } else {
-        Err("No se pudo cancelar el enrolamiento TOTP.".into())
-    }
+    request_account_no_content(
+        &account_api_client()?,
+        Method::DELETE,
+        &format!("{SYNC_ORIGIN}/v1/auth/mfa/totp/enrollment"),
+        token.as_str(),
+        "No se pudo cancelar el enrolamiento TOTP.",
+        "No se pudo cancelar el enrolamiento TOTP.",
+    )
+    .await
 }
 
 #[tauri::command]
 pub async fn rotate_account_recovery_codes() -> Result<Vec<String>, String> {
     let token = session_token()?;
-    let response = account_api_client()?
-        .post(format!("{SYNC_ORIGIN}/v1/auth/mfa/recovery-codes/rotate"))
-        .bearer_auth(token.as_str())
-        .send()
-        .await
-        .map_err(|_| "No se pudieron renovar los códigos de recuperación.".to_string())?;
-    bounded_response_json::<RecoveryCodesResponse>(
-        response,
+    request_account_json::<RecoveryCodesResponse>(
+        &account_api_client()?,
+        Method::POST,
+        &format!("{SYNC_ORIGIN}/v1/auth/mfa/recovery-codes/rotate"),
+        token.as_str(),
+        None,
+        "No se pudieron renovar los códigos de recuperación.",
         "Vuelve a iniciar sesión e inténtalo de nuevo.",
     )
     .await
@@ -490,16 +489,55 @@ pub async fn rotate_account_recovery_codes() -> Result<Vec<String>, String> {
 #[tauri::command]
 pub async fn disable_account_totp() -> Result<(), String> {
     let token = session_token()?;
-    let response = account_api_client()?
-        .delete(format!("{SYNC_ORIGIN}/v1/auth/mfa/totp"))
-        .bearer_auth(token.as_str())
+    request_account_no_content(
+        &account_api_client()?,
+        Method::DELETE,
+        &format!("{SYNC_ORIGIN}/v1/auth/mfa/totp"),
+        token.as_str(),
+        "No se pudo desactivar TOTP.",
+        "Vuelve a iniciar sesión y vuelve a intentarlo.",
+    )
+    .await
+}
+
+async fn request_account_json<T: DeserializeOwned>(
+    client: &Client,
+    method: Method,
+    endpoint: &str,
+    token: &str,
+    body: Option<Value>,
+    transport_failure: &str,
+    response_failure: &str,
+) -> Result<T, String> {
+    let mut request = client.request(method, endpoint).bearer_auth(token);
+    if let Some(body) = body {
+        request = request.json(&body);
+    }
+    let response = request
         .send()
         .await
-        .map_err(|_| "No se pudo desactivar TOTP.".to_string())?;
+        .map_err(|_| transport_failure.to_string())?;
+    bounded_response_json(response, response_failure).await
+}
+
+async fn request_account_no_content(
+    client: &Client,
+    method: Method,
+    endpoint: &str,
+    token: &str,
+    transport_failure: &str,
+    response_failure: &str,
+) -> Result<(), String> {
+    let response = client
+        .request(method, endpoint)
+        .bearer_auth(token)
+        .send()
+        .await
+        .map_err(|_| transport_failure.to_string())?;
     if response.status() == reqwest::StatusCode::NO_CONTENT {
         Ok(())
     } else {
-        Err("Vuelve a iniciar sesión y vuelve a intentarlo.".into())
+        Err(response_failure.to_string())
     }
 }
 
@@ -879,12 +917,41 @@ mod tests {
         let address = listener.local_addr().unwrap();
         let server = thread::spawn(move || {
             let (mut stream, _) = listener.accept().unwrap();
-            let mut request = [0; 2048];
-            let count = stream.read(&mut request).unwrap();
+            let request = read_local_http_request(&mut stream);
             stream.write_all(raw_response.as_bytes()).unwrap();
-            String::from_utf8_lossy(&request[..count]).into_owned()
+            request
         });
         (format!("http://{address}"), server)
+    }
+
+    fn read_local_http_request(stream: &mut TcpStream) -> String {
+        let mut request = Vec::new();
+        let mut chunk = [0; 1024];
+        loop {
+            let count = stream.read(&mut chunk).unwrap();
+            if count == 0 {
+                break;
+            }
+            request.extend_from_slice(&chunk[..count]);
+            let Some(header_end) = request.windows(4).position(|window| window == b"\r\n\r\n")
+            else {
+                continue;
+            };
+            let headers = String::from_utf8_lossy(&request[..header_end]);
+            let body_length = headers
+                .lines()
+                .find_map(|line| {
+                    let (name, value) = line.split_once(':')?;
+                    name.eq_ignore_ascii_case("content-length")
+                        .then(|| value.trim().parse::<usize>().ok())
+                        .flatten()
+                })
+                .unwrap_or_default();
+            if request.len() >= header_end + 4 + body_length {
+                break;
+            }
+        }
+        String::from_utf8_lossy(&request).into_owned()
     }
 
     async fn local_account_sessions_request(
@@ -1461,6 +1528,127 @@ mod tests {
             unavailable.err().unwrap(),
             "No se pudieron revocar las demás sesiones."
         );
+    }
+
+    #[tokio::test]
+    async fn envia_codigo_totp_y_valida_respuesta_json_autenticada() {
+        let body = r#"{"recoveryCodes":["ABCD-EFGH"]}"#;
+        let (origin, server) = local_api_server(format!(
+            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        ));
+
+        let codes = request_account_json::<RecoveryCodesResponse>(
+            &Client::new(),
+            Method::POST,
+            &format!("{origin}/v1/auth/mfa/totp/enrollment/confirm"),
+            "token-de-prueba",
+            Some(serde_json::json!({ "code": "123456" })),
+            "error de transporte",
+            "error de respuesta",
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(codes.recovery_codes, ["ABCD-EFGH"]);
+        let request = server.join().unwrap().to_ascii_lowercase();
+        assert!(request.contains("post /v1/auth/mfa/totp/enrollment/confirm http/1.1"));
+        assert!(request.contains("authorization: bearer token-de-prueba"));
+        assert!(request.contains("content-type: application/json"));
+        assert!(request.contains("\"code\":\"123456\""));
+
+        let body =
+            r#"{"secret":"JBSWY3DPEHPK3PXP","provisioningUri":"otpauth://totp/Laural:test"}"#;
+        let (origin, server) = local_api_server(format!(
+            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        ));
+        let enrollment = request_account_json::<TotpEnrollment>(
+            &Client::new(),
+            Method::POST,
+            &format!("{origin}/v1/auth/mfa/totp/enrollment"),
+            "token-de-prueba",
+            None,
+            "error de transporte",
+            "error de respuesta",
+        )
+        .await
+        .unwrap();
+        assert_eq!(enrollment.secret, "JBSWY3DPEHPK3PXP");
+        assert_eq!(enrollment.provisioning_uri, "otpauth://totp/Laural:test");
+        let request = server.join().unwrap().to_ascii_lowercase();
+        assert!(request.contains("post /v1/auth/mfa/totp/enrollment http/1.1"));
+        assert!(request.contains("authorization: bearer token-de-prueba"));
+        assert!(!request.contains("\"code\""));
+
+        let (origin, server) = local_api_server(
+            "HTTP/1.1 401 Unauthorized\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}".into(),
+        );
+        let denied = request_account_json::<RecoveryCodesResponse>(
+            &Client::new(),
+            Method::POST,
+            &format!("{origin}/v1/auth/mfa/totp/enrollment/confirm"),
+            "token-de-prueba",
+            Some(serde_json::json!({ "code": "123456" })),
+            "error de transporte",
+            "fallo de autenticación",
+        )
+        .await;
+        assert_eq!(denied.err().unwrap(), "fallo de autenticación");
+        server.join().unwrap();
+    }
+
+    #[tokio::test]
+    async fn operaciones_totp_sin_contenido_exigen_204_y_controlan_fallos() {
+        let (origin, server) = local_api_server(
+            "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".into(),
+        );
+        request_account_no_content(
+            &Client::new(),
+            Method::DELETE,
+            &format!("{origin}/v1/auth/mfa/totp"),
+            "token-de-prueba",
+            "error de transporte",
+            "fallo de respuesta",
+        )
+        .await
+        .unwrap();
+        let request = server.join().unwrap().to_ascii_lowercase();
+        assert!(request.contains("delete /v1/auth/mfa/totp http/1.1"));
+        assert!(request.contains("authorization: bearer token-de-prueba"));
+
+        let (origin, server) = local_api_server(
+            "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}".into(),
+        );
+        let unexpected_status = request_account_no_content(
+            &Client::new(),
+            Method::POST,
+            &format!("{origin}/v1/auth/mfa/totp/enrollment/complete"),
+            "token-de-prueba",
+            "error de transporte",
+            "fallo de respuesta",
+        )
+        .await;
+        assert_eq!(unexpected_status.err().unwrap(), "fallo de respuesta");
+        server.join().unwrap();
+
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let (stream, _) = listener.accept().unwrap();
+            drop(stream);
+        });
+        let unavailable = request_account_no_content(
+            &Client::new(),
+            Method::POST,
+            &format!("http://{address}/v1/auth/mfa/totp/enrollment/complete"),
+            "token-de-prueba",
+            "fallo de transporte",
+            "fallo de respuesta",
+        )
+        .await;
+        assert_eq!(unavailable.err().unwrap(), "fallo de transporte");
+        server.join().unwrap();
     }
 
     #[test]
