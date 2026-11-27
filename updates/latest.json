@@ -1,15 +1,15 @@
 {
   "version": "0.1.0-alpha.19",
   "notes": "Actualización de Laural para Windows x64.\n\n## Novedades de alpha.19\n- El agente propone comandos según el shell de la pestaña activa: PowerShell, CMD, WSL o Git Bash.\n- En PowerShell evita opciones incompatibles de CMD como `dir /b` y ofrece equivalentes nativos.\n\nConsulta [el registro de cambios](https://github.com/elkangri23/laural/blob/main/CHANGELOG.md) para el detalle. El instalador NSIS incluye el manifiesto firmado para el actualizador integrado. Esta versión sigue siendo una pre-release.",
-  "pub_date": "2026-11-26T11:02:14.514Z",
+  "pub_date": "2026-11-27T13:37:03.395Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRT2xYT2o1K3RWWTNTTnhmbmdMWmxqVlNMamJ2Y0trSG1raTU0NVd0Q0RPUEJNM1h3aHJGVENXQjFoclNoQlh0L1BTK0JhVmNUTUVWYWJFVjlKYXAvN2kxRjFVWHNwQVFzPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1NjkwOTMyCWZpbGU6TGF1cmFsXzAuMS4wLWFscGhhLjE5X3g2NC1zZXR1cC5leGUJdmVyc2lvbjowLjEuMC1hbHBoYS4xOQoxRjVrR3ZwMnJrSzRPbVd4UTk0YlNaalVHQ3luR0J5QlJKdEtBRzliRi9WVStxVVQ3dUJlQVpzZXJVNEhWUVZQNEdzZmpvQkMxMFdaZFVEaEFyRDFBUT09Cg==",
-      "url": "https://api.github.com/repos/elkangri23/laural/releases/assets/795489311"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRT2xYT2o1K3RWWXpwZHNnRmlUeEpST0txZjMyR1hsOTFVWlljYWJYS2pxdFRTRlMzc1cwS0JxTkkyU1YvS3d4dmRQdlRKa0M4b0R3eC9YZE5kVnJPVXI4ZTlFdHBoMkFVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1Nzg2NjIwCWZpbGU6TGF1cmFsXzAuMS4wLWFscGhhLjE5X3g2NC1zZXR1cC5leGUJdmVyc2lvbjowLjEuMC1hbHBoYS4xOQo4a1pXS0s5NWJYZWE2bWorallBYy9FMEx2dG9SVGNRbExvbjlTOWpKZSszS2NHQjB6aUtKQ2JPQmMzUzJUeHlUWHV2ejFpYTI4RkxrcitoNzVPRXpBZz09Cg==",
+      "url": "https://api.github.com/repos/elkangri23/laural/releases/assets/800634960"
     },
     "windows-x86_64-nsis": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRT2xYT2o1K3RWWTNTTnhmbmdMWmxqVlNMamJ2Y0trSG1raTU0NVd0Q0RPUEJNM1h3aHJGVENXQjFoclNoQlh0L1BTK0JhVmNUTUVWYWJFVjlKYXAvN2kxRjFVWHNwQVFzPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1NjkwOTMyCWZpbGU6TGF1cmFsXzAuMS4wLWFscGhhLjE5X3g2NC1zZXR1cC5leGUJdmVyc2lvbjowLjEuMC1hbHBoYS4xOQoxRjVrR3ZwMnJrSzRPbVd4UTk0YlNaalVHQ3luR0J5QlJKdEtBRzliRi9WVStxVVQ3dUJlQVpzZXJVNEhWUVZQNEdzZmpvQkMxMFdaZFVEaEFyRDFBUT09Cg==",
-      "url": "https://api.github.com/repos/elkangri23/laural/releases/assets/795489311"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRT2xYT2o1K3RWWXpwZHNnRmlUeEpST0txZjMyR1hsOTFVWlljYWJYS2pxdFRTRlMzc1cwS0JxTkkyU1YvS3d4dmRQdlRKa0M4b0R3eC9YZE5kVnJPVXI4ZTlFdHBoMkFVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1Nzg2NjIwCWZpbGU6TGF1cmFsXzAuMS4wLWFscGhhLjE5X3g2NC1zZXR1cC5leGUJdmVyc2lvbjowLjEuMC1hbHBoYS4xOQo4a1pXS0s5NWJYZWE2bWorallBYy9FMEx2dG9SVGNRbExvbjlTOWpKZSszS2NHQjB6aUtKQ2JPQmMzUzJUeHlUWHV2ejFpYTI4RkxrcitoNzVPRXpBZz09Cg==",
+      "url": "https://api.github.com/repos/elkangri23/laural/releases/assets/800634960"
     }
   }
 }
