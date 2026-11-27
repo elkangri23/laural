@@ -342,16 +342,16 @@ fn normalize_agent_command(command: &str) -> String {
 fn agent_shell_guidance(shell: &str) -> &'static str {
     match shell {
         "powershell" => {
-            "Usa exclusivamente sintaxis nativa de PowerShell. Para listar, usa `Get-ChildItem -Force`; para buscar imágenes, usa `Get-ChildItem -Path . -File -Recurse | Where-Object { $_.Extension -in '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp' }`. No uses opciones de CMD como `/b`, `/s` o `/a`, ni opciones Unix como `-la`; en particular, `dir /b` no es válido en PowerShell."
+            "Usa exclusivamente sintaxis nativa de PowerShell. Para consultar la carpeta actual, usa `Get-Location`; para listar, `Get-ChildItem -Force`; para buscar imágenes, usa `Get-ChildItem -Path . -File -Recurse | Where-Object { $_.Extension -in '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp' }`. No uses opciones de CMD como `/b`, `/s` o `/a`, ni opciones Unix como `-la`; en particular, `dir /b` no es válido en PowerShell."
         }
         "cmd" => {
-            "Usa exclusivamente sintaxis de CMD. Para listar, usa `dir`; para una lista simple, `dir /b`; para buscar imágenes recursivamente, `dir /s /b *.png *.jpg *.jpeg *.gif *.webp *.bmp`. No uses cmdlets de PowerShell ni opciones Unix como `-la`."
+            "Usa exclusivamente sintaxis de CMD. Para consultar la carpeta actual, usa `cd`; para listar, usa `dir`; para una lista simple, `dir /b`; para buscar imágenes recursivamente, `dir /s /b *.png *.jpg *.jpeg *.gif *.webp *.bmp`. No uses cmdlets de PowerShell ni opciones Unix como `-la`."
         }
         "wsl" => {
-            "Usa sintaxis de Bash en WSL y rutas Linux; para listar, `ls -la`; para buscar imágenes, `find . -type f \\( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.gif' -o -iname '*.webp' -o -iname '*.bmp' \\) -print`. No uses cmdlets ni opciones de CMD como `/b`."
+            "Usa sintaxis de Bash en WSL y rutas Linux; para consultar la carpeta actual, usa `pwd`; para listar, `ls -la`; para buscar imágenes, `find . -type f \\( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.gif' -o -iname '*.webp' -o -iname '*.bmp' \\) -print`. No uses cmdlets ni opciones de CMD como `/b`."
         }
         "git-bash" => {
-            "Usa sintaxis de Bash y utilidades Unix de Git Bash; para listar, `ls -la`; para buscar imágenes, `find . -type f \\( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.gif' -o -iname '*.webp' -o -iname '*.bmp' \\) -print`. En rutas de Windows usa el formato de Git Bash, por ejemplo `/c/Users/...`; no uses cmdlets ni opciones de CMD como `/b`."
+            "Usa sintaxis de Bash y utilidades Unix de Git Bash; para consultar la carpeta actual, usa `pwd`; para listar, `ls -la`; para buscar imágenes, `find . -type f \\( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.gif' -o -iname '*.webp' -o -iname '*.bmp' \\) -print`. En rutas de Windows usa el formato de Git Bash, por ejemplo `/c/Users/...`; no uses cmdlets ni opciones de CMD como `/b`."
         }
         _ => {
             "Usa exclusivamente sintaxis nativa del shell activo; si no conoces un comando compatible, pregunta en vez de mezclar sintaxis de otro shell."
@@ -4464,21 +4464,25 @@ mod tests {
     fn planificador_indica_comandos_propios_de_cada_shell_activo() {
         let powershell = agent_system_prompt("powershell", true);
         assert!(powershell.contains("Get-ChildItem -Force"));
+        assert!(powershell.contains("consultar la carpeta actual, usa `Get-Location`"));
         assert!(powershell.contains("Where-Object { $_.Extension -in"));
         assert!(powershell.contains("`dir /b` no es válido en PowerShell"));
 
         let cmd = agent_system_prompt("cmd", true);
         assert!(cmd.contains("dir /b"));
+        assert!(cmd.contains("consultar la carpeta actual, usa `cd`"));
         assert!(cmd.contains("dir /s /b *.png *.jpg *.jpeg *.gif *.webp *.bmp"));
         assert!(cmd.contains("No uses cmdlets de PowerShell"));
 
         let wsl = agent_system_prompt("wsl", true);
         assert!(wsl.contains("Bash en WSL y rutas Linux"));
+        assert!(wsl.contains("consultar la carpeta actual, usa `pwd`"));
         assert!(wsl.contains("find . -type f \\( -iname '*.png'"));
         assert!(wsl.contains("-o -iname '*.bmp' \\) -print"));
 
         let git_bash = agent_system_prompt("git-bash", true);
         assert!(git_bash.contains("utilidades Unix de Git Bash"));
+        assert!(git_bash.contains("consultar la carpeta actual, usa `pwd`"));
         assert!(git_bash.contains("find . -type f \\( -iname '*.png'"));
         assert!(git_bash.contains("/c/Users/..."));
 

@@ -1,6 +1,6 @@
 # Auditoría de operatividad del agente
 
-- Fecha: 26-11-2026
+- Fecha: 27-11-2026
 - Alcance: petición → contexto → plan → ejecución → resultado.
 - Estado: ciclo acotado de observación y replanificación implementado; pendiente validarlo desde la app con proveedores reales y en los cuatro shells instalados.
 
@@ -11,6 +11,7 @@
 3. El agente presenta como máximo ocho acciones. Los comandos se envían al shell activo; los cambios estructurados de archivo quedan asociados a la raíz del proyecto y requieren aplicación explícita.
 4. Tras un comando exitoso o un archivo aplicado con aprobación, la interfaz vuelve a planificar con la acción, el resultado y hasta 1.000 caracteres de salida reciente. Este historial se envía al proveedor configurado como dato no confiable y solo permanece en memoria durante el ciclo; no se guarda en disco.
 5. El ciclo se detiene ante error, código distinto de cero, finalización desconocida, aclaración o cancelación. Como máximo ejecuta ocho acciones exitosas por petición; los cambios de archivo siempre esperan aprobación y backup.
+6. Para tareas que dependen de la carpeta de trabajo, el prompt diferencia el proyecto seleccionado del directorio actual de la terminal. El modelo recibe los comandos correctos para consultarlo: `Get-Location` (PowerShell), `cd` (CMD) y `pwd` (WSL/Git Bash); debe esperar esa salida antes de construir rutas dependientes.
 
 ## Hallazgos y resolución
 
@@ -58,7 +59,7 @@ El prompt también separa la raíz del proyecto (límite de `write_file`) del di
 - `TerminalPane.tsx` se clasifica como **Crítico**: las regresiones aceptan una marca OSC 777 numérica válida y rechazan códigos mal formados.
 - `App.tsx` se clasifica como **Estándar**: las regresiones verifican que el turno de aclaración conserve el objetivo original, que no se replanifique antes del token correcto, que la salida y el código exitoso entren en la siguiente decisión, que un código distinto de cero no provoque otra planificación ni ejecución y muestre el motivo de parada, y que cancelar durante un comando impida continuar.
 
-Validación local de esta revisión: UI 294/294; cobertura UI 92,24 % de líneas, con `App.tsx` en 83,08 % y `TerminalPane.tsx` en 100 % de líneas y ramas. La política 100/80/0 pasa: 11 archivos Críticos al 100/100, 14 Estándar con al menos 80 % de líneas y 8 Triviales excluidos. Rust: 268 pruebas pasadas y 2 manuales ignoradas; `cargo fmt --check` pasa. Windows/MSVC no genera cobertura local de Rust; CI del commit anterior `e4184ef` pasó los gates de líneas y ramas, y esta modificación los vuelve a ejecutar. La compilación UI, el gate 100/80/0 y `git diff --check` pasaron en la revisión anterior; esta revisión solo modifica el prompt del backend y su regresión Rust. No hay proveedor local escuchando en Ollama, LM Studio ni el puerto FreeLLMAPI configurado, así que no se pudo probar la conversación real.
+Validación local de esta revisión: UI 294/294; cobertura UI 92,24 % de líneas, con `App.tsx` en 83,08 % y `TerminalPane.tsx` en 100 % de líneas y ramas. La política 100/80/0 pasa: 11 archivos Críticos al 100/100, 14 Estándar con al menos 80 % de líneas y 8 Triviales excluidos. Rust: 268 pruebas pasadas y 2 manuales ignoradas; `cargo fmt --check` pasa. Windows/MSVC no genera cobertura local de Rust; CI del commit anterior `a3e4ebb` pasó los gates de líneas y ramas, y esta modificación los vuelve a ejecutar. La compilación UI, el gate 100/80/0 y `git diff --check` pasaron en la revisión anterior; esta revisión solo modifica el prompt del backend y su regresión Rust. No hay proveedor local escuchando en Ollama, LM Studio ni el puerto FreeLLMAPI configurado, así que no se pudo probar la conversación real.
 
 La cobertura integral por archivo se mide con la política 100/80/0 del proyecto; Windows/MSVC ejecuta Cargo pero no genera los perfiles `llvm-cov`, por lo que la cobertura Rust debe confirmarse en CI Linux.
 
