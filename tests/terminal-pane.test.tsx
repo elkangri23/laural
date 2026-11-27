@@ -6,8 +6,8 @@ import TerminalPane from "../src/components/TerminalPane";
 import { themes } from "../src/themes";
 import { LanguageProvider } from "../src/i18n";
 
-const { invoke, listen, write, onData, registerOscHandler, terminalOptions, clear, getSelection, observeResize, terminalSize, fitAddonFit } = vi.hoisted(() => ({
-  invoke: vi.fn(), listen: vi.fn(), write: vi.fn(), onData: vi.fn(), registerOscHandler: vi.fn(), terminalOptions: vi.fn(), clear: vi.fn(), getSelection: vi.fn(), observeResize: vi.fn<(callback: () => void) => void>(), terminalSize: { rows: 28, cols: 100 }, fitAddonFit: vi.fn<() => void>(),
+const { invoke, listen, write, onData, terminalPaste, registerOscHandler, terminalOptions, clear, getSelection, observeResize, terminalSize, fitAddonFit } = vi.hoisted(() => ({
+  invoke: vi.fn(), listen: vi.fn(), write: vi.fn(), onData: vi.fn(), terminalPaste: vi.fn<(data: string) => void>(), registerOscHandler: vi.fn(), terminalOptions: vi.fn(), clear: vi.fn(), getSelection: vi.fn(), observeResize: vi.fn<(callback: () => void) => void>(), terminalSize: { rows: 28, cols: 100 }, fitAddonFit: vi.fn<() => void>(),
 }));
 const { skipTerminalInitialization } = vi.hoisted(() => ({ skipTerminalInitialization: { value: false } }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
@@ -32,6 +32,7 @@ vi.mock("@xterm/xterm", () => ({
     loadAddon() {} open() {} focus() {} dispose() {}
     clear = clear; getSelection = getSelection;
     onData = onData;
+    paste = terminalPaste;
   },
 }));
 
@@ -64,6 +65,7 @@ beforeEach(() => {
     return name === "terminal-output-uno" ? removeOutput : removeExit;
   });
   onData.mockReturnValue({ dispose() {} });
+  terminalPaste.mockImplementation((data) => onData.mock.calls[onData.mock.calls.length - 1]?.[0](data));
   registerOscHandler.mockReturnValue({ dispose() {} });
   invoke.mockResolvedValue(undefined);
   write.mockImplementation((_data, callback) => callback?.());
@@ -384,25 +386,25 @@ test("no envía entrada si la shell termina antes de completar el arranque", asy
   expect(invoke).not.toHaveBeenCalledWith("write_terminal", expect.anything());
 });
 
-test("prepara el comando en la línea sin enviar Enter", async () => {
+test("pega el comando en la línea sin enviar Enter", async () => {
   await act(async () => root!.render(pane()));
   await act(async () => new Promise(resolve => setTimeout(resolve, 0)));
   await act(async () => root!.render(pane(true, undefined, undefined, actionNotice, "cmd", false, { sequence: 1, terminalId: "uno", command: "dir" })));
 
   expect(invoke).toHaveBeenCalledWith("write_terminal", { terminalId: "uno", data: "dir" });
   expect(invoke).not.toHaveBeenCalledWith("write_terminal", { terminalId: "uno", data: "dir\r" });
-  expect(actionNotice).toHaveBeenCalledWith("Comando preparado. Revísalo y pulsa Intro para ejecutarlo.");
+  expect(actionNotice).toHaveBeenCalledWith("Comando añadido. Revisa la línea y pulsa Intro para ejecutarlo.");
 });
 
-test("no pisa texto que ya está escrito en la línea", async () => {
+test("pega el comando después del texto existente para que el usuario lo revise", async () => {
   await act(async () => root!.render(pane()));
   await act(async () => new Promise(resolve => setTimeout(resolve, 0)));
   const input = onData.mock.calls[0][0];
-  await act(async () => input("texto existente"));
+  await act(async () => { input("texto existente"); input("\x1b[A"); });
   await act(async () => root!.render(pane(true, undefined, undefined, actionNotice, "cmd", false, { sequence: 1, terminalId: "uno", command: "dir" })));
 
-  expect(invoke).not.toHaveBeenCalledWith("write_terminal", { terminalId: "uno", data: "dir" });
-  expect(actionNotice).toHaveBeenCalledWith("La terminal ya tiene texto escrito; envíalo o bórralo antes.");
+  expect(invoke).toHaveBeenCalledWith("write_terminal", { terminalId: "uno", data: "dir" });
+  expect(actionNotice).toHaveBeenCalledWith("Comando añadido. Revisa la línea y pulsa Intro para ejecutarlo.");
 });
 
 test("no prepara comandos en una terminal ocupada ni comandos multilínea", async () => {
@@ -432,6 +434,22 @@ test("informa si todavía no existe un controlador de terminal", async () => {
   await act(async () => root!.render(pane(true, undefined, undefined, actionNotice, "cmd", false, { sequence: 3, terminalId: "uno", command: "dir" })));
   expect(actionNotice).toHaveBeenCalledWith("No se pudo preparar el comando en la terminal.");
   skipTerminalInitialization.value = false;
+});
+
+test("avisa si xterm no llega a entregar el pegado al PTY", async () => {
+  await act(async () => root!.render(pane()));
+  await act(async () => new Promise(resolve => setTimeout(resolve, 0)));
+  terminalPaste.mockImplementation(() => undefined);
+  await act(async () => root!.render(pane(true, undefined, undefined, actionNotice, "cmd", false, { sequence: 1, terminalId: "uno", command: "dir" })));
+  expect(actionNotice).toHaveBeenCalledWith("No se pudo preparar el comando en la terminal.");
+});
+
+test("informa si xterm falla al preparar el pegado", async () => {
+  await act(async () => root!.render(pane()));
+  await act(async () => new Promise(resolve => setTimeout(resolve, 0)));
+  terminalPaste.mockImplementation(() => { throw new Error("paste failed"); });
+  await act(async () => root!.render(pane(true, undefined, undefined, actionNotice, "cmd", false, { sequence: 1, terminalId: "uno", command: "dir" })));
+  expect(actionNotice).toHaveBeenCalledWith("No se pudo preparar el comando en la terminal.");
 });
 
 test("rechaza la inserción si el envío al proceso falla", async () => {
@@ -477,7 +495,7 @@ test("no muestra avisos de inserción tardíos tras cerrar la terminal", async (
   await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith("write_terminal", { terminalId: "uno", data: "dir" }));
   await unmount();
   await act(async () => resolveWrite());
-  expect(actionNotice).not.toHaveBeenCalledWith("Comando preparado. Revísalo y pulsa Intro para ejecutarlo.");
+  expect(actionNotice).not.toHaveBeenCalledWith("Comando añadido. Revisa la línea y pulsa Intro para ejecutarlo.");
 });
 
 test("no muestra fallos tardíos de inserción tras cerrar la terminal", async () => {

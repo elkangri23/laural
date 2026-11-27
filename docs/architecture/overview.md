@@ -36,7 +36,7 @@ La apariencia se administra en React y se aplica con atributos CSS `data-theme`/
 
 El cliente Rust usa HTTP para consultar `/models` y enviar solicitudes en streaming a `/chat/completions`. Los eventos de fragmentos se asocian al identificador de la petición; el registro local permite cancelarla. `preview_context` devuelve los mismos recortes de terminal, proyecto y archivos que usa el envío. El identificador de modelo, URL base y nombre se guardan en `providers.json`; la clave se busca por perfil en el almacén del sistema operativo.
 
-En modo Chat, los bloques Markdown etiquetados para el shell activo pueden preparar una línea en el PTY correspondiente. La capa UI exige shell compatible y línea única; `TerminalPane` conserva el estado de entrada, rechaza texto pendiente o un comando en curso, y escribe el comando sin carácter Enter. El prompt de Rust especifica PowerShell, CMD o Bash para WSL/Git Bash. El botón no forma parte del modo Agente y no ejecuta el comando.
+En modo Chat, los bloques Markdown etiquetados para el shell activo pueden preparar una línea en el PTY correspondiente. La capa UI exige shell compatible y línea única; `TerminalPane` rechaza una terminal ocupada y usa el pegado nativo de xterm.js, sin carácter Enter y sin reemplazar texto presente en la línea. El prompt de Rust especifica PowerShell, CMD o Bash para WSL/Git Bash. El botón no forma parte del modo Agente y no ejecuta el comando.
 
 ### Agente
 

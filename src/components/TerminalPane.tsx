@@ -52,6 +52,7 @@ function TerminalPane({ terminalId, shell, cwd, powerShellPredictionEnabled, vis
     let disposed = false;
     let isReady = false;
     let writeQueue: Promise<void> = Promise.resolve();
+    let startup: Promise<void> = Promise.resolve();
     let started = false;
     let exited = false;
     let lastSentSize: TerminalSize | null = null;
@@ -83,6 +84,7 @@ function TerminalPane({ terminalId, shell, cwd, powerShellPredictionEnabled, vis
     });
     let commandRunning = false;
     let insertionPending = false;
+    let suggestedPastePending = false;
     const onOutput = (event: { payload: OutputEvent }) => {
       if (!disposed) {
         const bytes = decodeTerminalOutput(event.payload.dataBase64);
@@ -104,27 +106,26 @@ function TerminalPane({ terminalId, shell, cwd, powerShellPredictionEnabled, vis
         onActionNotice(terminalText.commandInsertFailed);
         return;
       }
-      if (commandLine !== "") {
-        onActionNotice(terminalText.commandLineNotEmpty);
-        return;
-      }
       insertionPending = true;
-      commandLine = command;
-      writeQueue = writeQueue.then(async () => {
-        await startup;
-        if (!isReady || disposed || exited) throw new Error("Terminal is unavailable");
-        await invoke("write_terminal", { terminalId, data: command });
-      }).then(() => {
-        if (!disposed) onActionNotice(terminalText.commandPrepared);
-      }).catch(() => {
-        commandLine = null;
-        if (!disposed) onActionNotice(terminalText.commandInsertFailed);
-      }).finally(() => { insertionPending = false; });
-      await writeQueue;
+      suggestedPastePending = true;
+      try {
+        terminal.paste(command);
+        if (suggestedPastePending) {
+          suggestedPastePending = false;
+          insertionPending = false;
+          onActionNotice(terminalText.commandInsertFailed);
+        }
+      } catch {
+        suggestedPastePending = false;
+        insertionPending = false;
+        onActionNotice(terminalText.commandInsertFailed);
+      }
     };
     let skipLineFeed = false;
     const inputSubscription = terminal.onData((data) => {
       if (disposed || exited) return;
+      const isSuggestedInsertion = suggestedPastePending;
+      if (isSuggestedInsertion) suggestedPastePending = false;
       if (data.includes("\u0003")) commandLine = "";
       else if (data.includes("\u001b") || UNTRACKED_LINE_EDIT_KEYS.test(data)) commandLine = null;
       for (const character of data) {
@@ -148,10 +149,20 @@ function TerminalPane({ terminalId, shell, cwd, powerShellPredictionEnabled, vis
       if (!data.includes("\r") && !data.includes("\n")) skipLineFeed = false;
       writeQueue = writeQueue.then(async () => {
         await startup;
-        if (!isReady || disposed || exited) return;
+        if (!isReady || disposed || exited) {
+          if (isSuggestedInsertion) throw new Error("Terminal is unavailable");
+          return;
+        }
         await invoke("write_terminal", { terminalId, data });
+      }).then(() => {
+        if (isSuggestedInsertion && !disposed) onActionNotice(terminalText.commandPrepared);
       }).catch((error) => {
-        if (!disposed) terminal.write(`\r\n\x1b[31mLaural: ${String(error)}\x1b[0m\r\n`);
+        if (isSuggestedInsertion) {
+          commandLine = null;
+          if (!disposed) onActionNotice(terminalText.commandInsertFailed);
+        } else if (!disposed) terminal.write(`\r\n\x1b[31mLaural: ${String(error)}\x1b[0m\r\n`);
+      }).finally(() => {
+        if (isSuggestedInsertion) insertionPending = false;
       });
     });
     const fitAndResize = () => {
@@ -196,7 +207,7 @@ function TerminalPane({ terminalId, shell, cwd, powerShellPredictionEnabled, vis
       fitAndResize();
     }
 
-    const startup = start().catch((error) => {
+    startup = start().catch((error) => {
       if (disposed) return;
       terminal.writeln(`${terminalText.startFailure} ${shell}: ${String(error)}`);
       setEnded(true);

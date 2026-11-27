@@ -51,7 +51,7 @@ El botón de UC-32 solo prepara un comando compatible de una línea en la termin
 3. El usuario pulsa el botón. Laural coloca el comando en la línea vacía de la terminal sin enviar Enter.
 4. La app indica que debe revisar la línea y pulsar Intro para ejecutarla.
 
-**Alternativas y errores:** no se muestra el botón para un bloque sin lenguaje, de otro shell, multilínea o con controles; tampoco durante el streaming, en modo Agente, si la terminal ya tiene entrada pendiente, ejecuta otro comando o no está disponible. La app informa el motivo y no sobrescribe la entrada existente.
+**Alternativas y errores:** no se muestra el botón para un bloque sin lenguaje, de otro shell, multilínea o con controles; tampoco durante el streaming o en modo Agente. Si hay texto en la línea, el comando se inserta en el cursor sin reemplazarlo; el usuario revisa la línea completa. No se inserta mientras otro comando se ejecuta o la terminal no está disponible.
 
 **Seguridad:** la sugerencia es contenido no confiable del proveedor. El botón solo prepara texto; no ejecuta, no autoriza ni altera la política de permisos del Agente. El usuario conserva la última confirmación mediante Enter.
 
