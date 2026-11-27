@@ -44,9 +44,9 @@ jobs:
           releaseBody: |
             Actualización de Laural para Windows x64.
 
-            ## Novedades de alpha.19
-            - El agente propone comandos según el shell de la pestaña activa: PowerShell, CMD, WSL o Git Bash.
-            - En PowerShell evita opciones incompatibles de CMD como `dir /b` y ofrece equivalentes nativos.
+            ## Novedades de alpha.20
+            - La sincronización ya no dice que local y nube difieren cuando son el mismo ajuste (snapshot v1 en la nube frente a v2 local).
+            - La página del callback de inicio de sesión lleva el diseño de Laural: fondo verde oscuro, tarjeta con la marca L y confirmación en verde.
 
             Consulta [el registro de cambios](https://github.com/elkangri23/laural/blob/main/CHANGELOG.md) para el detalle. El instalador NSIS incluye el manifiesto firmado para el actualizador integrado. Esta versión sigue siendo una pre-release.
           prerelease: true
