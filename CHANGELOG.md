@@ -40,6 +40,7 @@
 - El borrado de cuenta separa la petición remota del comando Tauri y comprueba confirmación `ELIMINAR`, autorización, sesión reciente, respuesta 204 y errores de transporte. Suite Rust: 243 pasadas, 2 manuales ignoradas; `account.rs` alcanza 77,22 % de líneas y 80,19 % de ramas en CI.
 - La limpieza local al borrar una cuenta informa por separado si se retiró la credencial de sesión y el estado de sincronización; una credencial inexistente cuenta como borrada y los errores no se ocultan. Suite Rust: 244 pasadas, 2 manuales ignoradas.
 - La sincronización ya no dice que local y nube difieren cuando son el mismo ajuste: un snapshot v1 en la nube (sin idioma) y el snapshot v2 local se comparan por su contenido, no por la versión del esquema, así que descargar la nube deja de pedirlo otra vez inmediatamente.
+- La página del callback de inicio de sesión lleva el diseño de Laural: fondo verde oscuro, tarjeta con la marca L y confirmación en verde.
 - La comparación de snapshots ignora el idioma cuando una versión v1 no lo contiene, pero detecta diferencias si ambos son v2. `AccountSettings.tsx` conserva cobertura Crítica 100/100 en líneas y ramas; una regresión fija un fixture que usaba `ocean` como supuesto tema distinto aunque era el tema original.
 - Las regresiones del clasificador Git cubren también un guion aislado, una opción corta desconocida y un valor de consulta ausente antes de otra opción; las formas ambiguas siguen exigiendo revisión.
 
