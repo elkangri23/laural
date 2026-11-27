@@ -1,6 +1,8 @@
 # Registro de cambios
 
 ## Próxima versión
+- En el modo Chat, los bloques de comandos etiquetados para el shell activo permiten pegar una sola línea en la terminal sin enviarla. La interfaz oculta la acción en el modo Agente, con sintaxis incompatible o mientras se transmite la respuesta; rechaza terminales ocupadas o con texto pendiente. El asistente recibe el shell activo y formatea sus sugerencias para PowerShell, CMD, WSL o Git Bash. ADR-0058.
+- Regresión del flujo de comandos: UI 310/310; 92,30 % de líneas y 86,86 % de ramas. Gate 100/80/0: los 12 archivos Críticos alcanzan 100 % de líneas y ramas y los 14 Estándar superan 80 % de líneas. Rust: 269 pruebas pasaron y 2 manuales quedaron ignoradas. En Windows/MSVC `cargo llvm-cov` ejecuta las pruebas, pero no obtiene datos de cobertura; la medición Rust debe confirmarse en CI Linux.
 - Al averiguar la carpeta de trabajo, el agente usa la consulta propia del shell: `Get-Location` en PowerShell, `cd` en CMD y `pwd` en WSL/Git Bash.
 - El agente distingue la raíz del proyecto del directorio actual de la terminal. Si una petición depende de esa carpeta y el contexto no la revela, consulta primero la ubicación con un comando nativo del shell.
 - El planificador distingue las consultas de las modificaciones: prefiere acciones mínimas, inspecciona solo lo que no está en contexto y pide verificar los cambios con evidencia suficiente.

@@ -8,9 +8,9 @@ import { LanguageProvider } from "../src/i18n";
 let host: HTMLDivElement;
 let root: Root;
 
-function renderMarkdown(content: string, language: "es" | "en" = "es") {
+function renderMarkdown(content: string, language: "es" | "en" = "es", options: { shell?: "powershell" | "cmd" | "wsl" | "git-bash"; onPrepareCommand?: (command: string) => void } = {}) {
   localStorage.setItem("laural.language.v1", language);
-  return root.render(<LanguageProvider><AssistantMarkdown content={content} /></LanguageProvider>);
+  return root.render(<LanguageProvider><AssistantMarkdown content={content} {...options} /></LanguageProvider>);
 }
 
 beforeEach(() => {
@@ -58,4 +58,30 @@ test("solo conserva fragmentos y protocolos web o mailto, y omite imágenes sin 
   expect(host.querySelector('a[href=""]')).not.toBeNull();
   expect(host.querySelector("img")).toBeNull();
   expect(host.textContent).toContain("Image omitted");
+});
+
+test("ofrece preparar un comando PowerShell etiquetado y no lo ejecuta", async () => {
+  const prepare = vi.fn();
+  await act(async () => renderMarkdown("```powershell\nGet-ChildItem\n```", "es", { onPrepareCommand: prepare }));
+  const button = host.querySelector<HTMLButtonElement>(".markdown-command-action");
+  expect(button?.textContent).toBe("Pegar en terminal");
+  await act(async () => button?.click());
+  expect(prepare).toHaveBeenCalledWith("Get-ChildItem");
+});
+
+test("solo muestra el botón para bloques de comando de una línea compatibles con el shell", async () => {
+  const prepare = vi.fn();
+  await act(async () => renderMarkdown("```bash\nls\n```", "es", { shell: "powershell", onPrepareCommand: prepare }));
+  expect(host.querySelector(".markdown-command-action")).toBeNull();
+  await act(async () => renderMarkdown("```powershell\nGet-ChildItem\nGet-Location\n```", "es", { onPrepareCommand: prepare }));
+  expect(host.querySelector(".markdown-command-action")).toBeNull();
+  await act(async () => renderMarkdown("```text\nplain text\n```", "es", { onPrepareCommand: prepare }));
+  expect(host.querySelector(".markdown-command-action")).toBeNull();
+});
+
+test("no ofrece la acción cuando falta el manejador o el comando contiene controles", async () => {
+  await act(async () => renderMarkdown("```powershell\nGet-ChildItem\n```"));
+  expect(host.querySelector(".markdown-command-action")).toBeNull();
+  await act(async () => renderMarkdown("```powershell\nGet-ChildItem\u0001\n```", "es", { onPrepareCommand: vi.fn() }));
+  expect(host.querySelector(".markdown-command-action")).toBeNull();
 });

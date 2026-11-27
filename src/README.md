@@ -6,6 +6,8 @@ Los catálogos tipados de `locales/es.ts` y `locales/en.ts` alimentan `i18n.tsx`
 
 La opción local de PSReadLine se mantiene en `App.tsx`/`localStorage` y se pasa a `TerminalPane` al crear sesiones. `terminal_prediction.rs` solo antepone configuración fija a PowerShell cuando se activa; comprueba disponibilidad y compatibilidad del cmdlet y omite el ajuste ante cualquier error. No modifica sesiones existentes, otros shells ni datos de historial.
 
+`chatCommands.ts` filtra bloques de comandos del chat por sintaxis del shell y rechaza líneas vacías, multilínea, con controles o superiores al límite. `AssistantMarkdown.tsx` presenta la acción solo en respuestas completas del modo Chat. `TerminalPane.tsx` comprueba que la línea esté vacía y la sesión disponible, inserta el texto sin Enter y conserva la confirmación del usuario. Estos controles son Críticos y las pruebas comprueban sus ramas; la decisión está en [ADR-0058](../docs/adr/0058-preparar-comandos-del-chat-en-terminal.md).
+
 `terminalPaneState.ts` mantiene aislados los cambios de tema/parpadeo de xterm y la lectura de selección. Este módulo Crítico tiene tests de referencia nula y valores normales; su cobertura de líneas y ramas es 100 %. `TerminalPane.tsx` sigue Crítico: está en 100 % líneas y 99,18 % ramas en la suite UI actual.
 
 `accountActionGuards.ts` valida el permiso antes de ejecutar acciones de MFA, borrado o sincronización, y elimina versiones del historial de forma inmutable. Tanto el helper como `AccountSettings.tsx` cumplen 100 % de líneas y ramas en la suite UI.

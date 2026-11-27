@@ -9,8 +9,19 @@ import { LanguageProvider } from "../src/i18n";
 const { invoke, listen, write, onData, registerOscHandler, terminalOptions, clear, getSelection, observeResize, terminalSize, fitAddonFit } = vi.hoisted(() => ({
   invoke: vi.fn(), listen: vi.fn(), write: vi.fn(), onData: vi.fn(), registerOscHandler: vi.fn(), terminalOptions: vi.fn(), clear: vi.fn(), getSelection: vi.fn(), observeResize: vi.fn<(callback: () => void) => void>(), terminalSize: { rows: 28, cols: 100 }, fitAddonFit: vi.fn<() => void>(),
 }));
+const { skipTerminalInitialization } = vi.hoisted(() => ({ skipTerminalInitialization: { value: false } }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 vi.mock("@tauri-apps/api/event", () => ({ listen }));
+vi.mock("../src/terminalPaneState", async (importOriginal) => {
+  const original = await importOriginal<typeof import("../src/terminalPaneState")>();
+  return {
+    ...original,
+    initializeWithTerminalHost: (host: HTMLElement | null, initialize: (host: HTMLElement) => void | (() => void)) => {
+      if (skipTerminalInitialization.value) return;
+      return original.initializeWithTerminalHost(host, initialize);
+    },
+  };
+});
 vi.mock("@xterm/addon-fit", () => ({ FitAddon: class { fit = fitAddonFit; } }));
 vi.mock("@xterm/xterm", () => ({
   Terminal: class {
@@ -30,14 +41,15 @@ const finished = vi.fn(), agentFinished = vi.fn(), restart = vi.fn(), output = v
 const actionNotice = vi.fn();
 const handlers = new Map<string, (event: { payload: unknown }) => void>();
 const removeOutput = vi.fn(), removeExit = vi.fn();
-function pane(visible = true, copyRequest = { sequence: 0, terminalId: "" }, clearRequest = { sequence: 0, terminalId: "" }, onActionNotice = actionNotice, shell: "powershell" | "cmd" | "wsl" | "git-bash" = "cmd", powerShellPredictionEnabled = false) {
+function pane(visible = true, copyRequest = { sequence: 0, terminalId: "" }, clearRequest = { sequence: 0, terminalId: "" }, onActionNotice = actionNotice, shell: "powershell" | "cmd" | "wsl" | "git-bash" = "cmd", powerShellPredictionEnabled = false, insertRequest = { sequence: 0, terminalId: "", command: "" }) {
   return <LanguageProvider><TerminalPane terminalId="uno" shell={shell} cwd={null} powerShellPredictionEnabled={powerShellPredictionEnabled} visible={visible} active={visible}
-    copyRequest={copyRequest} clearRequest={clearRequest} onActionNotice={onActionNotice}
+    copyRequest={copyRequest} clearRequest={clearRequest} insertRequest={insertRequest} onActionNotice={onActionNotice}
     appearance="dark" theme={themes[0]} onCommandFinish={finished} onAgentCommandFinish={agentFinished} onRestart={restart}
     onTextOutput={output} onCommandSubmit={submit} /></LanguageProvider>;
 }
 const outputEvent = (data: number[]) => ({ payload: { dataBase64: btoa(String.fromCharCode(...data)) } });
 beforeEach(() => {
+  skipTerminalInitialization.value = false;
   localStorage.setItem("laural.language.v1", "es");
   vi.resetAllMocks();
   terminalSize.rows = 28;
@@ -370,6 +382,117 @@ test("no envía entrada si la shell termina antes de completar el arranque", asy
   await act(async () => new Promise(resolve => setTimeout(resolve, 0)));
 
   expect(invoke).not.toHaveBeenCalledWith("write_terminal", expect.anything());
+});
+
+test("prepara el comando en la línea sin enviar Enter", async () => {
+  await act(async () => root!.render(pane()));
+  await act(async () => new Promise(resolve => setTimeout(resolve, 0)));
+  await act(async () => root!.render(pane(true, undefined, undefined, actionNotice, "cmd", false, { sequence: 1, terminalId: "uno", command: "dir" })));
+
+  expect(invoke).toHaveBeenCalledWith("write_terminal", { terminalId: "uno", data: "dir" });
+  expect(invoke).not.toHaveBeenCalledWith("write_terminal", { terminalId: "uno", data: "dir\r" });
+  expect(actionNotice).toHaveBeenCalledWith("Comando preparado. Revísalo y pulsa Intro para ejecutarlo.");
+});
+
+test("no pisa texto que ya está escrito en la línea", async () => {
+  await act(async () => root!.render(pane()));
+  await act(async () => new Promise(resolve => setTimeout(resolve, 0)));
+  const input = onData.mock.calls[0][0];
+  await act(async () => input("texto existente"));
+  await act(async () => root!.render(pane(true, undefined, undefined, actionNotice, "cmd", false, { sequence: 1, terminalId: "uno", command: "dir" })));
+
+  expect(invoke).not.toHaveBeenCalledWith("write_terminal", { terminalId: "uno", data: "dir" });
+  expect(actionNotice).toHaveBeenCalledWith("La terminal ya tiene texto escrito; envíalo o bórralo antes.");
+});
+
+test("no prepara comandos en una terminal ocupada ni comandos multilínea", async () => {
+  await act(async () => root!.render(pane()));
+  await act(async () => new Promise(resolve => setTimeout(resolve, 0)));
+  const input = onData.mock.calls[0][0];
+  await act(async () => input("dir\r"));
+  await act(async () => root!.render(pane(true, undefined, undefined, actionNotice, "cmd", false, { sequence: 1, terminalId: "uno", command: "whoami" })));
+  expect(actionNotice).toHaveBeenCalledWith("La terminal está ejecutando un comando y no puede recibir otro todavía.");
+
+  await act(async () => root!.render(pane(true, undefined, undefined, actionNotice, "cmd", false, { sequence: 2, terminalId: "uno", command: "dir\rwhoami" })));
+  expect(actionNotice).toHaveBeenLastCalledWith("No se pudo preparar el comando en la terminal.");
+});
+
+test("ignora solicitudes para otra terminal y muestra un aviso si la terminal aún no está lista", async () => {
+  await act(async () => root!.render(pane(true, undefined, undefined, actionNotice, "cmd", false, { sequence: 1, terminalId: "otra", command: "dir" })));
+  expect(actionNotice).not.toHaveBeenCalled();
+
+  await unmount();
+  root = createRoot(host);
+  await act(async () => root!.render(pane(true, undefined, undefined, actionNotice, "cmd", false, { sequence: 2, terminalId: "uno", command: "dir" })));
+  expect(actionNotice).toHaveBeenCalledWith("No se pudo preparar el comando en la terminal.");
+});
+
+test("informa si todavía no existe un controlador de terminal", async () => {
+  skipTerminalInitialization.value = true;
+  await act(async () => root!.render(pane(true, undefined, undefined, actionNotice, "cmd", false, { sequence: 3, terminalId: "uno", command: "dir" })));
+  expect(actionNotice).toHaveBeenCalledWith("No se pudo preparar el comando en la terminal.");
+  skipTerminalInitialization.value = false;
+});
+
+test("rechaza la inserción si el envío al proceso falla", async () => {
+  await act(async () => root!.render(pane()));
+  await act(async () => new Promise(resolve => setTimeout(resolve, 0)));
+  invoke.mockImplementation(async (command: string) => {
+    if (command === "write_terminal") throw new Error("pty unavailable");
+    return undefined;
+  });
+  await act(async () => root!.render(pane(true, undefined, undefined, actionNotice, "cmd", false, { sequence: 1, terminalId: "uno", command: "dir" })));
+  await act(async () => new Promise(resolve => setTimeout(resolve, 0)));
+  expect(actionNotice).toHaveBeenLastCalledWith("No se pudo preparar el comando en la terminal.");
+});
+
+test("no envía el comando si la sesión termina mientras espera la cola de entrada", async () => {
+  let releaseInput!: () => void;
+  invoke.mockImplementation(async (name: string, args?: { data?: string }) => {
+    if (name === "write_terminal" && args?.data === "\x03") await new Promise<void>(resolve => { releaseInput = resolve; });
+    return undefined;
+  });
+  await act(async () => root!.render(pane()));
+  await act(async () => new Promise(resolve => setTimeout(resolve, 0)));
+  const input = onData.mock.calls[0][0];
+  await act(async () => input("\x03"));
+  await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith("write_terminal", { terminalId: "uno", data: "\x03" }));
+  await act(async () => root!.render(pane(true, undefined, undefined, actionNotice, "cmd", false, { sequence: 1, terminalId: "uno", command: "dir" })));
+  await act(async () => handlers.get("terminal-exit-uno")!({ payload: undefined }));
+  await act(async () => releaseInput());
+
+  expect(invoke).not.toHaveBeenCalledWith("write_terminal", { terminalId: "uno", data: "dir" });
+  expect(actionNotice).toHaveBeenLastCalledWith("No se pudo preparar el comando en la terminal.");
+});
+
+test("no muestra avisos de inserción tardíos tras cerrar la terminal", async () => {
+  let resolveWrite!: () => void;
+  await act(async () => root!.render(pane()));
+  await act(async () => new Promise(resolve => setTimeout(resolve, 0)));
+  invoke.mockImplementation(async (name: string) => {
+    if (name === "write_terminal") await new Promise<void>(resolve => { resolveWrite = resolve; });
+    return undefined;
+  });
+  await act(async () => root!.render(pane(true, undefined, undefined, actionNotice, "cmd", false, { sequence: 1, terminalId: "uno", command: "dir" })));
+  await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith("write_terminal", { terminalId: "uno", data: "dir" }));
+  await unmount();
+  await act(async () => resolveWrite());
+  expect(actionNotice).not.toHaveBeenCalledWith("Comando preparado. Revísalo y pulsa Intro para ejecutarlo.");
+});
+
+test("no muestra fallos tardíos de inserción tras cerrar la terminal", async () => {
+  let rejectWrite!: (error: Error) => void;
+  await act(async () => root!.render(pane()));
+  await act(async () => new Promise(resolve => setTimeout(resolve, 0)));
+  invoke.mockImplementation(async (name: string) => {
+    if (name === "write_terminal") await new Promise<void>((_resolve, reject) => { rejectWrite = reject; });
+    return undefined;
+  });
+  await act(async () => root!.render(pane(true, undefined, undefined, actionNotice, "cmd", false, { sequence: 1, terminalId: "uno", command: "dir" })));
+  await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith("write_terminal", { terminalId: "uno", data: "dir" }));
+  await unmount();
+  await act(async () => rejectWrite(new Error("terminal closed")));
+  expect(actionNotice).not.toHaveBeenCalledWith("No se pudo preparar el comando en la terminal.");
 });
 
 test("ignora el error al cerrar una sesión durante el desmontaje", async () => {

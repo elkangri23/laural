@@ -1,6 +1,7 @@
 import { lazy, memo, Suspense, useEffect, useState } from "react";
 import { SparkIcon } from "./SparkIcon";
 import { useLanguage } from "../i18n";
+import type { TerminalShell } from "../chatCommands";
 
 const AssistantMarkdown = lazy(() => import("./AssistantMarkdown").then(module => ({ default: module.AssistantMarkdown })));
 
@@ -8,9 +9,9 @@ export type ChatMessage = { role: "user" | "assistant"; content: string; id?: st
 type StreamingContentRef = { current: { snapshot: () => string } | null };
 const STREAM_MARKDOWN_REFRESH_MS = 200;
 
-type ChatMessageItemProps = { message: ChatMessage; isStreaming?: boolean; streamingContentRef?: StreamingContentRef };
+type ChatMessageItemProps = { message: ChatMessage; isStreaming?: boolean; streamingContentRef?: StreamingContentRef; terminalShell?: TerminalShell; onPrepareCommand?: (command: string) => void };
 
-export const ChatMessageItem = memo(function ChatMessageItem({ message, isStreaming = false, streamingContentRef }: ChatMessageItemProps) {
+export const ChatMessageItem = memo(function ChatMessageItem({ message, isStreaming = false, streamingContentRef, terminalShell = "powershell", onPrepareCommand }: ChatMessageItemProps) {
   const { messages } = useLanguage();
   const [renderedStreamContent, setRenderedStreamContent] = useState(message.content);
 
@@ -31,12 +32,12 @@ export const ChatMessageItem = memo(function ChatMessageItem({ message, isStream
   const content = isStreaming ? renderedStreamContent : message.content;
   return <article className={`chat-message ${message.role}`}>
     <span className="message-avatar">{message.role === "user" ? messages.chat.user : <SparkIcon />}</span>
-    <div className="message-content">{message.role === "assistant" ? <Suspense fallback={<span role="status">{messages.chat.preparing}</span>}><AssistantMarkdown content={content} /></Suspense> : message.content}</div>
+    <div className="message-content">{message.role === "assistant" ? <Suspense fallback={<span role="status">{messages.chat.preparing}</span>}><AssistantMarkdown content={content} shell={terminalShell} onPrepareCommand={isStreaming ? undefined : onPrepareCommand} /></Suspense> : message.content}</div>
   </article>;
 }, (previous, next) => {
   if (previous.isStreaming && next.isStreaming && previous.message.id === next.message.id) {
     if (previous.message.content.length === 0 && next.message.content.length > 0) return false;
     return previous.streamingContentRef === next.streamingContentRef;
   }
-  return previous.message === next.message && previous.isStreaming === next.isStreaming;
+  return previous.message === next.message && previous.isStreaming === next.isStreaming && previous.terminalShell === next.terminalShell && previous.onPrepareCommand === next.onPrepareCommand;
 });

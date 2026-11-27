@@ -9,6 +9,7 @@ import { SettingsDialog, type SettingsCategory } from "./components/SettingsDial
 import type { ExecutionMode } from "./components/AgentSettings";
 import { UpdateManager } from "./components/UpdateManager";
 import { ChatMessageItem, type ChatMessage } from "./components/ChatMessageItem";
+import type { TerminalShell } from "./chatCommands";
 import { CommandBlockItem, type CommandBlock } from "./components/CommandBlockItem";
 import { SparkIcon } from "./components/SparkIcon";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
@@ -29,7 +30,7 @@ const GitPanel = lazy(() => import("./components/GitPanel").then(module => ({ de
 const TaskRecipes = lazy(() => import("./components/TaskRecipes").then(module => ({ default: module.TaskRecipes })));
 const ConfigurationTransfer = lazy(() => import("./components/ConfigurationTransfer").then(module => ({ default: module.ConfigurationTransfer })));
 
-type Shell = "powershell" | "cmd" | "wsl" | "git-bash";
+type Shell = TerminalShell;
 type TerminalTab = { id: string; shell: Shell; title: string; cwd: string | null };
 type CommandHistoryEntry = { id: string; terminalId: string; command: string; shell: Shell };
 type ContextPreview = { terminal: string; project: string; selectedFiles: string; gitDiff: string; totalCharacters: number };
@@ -75,6 +76,7 @@ function AppContent() {
   const [commandBlocks, setCommandBlocks] = useState<CommandBlock[]>([]);
   const [terminalCopyRequest, setTerminalCopyRequest] = useState({ sequence: 0, terminalId: "" });
   const [terminalClearRequest, setTerminalClearRequest] = useState({ sequence: 0, terminalId: "" });
+  const [terminalInsertRequest, setTerminalInsertRequest] = useState({ sequence: 0, terminalId: "", command: "" });
   const [terminalActionNotice, setTerminalActionNotice] = useState("");
   const [terminalMoreOpen, setTerminalMoreOpen] = useState(false);
   const [appMenuOpen, setAppMenuOpen] = useState(false);
@@ -427,6 +429,11 @@ function AppContent() {
     () => tabs.find((tab) => tab.id === activeTabId) ?? tabs[0],
     [activeTabId, tabs],
   );
+  const prepareChatCommand = useCallback((command: string) => {
+    if (!activeTab) return;
+    setTerminalActionNotice("");
+    setTerminalInsertRequest((request) => ({ sequence: request.sequence + 1, terminalId: activeTab.id, command }));
+  }, [activeTab]);
   const activeTheme = themes.find((theme) => theme.id === themeId) ?? themes[0];
   const visibleBlocks = commandBlocks.filter((block) => block.terminalId === activeTabId).slice(-30).reverse();
   const firstUnresolvedAgentAction = agentPlan?.actions.findIndex((action) => !["completed", "applied", "cancelled", "rejected", "submitted"].includes(action.status ?? "pending")) ?? -1;
@@ -829,6 +836,7 @@ function AppContent() {
       requestId,
       messages: prepareChatHistoryForRequest(nextMessages.slice(0, -1)),
       terminalContext: terminalContextRef.current[activeTabId] ?? "",
+      terminalShell: activeTab?.shell ?? "powershell",
       projectPath,
       selectedFiles: contextFiles,
       gitDiffContext,
@@ -1392,7 +1400,7 @@ function AppContent() {
             </div>
             <div className={`terminal-frame ${blocksOpen ? "with-blocks" : ""} ${splitTabId ? `is-split split-${splitOrientation}` : ""}`}>
               <Suspense fallback={<div className="terminal-loading" role="status">{appText.terminalLoading}</div>}>
-                {tabs.map((tab) => <TerminalPane key={tab.id} terminalId={tab.id} active={tab.id === activeTabId} copyRequest={terminalCopyRequest} clearRequest={terminalClearRequest} onActionNotice={setTerminalActionNotice} onRestart={restartTab} shell={tab.shell} cwd={tab.cwd} powerShellPredictionEnabled={powerShellPredictionEnabled} visible={tab.id === activeTabId || tab.id === splitTabId} theme={activeTheme} appearance={appearance} onTextOutput={captureTerminalOutput} onCommandSubmit={startCommandBlock} onCommandFinish={finishCommandBlock} onAgentCommandFinish={finishAgentCommand} />)}
+                {tabs.map((tab) => <TerminalPane key={tab.id} terminalId={tab.id} active={tab.id === activeTabId} copyRequest={terminalCopyRequest} clearRequest={terminalClearRequest} insertRequest={terminalInsertRequest} onActionNotice={setTerminalActionNotice} onRestart={restartTab} shell={tab.shell} cwd={tab.cwd} powerShellPredictionEnabled={powerShellPredictionEnabled} visible={tab.id === activeTabId || tab.id === splitTabId} theme={activeTheme} appearance={appearance} onTextOutput={captureTerminalOutput} onCommandSubmit={startCommandBlock} onCommandFinish={finishCommandBlock} onAgentCommandFinish={finishAgentCommand} />)}
               </Suspense>
               <div className="terminal-caption"><span className="shortcut-hint"><kbd>Ctrl</kbd> + <kbd>`</kbd> {appText.toggleTerminal}</span><span><span className="activity-pulse" /> {appText.shellConnected}</span></div>
             </div>
@@ -1422,7 +1430,7 @@ function AppContent() {
                 <button onClick={() => setPrompt(appText.gitCommand)}><span className="suggestion-icon"><TerminalIcon /></span><span>{appText.generateCommand}</span><ArrowUpRightIcon /></button>
               </div>
             </div> : <div className="message-thread">
-              {chatMessages.map((message, index) => <ChatMessageItem key={message.id ?? `${index}-${message.role}`} message={message} isStreaming={message.id === streamingMessageId} streamingContentRef={message.id === streamingMessageId ? streamingContentRef : undefined} />)}
+              {chatMessages.map((message, index) => <ChatMessageItem key={message.id ?? `${index}-${message.role}`} message={message} isStreaming={message.id === streamingMessageId} streamingContentRef={message.id === streamingMessageId ? streamingContentRef : undefined} terminalShell={activeTab?.shell ?? "powershell"} onPrepareCommand={!agentMode ? prepareChatCommand : undefined} />)}
               {agentPlan && <div className="agent-plan-card">
                 <div className="agent-plan-header"><span className="plan-icon-small"><AgentIcon /></span><strong>{appText.agentPlan}</strong>{agentPlanProjectPath && <span className="agent-plan-root" title={agentPlanProjectPath}>{agentPlanProjectPath}</span>}{agentPlan.isComplete ? <span className="agent-plan-count">{appText.completed}</span> : !agentPlan.clarifyingQuestion && <span className="agent-plan-count">{appText.actionsCount.replace("{count}", String(agentPlan.actions.length))}</span>}</div>
                 <p className="agent-plan-summary">{agentPlan.clarifyingQuestion ?? agentPlan.summary}</p>

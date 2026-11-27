@@ -34,6 +34,7 @@ Estado al 26 de noviembre de 2026. «Implementado» describe código presente; �
 ## M2 — Chat y proveedores (parcial)
 
 - Chat incremental cancelable e historial local borrable implementados.
+- En modo Chat se puede preparar un bloque de comando de una línea en la terminal activa sin ejecutarlo. Markdown exige lenguaje compatible con PowerShell/CMD/Bash; el backend incorpora el shell activo en las instrucciones del modelo. La terminal rechaza la acción si la línea no está vacía o hay un proceso en marcha. Regresiones focalizadas pasan; pendiente validación manual en los cuatro shells instalados. Véase [ADR-0058](adr/0058-preparar-comandos-del-chat-en-terminal.md) y [UC-32](use-cases/README.md).
 - Corregida la compilación de `keyring` para usar Windows Credential Manager; la clave se verifica tras guardar. Validación manual desde la app release el 23-11-2026: perfil FreeLLMAPI de `127.0.0.1:31415/v1`, autenticación guardada en Credential Manager, consulta de modelos exitosa (311 modelos) y respuesta completa de chat por streaming. La prueba usó un mensaje inocuo y no mostró ni cambió la clave. Ollama en `11434` y LM Studio en `1234` no estaban activos.
 - Quedan por validar Ollama, LM Studio y otro endpoint OpenAI-compatible remoto con sus servicios configurados. Las respuestas simuladas de suite no sustituyen la interoperabilidad con esos servidores.
 - Añadida regresión local que confirma que el cliente rechaza redirecciones HTTP del proveedor, para no enviar credenciales/contexto a otro destino. Las pruebas con proveedores instalados siguen pendientes.

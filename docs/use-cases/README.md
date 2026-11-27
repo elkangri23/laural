@@ -32,8 +32,28 @@ Los casos describen el comportamiento esperado del producto. Los estados disting
 | UC-29 | Solicitar revisión por pérdida de factores | Usuario/administrador | Flujo local con PIN de verificación y revisión administrativa; servicio desplegado, pero falta ensayo de Resend/Caddy y habilitar flags |
 | UC-30 | Activar sugerencias locales de PowerShell | Desarrollador | Implementado localmente; validar PSReadLine en Windows |
 | UC-31 | Conservar idioma al transferir o sincronizar preferencias | Usuario | Transferencia v2 y cliente v2 implementados localmente; validar despliegue del VPS antes de publicar |
+| UC-32 | Preparar en terminal un comando sugerido en el chat | Desarrollador | Implementado localmente; validar en los cuatro shells desde la app instalada |
 
 Los casos UC-17 y UC-18 están disponibles en Configuración en su implementación inicial. UC-19 y UC-20 tienen un cliente inicial, pero requieren un servicio desplegado para su validación real. UC-21 permite usar códigos TOTP, pedir revisión por buzón y registrar la decisión del administrador desde el VPS. Tras aprobar, el usuario recibe un enlace temporal para configurar y confirmar un TOTP nuevo; solo entonces se reemplazan factores y se revocan sesiones, sin emitir sesión. Falta el ensayo VPS/Resend. UC-22 tiene una implementación local que requiere operación del VPS. UC-25 implementa restablecimiento de contraseña, independiente de recuperar factores. Los flujos de sincronización están detallados en [portabilidad y sincronización](sincronizacion-preferencias.md). El acceso Google se especifica en [UC-28](google-oauth.md).
+
+El botón de UC-32 solo prepara un comando compatible de una línea en la terminal activa y nunca lo ejecuta. Consulta [ADR-0058](../adr/0058-preparar-comandos-del-chat-en-terminal.md).
+
+## UC-32 — Preparar un comando sugerido en el chat
+
+**Objetivo:** llevar una sugerencia del asistente a la terminal activa manteniendo la ejecución bajo control del usuario.
+
+**Precondiciones:** Laural está en modo Chat y tiene una terminal activa y lista.
+
+**Flujo principal:**
+
+1. El usuario pide ayuda y recibe una respuesta que incluye un bloque Markdown de una sola línea etiquetado para el shell activo.
+2. Laural muestra el botón **Pegar en terminal** debajo del bloque.
+3. El usuario pulsa el botón. Laural coloca el comando en la línea vacía de la terminal sin enviar Enter.
+4. La app indica que debe revisar la línea y pulsar Intro para ejecutarla.
+
+**Alternativas y errores:** no se muestra el botón para un bloque sin lenguaje, de otro shell, multilínea o con controles; tampoco durante el streaming, en modo Agente, si la terminal ya tiene entrada pendiente, ejecuta otro comando o no está disponible. La app informa el motivo y no sobrescribe la entrada existente.
+
+**Seguridad:** la sugerencia es contenido no confiable del proveedor. El botón solo prepara texto; no ejecuta, no autoriza ni altera la política de permisos del Agente. El usuario conserva la última confirmación mediante Enter.
 
 ## UC-01 — Abrir terminal
 

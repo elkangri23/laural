@@ -7,16 +7,17 @@ import { terminalTheme, type AppearanceMode, type ThemeDefinition } from "../the
 import { applyTerminalCursorBlink, applyTerminalTheme, initializeWithTerminalHost, readTerminalSelection } from "../terminalPaneState";
 import { createTerminalOutputBatcher, createTerminalTextBatcher, decodeTerminalOutput, terminalSizeChanged, type TerminalSize } from "../terminalOutput";
 import { useLanguage } from "../i18n";
+import type { TerminalShell } from "../chatCommands";
 import "@xterm/xterm/css/xterm.css";
 
-type Shell = "powershell" | "cmd" | "wsl" | "git-bash";
 const TERMINAL_SCROLLBACK_LINES = 2_500;
 const UNTRACKED_LINE_EDIT_KEYS = /[\u0001-\u0002\u0004-\u0007\u0009\u000b\u000c\u000e-\u001f]/;
 type OutputEvent = { dataBase64: string };
 type TerminalRequest = { sequence: number; terminalId: string };
-type TerminalPaneProps = { terminalId: string; shell: Shell; cwd: string | null; powerShellPredictionEnabled: boolean; visible: boolean; active: boolean; copyRequest: TerminalRequest; clearRequest: TerminalRequest; onActionNotice: (message: string) => void; onRestart: (terminalId: string) => void; theme: ThemeDefinition; appearance: AppearanceMode; onTextOutput: (terminalId: string, text: string) => void; onCommandSubmit: (terminalId: string, command: string) => void; onCommandFinish: (terminalId: string, exitCode: number | null) => void; onAgentCommandFinish: (terminalId: string, token: string, exitCode: number | null) => void };
+type InsertRequest = TerminalRequest & { command: string };
+type TerminalPaneProps = { terminalId: string; shell: TerminalShell; cwd: string | null; powerShellPredictionEnabled: boolean; visible: boolean; active: boolean; copyRequest: TerminalRequest; clearRequest: TerminalRequest; insertRequest: InsertRequest; onActionNotice: (message: string) => void; onRestart: (terminalId: string) => void; theme: ThemeDefinition; appearance: AppearanceMode; onTextOutput: (terminalId: string, text: string) => void; onCommandSubmit: (terminalId: string, command: string) => void; onCommandFinish: (terminalId: string, exitCode: number | null) => void; onAgentCommandFinish: (terminalId: string, token: string, exitCode: number | null) => void };
 
-function TerminalPane({ terminalId, shell, cwd, powerShellPredictionEnabled, visible, active, copyRequest, clearRequest, onActionNotice, onRestart, theme, appearance, onTextOutput, onCommandSubmit, onCommandFinish, onAgentCommandFinish }: TerminalPaneProps) {
+function TerminalPane({ terminalId, shell, cwd, powerShellPredictionEnabled, visible, active, copyRequest, clearRequest, insertRequest, onActionNotice, onRestart, theme, appearance, onTextOutput, onCommandSubmit, onCommandFinish, onAgentCommandFinish }: TerminalPaneProps) {
   const { messages } = useLanguage();
   const terminalText = messages.terminal;
   const [ended, setEnded] = useState(false);
@@ -25,6 +26,10 @@ function TerminalPane({ terminalId, shell, cwd, powerShellPredictionEnabled, vis
   const terminalRef = useRef<Terminal | null>(null);
   const handledCopyRef = useRef(0);
   const handledClearRef = useRef(0);
+  const handledInsertRef = useRef(0);
+  const insertHandlerRef = useRef<(command: string) => Promise<void>>(async () => {
+    onActionNotice(terminalText.commandInsertFailed);
+  });
 
   useEffect(() => initializeWithTerminalHost(hostRef.current, (host) => {
     const terminal = new Terminal({
@@ -65,6 +70,7 @@ function TerminalPane({ terminalId, shell, cwd, powerShellPredictionEnabled, vis
       if (mark === "D") {
         const parsed = rawCode === undefined ? null : Number.parseInt(rawCode, 10);
         onCommandFinish(terminalId, parsed !== null && Number.isFinite(parsed) ? parsed : null);
+        commandRunning = false;
         return true;
       }
       return mark === "A" || mark === "B" || mark === "C";
@@ -75,6 +81,8 @@ function TerminalPane({ terminalId, shell, cwd, powerShellPredictionEnabled, vis
       onAgentCommandFinish(terminalId, token, Number(rawCode));
       return true;
     });
+    let commandRunning = false;
+    let insertionPending = false;
     const onOutput = (event: { payload: OutputEvent }) => {
       if (!disposed) {
         const bytes = decodeTerminalOutput(event.payload.dataBase64);
@@ -83,6 +91,37 @@ function TerminalPane({ terminalId, shell, cwd, powerShellPredictionEnabled, vis
       }
     };
     let commandLine: string | null = "";
+    insertHandlerRef.current = async (command) => {
+      if (!command.trim() || command.length > 4_000 || /[\r\n\u2028\u2029\u0000-\u001f\u007f]/.test(command)) {
+        onActionNotice(terminalText.commandInsertFailed);
+        return;
+      }
+      if (commandRunning || insertionPending) {
+        onActionNotice(terminalText.terminalBusy);
+        return;
+      }
+      if (!isReady || disposed || exited) {
+        onActionNotice(terminalText.commandInsertFailed);
+        return;
+      }
+      if (commandLine !== "") {
+        onActionNotice(terminalText.commandLineNotEmpty);
+        return;
+      }
+      insertionPending = true;
+      commandLine = command;
+      writeQueue = writeQueue.then(async () => {
+        await startup;
+        if (!isReady || disposed || exited) throw new Error("Terminal is unavailable");
+        await invoke("write_terminal", { terminalId, data: command });
+      }).then(() => {
+        if (!disposed) onActionNotice(terminalText.commandPrepared);
+      }).catch(() => {
+        commandLine = null;
+        if (!disposed) onActionNotice(terminalText.commandInsertFailed);
+      }).finally(() => { insertionPending = false; });
+      await writeQueue;
+    };
     let skipLineFeed = false;
     const inputSubscription = terminal.onData((data) => {
       if (disposed || exited) return;
@@ -91,14 +130,14 @@ function TerminalPane({ terminalId, shell, cwd, powerShellPredictionEnabled, vis
       for (const character of data) {
         if (character === "\r") {
           skipLineFeed = true;
-          if (commandLine?.trim()) onCommandSubmit(terminalId, commandLine.trim());
-          else if (commandLine === null) onCommandSubmit(terminalId, terminalText.editedCommandNotCaptured);
+          if (commandLine?.trim()) { onCommandSubmit(terminalId, commandLine.trim()); commandRunning = true; }
+          else if (commandLine === null) { onCommandSubmit(terminalId, terminalText.editedCommandNotCaptured); commandRunning = true; }
           commandLine = "";
         } else if (character === "\n" && skipLineFeed) {
           skipLineFeed = false;
         } else if (character === "\n") {
-          if (commandLine?.trim()) onCommandSubmit(terminalId, commandLine.trim());
-          else if (commandLine === null) onCommandSubmit(terminalId, terminalText.editedCommandNotCaptured);
+          if (commandLine?.trim()) { onCommandSubmit(terminalId, commandLine.trim()); commandRunning = true; }
+          else if (commandLine === null) { onCommandSubmit(terminalId, terminalText.editedCommandNotCaptured); commandRunning = true; }
           commandLine = "";
         } else if (character === "\u007f" || character === "\b") {
           if (commandLine && commandLine.length > 0) commandLine = commandLine.slice(0, -1);
@@ -225,6 +264,13 @@ function TerminalPane({ terminalId, shell, cwd, powerShellPredictionEnabled, vis
     terminalRef.current?.clear();
     onActionNotice(terminalText.screenCleared);
   }, [clearRequest, onActionNotice, terminalId, terminalText.screenCleared]);
+
+  useEffect(() => {
+    if (insertRequest.sequence === 0 || insertRequest.sequence === handledInsertRef.current) return;
+    handledInsertRef.current = insertRequest.sequence;
+    if (insertRequest.terminalId !== terminalId) return;
+    void insertHandlerRef.current(insertRequest.command);
+  }, [insertRequest, onActionNotice, terminalId, terminalText.commandInsertFailed]);
 
   return <div className={`terminal-pane ${visible ? "visible" : "hidden"}`} ><div className="terminal-host" ref={hostRef} />
     {ended && <div className="terminal-ended" role="status">{terminalText.sessionEnded} <button onClick={() => onRestart(terminalId)}>{terminalText.restart}</button></div>}

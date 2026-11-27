@@ -8,7 +8,7 @@ import { createStreamingTextBuffer } from "../src/streamingText";
 
 const mocks = vi.hoisted(() => ({ sparkIconRender: vi.fn() }));
 vi.mock("../src/components/SparkIcon", () => ({ SparkIcon: () => { mocks.sparkIconRender(); return null; } }));
-vi.mock("../src/components/AssistantMarkdown", () => ({ AssistantMarkdown: ({ content }: { content: string }) => <span className="test-markdown">{content}</span> }));
+vi.mock("../src/components/AssistantMarkdown", () => ({ AssistantMarkdown: ({ content, shell, onPrepareCommand }: { content: string; shell?: string; onPrepareCommand?: (command: string) => void }) => <span className="test-markdown" data-shell={shell}>{content}{onPrepareCommand && <button onClick={() => onPrepareCommand("dir")}>preparar</button>}</span> }));
 
 let root: Root | undefined;
 let host: HTMLDivElement;
@@ -75,4 +75,21 @@ test("limita a cinco por segundo el render Markdown mientras llega el streaming"
   await act(async () => renderWithLanguage(<ChatMessageItem message={{ ...message, content: "respuesta final" }} isStreaming={false} streamingContentRef={streamingContentRef} />));
   expect(host.textContent).toContain("respuesta final");
   expect(mocks.sparkIconRender).toHaveBeenCalledTimes(2);
+});
+
+test("pasa el shell activo y habilita preparación solo en mensajes finalizados", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  host = document.createElement("div");
+  document.body.append(host);
+  root = createRoot(host);
+  const prepare = vi.fn();
+  const message: ChatMessage = { id: "comando", role: "assistant", content: "```cmd\ndir\n```" };
+
+  await act(async () => renderWithLanguage(<ChatMessageItem message={message} terminalShell="cmd" onPrepareCommand={prepare} />));
+  expect(host.querySelector(".test-markdown")?.getAttribute("data-shell")).toBe("cmd");
+  await act(async () => host.querySelector("button")?.click());
+  expect(prepare).toHaveBeenCalledWith("dir");
+
+  await act(async () => renderWithLanguage(<ChatMessageItem message={message} terminalShell="cmd" onPrepareCommand={prepare} isStreaming />));
+  expect(host.querySelector("button")).toBeNull();
 });

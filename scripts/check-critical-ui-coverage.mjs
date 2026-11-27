@@ -11,6 +11,7 @@ export const CRITICAL_UI_FILES = [
   "src/components/CommandBlockItem.tsx",
   "src/components/ConfigurationTransfer.tsx",
   "src/components/TerminalPane.tsx",
+  "src/chatCommands.ts",
   "src/components/UpdateManager.tsx",
   "src/terminalOutput.ts",
   "src/terminalPaneState.ts",

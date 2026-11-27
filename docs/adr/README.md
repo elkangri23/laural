@@ -61,6 +61,7 @@ Los ADR registran por qué se eligió una opción y qué costes trae. Un ADR ace
 | [0055](0055-prediccion-local-psreadline.md) | Sugerencias locales de historial mediante PSReadLine | Aceptada; implementación local, validación manual de Windows pendiente |
 | [0056](0056-proteccion-de-cadena-de-suministro-ci.md) | Fijar acciones CI y restringir tags de publicación firmada | Aceptada; acciones fijadas, reglas de tag activas; protección de `main` pendiente |
 | [0057](0057-ciclo-acotado-de-observacion-del-agente.md) | Observar resultados y replanificar hasta ocho acciones por petición | Aceptada; implementación local, prueba con proveedor real pendiente |
+| [0058](0058-preparar-comandos-del-chat-en-terminal.md) | Preparar comandos sugeridos en el chat sin ejecutarlos | Aceptada; implementación local, validación manual pendiente |
 
 ## Crear un ADR
 

@@ -15,7 +15,7 @@
 - Recetas de tareas para el modo Agente: plantillas locales editables con vista previa que preparan instrucciones; el plan requiere envío y conserva las aprobaciones actuales.
 - Paleta con `Ctrl+K` para buscar acciones, sesiones y comandos recientes; el historial dura solo la sesión y los comandos se copian para revisarlos antes de pegarlos.
 - Doce temas de color y modos claro/oscuro, con preferencias guardadas localmente.
-- Chat contextual con respuesta incremental y Markdown formateado (listas, tablas, enlaces y código), historial local borrable, vista previa del contexto, salida reciente de terminal, proyecto abierto y archivos elegidos.
+- Chat contextual con respuesta incremental y Markdown formateado (listas, tablas, enlaces y código), historial local borrable, vista previa del contexto, salida reciente de terminal, proyecto abierto y archivos elegidos. Los bloques de comandos compatibles ofrecen prepararlos en el shell activo; el usuario revisa la línea y pulsa Enter para ejecutarla.
 - Perfiles para Ollama, LM Studio, FreeLLMAPI y endpoints compatibles con OpenAI.
 - Cuenta opcional para sincronizar preferencias: email, passkeys y TOTP integrados; el servicio incorpora Google OIDC/PKCE detrás de flag. Las credenciales reales de Google y el VPS todavía requieren configuración y validación.
 - Agente que propone comandos y cambios de archivos para revisión. Las políticas permiten confirmar comandos, aplicar reglas o activar el modo automático; se puede cancelar la planificación, detener comandos en ejecución y las ediciones de archivos requieren aprobación explícita.

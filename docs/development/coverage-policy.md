@@ -26,6 +26,8 @@ Estos módulos son Críticos por las responsabilidades que implementan:
 - Servicio: autenticación, cuentas, MFA/TOTP, passkeys, OAuth, recuperación, criptografía de tickets, limitación de solicitudes, purga de retención, almacenamiento de sesiones/snapshots y outbox de avisos de seguridad.
 - Interfaz: flujos de cuenta/factores, transferencia que puede incluir claves, aprobación/ejecución del agente, terminal y actualización firmada.
 
+Esta entrega clasifica `src/chatCommands.ts`, `src/components/AssistantMarkdown.tsx` y `src/components/TerminalPane.tsx` como Críticos: filtran comandos no confiables, determinan shell/una sola línea y colocan texto en un PTY. `src/components/ChatMessageItem.tsx` y `src/App.tsx` son Estándar en el flujo de render y encaminamiento. Las pruebas cubren las ramas de elegibilidad, estados de terminal y que el envío no añade Enter.
+
 Para esta política, `scripts/check-critical-rust-coverage.mjs` y `server/scripts/critical-coverage.mjs` con sus tests son Críticos porque deciden si el gate acepta un informe; `.github/workflows/cobertura.yml` y el lanzador `server/scripts/check-critical-coverage.mjs` son Triviales/configuración de ejecución sin lógica de cobertura propia.
 
 `SettingsDialog.tsx` y las vistas de estado/ayuda con interacción ordinaria son Estándar. Catálogos de traducciones, iconos estáticos, configuración YAML/TOML, DTO puros, JSON Schema, fixtures declarativas y artefactos generados son Triviales; los validadores y las rutas que los consumen conservan su clasificación por riesgo. Cada archivo nuevo o modificado para tests recibe clasificación explícita antes de escribirlos.
