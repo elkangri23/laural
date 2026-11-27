@@ -1,6 +1,7 @@
 # Registro de cambios
 
 ## Próxima versión
+- El agente distingue la raíz del proyecto del directorio actual de la terminal. Si una petición depende de esa carpeta y el contexto no la revela, consulta primero la ubicación con un comando nativo del shell.
 - El planificador distingue las consultas de las modificaciones: prefiere acciones mínimas, inspecciona solo lo que no está en contexto y pide verificar los cambios con evidencia suficiente.
 - El agente muestra el motivo de detención cuando un comando automático falla y conserva la acción fallida para revisarla.
 - Regresión del agente: cancelar mientras un comando está en curso impide que el ciclo pida otro plan o ejecute otra acción.
